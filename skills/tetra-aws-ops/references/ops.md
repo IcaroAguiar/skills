@@ -61,7 +61,7 @@ Treat logs as sensitive and redact before quoting.
 All commands below are read-only:
 
 ```bash
-SKILL=/Users/icaroaguiar/.agents/skills/tetra-aws-ops
+SKILL=<skill-directory>
 python3 "$SKILL/scripts/tetra-aws" whoami
 python3 "$SKILL/scripts/tetra-aws" services
 python3 "$SKILL/scripts/tetra-aws" service tetra-enrollments
@@ -91,7 +91,7 @@ Use `--cluster`, `--profile`, or `--region` only when intentionally departing fr
 2. Look for IaC sources before direct AWS writes:
 
 ```bash
-find /Users/icaroaguiar/dev/tetra -maxdepth 5 \
+find <tetra-workspace> -maxdepth 5 \
   \( -name '*.tf' -o -name '.terraform.lock.hcl' -o -name 'terragrunt.hcl' \) -print
 ```
 

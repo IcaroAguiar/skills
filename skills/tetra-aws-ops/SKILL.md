@@ -7,7 +7,7 @@ description: Use when any agent or harness needs to manage, inspect, diagnose, o
 
 Use this skill for Tetra-specific AWS operations across Codex, Claude, Cursor, OpenCode, and other local harnesses that can read shared skills. Keep actions evidence-driven, least-privilege, and explicit about side effects.
 
-Canonical location: `/Users/icaroaguiar/.agents/skills/tetra-aws-ops`. Harness-specific skill folders should symlink to this directory instead of copying it.
+Canonical location: this skill's installed directory. Harness-specific skill folders should symlink to that directory instead of copying it.
 
 Defaults:
 - AWS CLI profile: `tetra`
@@ -59,13 +59,13 @@ Defaults:
 Use the bundled read-only script for common inspection:
 
 ```bash
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" whoami
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" clusters
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" services
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" service <service-name>
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" tasks <service-name>
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" taskdef <service-name>
-python3 "/Users/icaroaguiar/.agents/skills/tetra-aws-ops/scripts/tetra-aws" logs <service-name> --minutes 30 --limit 50
+python3 "<skill-directory>/scripts/tetra-aws" whoami
+python3 "<skill-directory>/scripts/tetra-aws" clusters
+python3 "<skill-directory>/scripts/tetra-aws" services
+python3 "<skill-directory>/scripts/tetra-aws" service <service-name>
+python3 "<skill-directory>/scripts/tetra-aws" tasks <service-name>
+python3 "<skill-directory>/scripts/tetra-aws" taskdef <service-name>
+python3 "<skill-directory>/scripts/tetra-aws" logs <service-name> --minutes 30 --limit 50
 ```
 
 The script only runs read-only AWS APIs and sanitizes task definition/log output. Use raw `aws` CLI only when the script does not cover the inspection needed.
@@ -76,7 +76,7 @@ The script only runs read-only AWS APIs and sanitizes task definition/log output
 - For `tetra-enrollments` auth failures, verify IAM runtime env names and issuer settings in ECS. The canonical IAM issuer is `https://iam.tetraeducacao.com.br`.
 - If local repo behavior contradicts production, verify remote default/prod branch and AWS runtime state before designing changes.
 - ECS deploy workflows may force a new deployment without updating task definition envs. Inspect task definition revisions and service deployments directly.
-- No local Terraform files were found under `/Users/icaroaguiar/dev/tetra` when this skill was created on 2026-06-11. Re-check before concluding Terraform is absent; the IaC source may live in a separate infra repository or private workspace.
+- No local Terraform files were found in the original Tetra workspace when this skill was created. Re-check before concluding Terraform is absent; the IaC source may live in a separate infra repository or private workspace.
 
 ## Local AWS access (2026-06-12)
 
@@ -85,7 +85,7 @@ The script only runs read-only AWS APIs and sanitizes task definition/log output
 
 ## Local Terraform / IaC
 
-- A local OpenTofu workspace was bootstrapped at `/Users/icaroaguiar/dev/tetra/tetra-infra` (provider profile var defaults to `780136995828_TetraAdmin`, region us-east-2, local state). It is a partial adoption: import resources incrementally, and always confirm `tofu plan` shows zero drift before trusting/applying. Tool: `tofu` (OpenTofu 1.12.x, installed via brew).
+- A local OpenTofu workspace was bootstrapped in the original Tetra infrastructure workspace. It is a partial adoption: import resources incrementally, and always confirm `tofu plan` shows zero drift before trusting/applying. Tool: `tofu`.
 - IMPORTANT: prod resources carry a `ManagedBy=terraform` tag, so a CANONICAL Terraform source exists elsewhere (not under `~/dev`). Local changes can be reverted by the canonical TF — mirror any change into the canonical source, or locate it before mutating.
 
 ## WAF (tetra-educacao-waf-prod, REGIONAL, on the imports ALB `tetra-educacao-alb-prod`)
