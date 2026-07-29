@@ -1,0 +1,6 @@
+interface:
+  display_name: "Record Real Dev E2E"
+  short_description: "Record credible real-environment evidence across product surfaces"
+  default_prompt: "Use $record-real-dev-e2e to record natural product journeys for any feature or repository in a real test environment, prepare reversible state, verify bounded evidence, and deliver audience-ready videos with neutral test names."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Finding Authenticated Smoke Context"
+  short_description: "Find approved redacted smoke credentials and app/API context for real browser QA"
+  default_prompt: "Use $finding-authenticated-smoke-context before authenticated browser smoke, login screenshots, real UI QA, credential lookup, login blockers, 401/403 browser validation, or starting duplicate app/API servers."
+policy:
+  allow_implicit_invocation: true

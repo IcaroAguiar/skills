@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Direction"
+  short_description: "Projete e revise interfaces com rigor autoral"
+  default_prompt: "Use $design-direction para projetar ou revisar esta interface, aplicando os critérios visual, funcional e de evidência."

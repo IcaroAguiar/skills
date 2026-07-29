@@ -1,0 +1,168 @@
+---
+name: agentic-testability-gate
+description: Mandatory testability and production-readiness gate for coding, review, autofix, CI, PR, and release workflows. Use before and after material code changes, bugfixes, UI/browser changes, auth/permission changes, API/contract/data/config changes, shared-library changes, and any agentic-code-review that needs reliable unit, integration, contract, E2E, browser, visual, coverage, or regression evidence.
+---
+
+# Agentic Testability Gate
+
+Use this skill to prevent optimistic validation. The agent must identify what
+must be testable, run the right level of evidence, and state residual risk before
+claiming code is ready.
+
+This skill complements `agentic-code-review`: code review can find implementation
+risks, but this gate decides whether the changed behavior was proven at the
+right level of the stack.
+
+## Load Order
+
+Read only what applies:
+
+1. Start here for every activation.
+2. Use `references/obligation-matrix.md` for the required evidence schema and
+   final result format.
+3. Use `references/test-quality-calibration.md` when choosing unit,
+   integration, contract, E2E, coverage, flake, mutation, or regression tests.
+4. Use `references/browser-visual-evidence.md` for UI, browser, visual,
+   accessibility, responsive, branding, tenant, or personalization changes.
+5. Use `references/ci-monorepo-gates.md` for monorepos, microservices, CI,
+   affected graph, service-suite, and pipeline hardening decisions.
+6. Use `references/agentic-code-review-integration.md` when this gate is part of
+   an implementation closeout or review approval.
+7. Use `references/pressure-tests.md` to audit whether the skill is being
+   applied correctly.
+8. Use `scripts/validate-skill-package.mjs` and
+   `tests/smoke-pressure-scenarios.test.mjs` after editing this skill.
+
+## Activation
+
+Activate for any material code, test, config, data, dependency, CI, deploy,
+API, contract, auth, permission, tenant, browser, UI, visual, branding,
+personalization, migration, integration, or bugfix work.
+
+If unsure, activate it. If the runtime cannot load this skill, continue manually
+with the same obligation matrix, evidence ledger, and residual-risk discipline.
+
+## Core Rules
+
+- Create a Test Obligation Matrix before final validation. For production-
+  relevant work, create it before coding or explicitly mark that the lifecycle
+  gate is incomplete.
+- Targeted tests are development-loop evidence only. They are not final proof for
+  production-relevant changes unless the change is genuinely narrow and low risk.
+- Microservice and service-owned changes require the full relevant service test
+  suite before final closeout unless blocked and reported as residual risk.
+- Monorepos require changed packages plus affected dependents. Shared libraries,
+  root config, generated clients, build tooling, and cross-cutting behavior
+  expand the gate.
+- UI, browser, layout, theme, branding, tenant, personalization, and visual
+  changes require rendered browser evidence. Source inspection is not enough.
+- Bugfixes need a regression test or a specific, technical reason why the
+  regression cannot be made deterministic yet.
+- Failed, flaky, missing, slow, credential-blocked, or skipped checks must be
+  named with blocker, substituted evidence, and residual risk.
+- Coverage is a signal, not proof. Do not use line coverage to replace behavior,
+  negative, contract, browser, or migration evidence.
+- Do not claim `tested`, `ready`, `PR-ready`, `merge-ready`, or `production-ready`
+  unless the final gate result and command evidence are explicit.
+
+## Workflow
+
+### 1. Planning Mode
+
+Run before implementation or before accepting a review/autofix plan.
+
+Output:
+
+- Risk: `LOW`, `MEDIUM`, or `HIGH`.
+- Changed surfaces: files, runtime entry points, public APIs, UI routes,
+  jobs/events, data stores, contracts, config, auth/permission boundaries, CI.
+- Initial Test Obligation Matrix.
+- Required new or updated tests.
+- Browser/visual decision.
+- Final-suite decision: exact package, service, workspace, E2E, browser,
+  contract, migration, or CI checks that must run before closeout.
+- Known blockers and unknowns.
+
+### 2. Implementation Mode
+
+Run while coding or applying review fixes.
+
+Behavior:
+
+- Keep the matrix visible and update it when scope changes.
+- Prefer test-first or regression-first for bugs and risky behavior.
+- Run focused checks for fast feedback.
+- Promote exploratory/browser findings into deterministic assertions where
+  practical.
+- Keep an unresolved validation list instead of relying on memory.
+
+### 3. Final Review Mode
+
+Run before final response, review approval, PR-ready, merge-ready, deploy, or
+production-ready language.
+
+Output:
+
+- `Final Testability Gate Result`: `PASS`, `PASS_WITH_RISK`, `BLOCKED`, or
+  `FAIL`.
+- Final Test Obligation Matrix.
+- Evidence ledger with exact commands, scopes, results, and artifact paths.
+- Browser/visual evidence when required.
+- Untested obligations and residual risk.
+- Skill or process improvement delta when a recurring gap was found.
+
+## Risk Minimums
+
+`LOW`:
+
+- Relevant targeted tests or a precise reason none exist.
+- Cheap typecheck/build/lint when project-native.
+- Exact command evidence.
+
+`MEDIUM`:
+
+- Relevant unit plus integration/component tests.
+- Build/typecheck/lint when project-native.
+- Full package or service suite unless prohibitively large or blocked.
+- Browser evidence for user-facing changes.
+
+`HIGH`:
+
+- Unit tests for deterministic logic.
+- Integration tests for persistence, APIs, contracts, queues, jobs, or service
+  boundaries.
+- Negative, fallback, permission, invalid-input, and regression coverage.
+- Full relevant service/package/workspace suite.
+- E2E or smoke for critical user journeys when feasible.
+- Browser and visual evidence for any user-facing flow.
+- Explicit residual risk even when all checks pass.
+
+## Hard Stops
+
+Block completion or approval when:
+
+- No matrix exists.
+- No commands ran and no blocker is stated.
+- Only targeted tests ran for a production-relevant service or microservice
+  change.
+- UI/visual/branding changed with no browser evidence.
+- Contract/data/auth/permission changes lack negative or boundary evidence.
+- Test failures are present without fix, accepted baseline proof, or explicit
+  user acceptance.
+- The final answer lacks exact commands and results.
+
+## Final Response Contract
+
+When this gate is active, final user-facing output must include:
+
+```md
+Testability gate: PASS | PASS_WITH_RISK | BLOCKED | FAIL
+Risk: LOW | MEDIUM | HIGH
+Evidence:
+- <command or browser task> -> <scope> -> <result> -> <artifact path if any>
+Untested / residual risk:
+- <none or named risk>
+```
+
+Keep it concise. Do not paste long logs. Report the blocker, substituted
+evidence, and residual risk when exact verification is unavailable.

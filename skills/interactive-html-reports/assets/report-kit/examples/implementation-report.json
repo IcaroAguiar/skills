@@ -1,0 +1,79 @@
+{
+  "kitVersion": "0.1.0",
+  "preset": "implementation",
+  "title": "Implementacao da skill interactive-html-reports",
+  "subtitle": "Dogfood de uma skill global com gerador, validacao e catalogo de componentes.",
+  "language": "pt-BR",
+  "updatedAt": "2026-05-18T10:25:00-03:00",
+  "status": "partial",
+  "source": "interactive-html-reports",
+  "metrics": [
+    { "value": "1", "label": "gerador Node ESM", "status": "done" },
+    { "value": "1", "label": "validador local", "status": "done" },
+    { "value": "file://", "label": "modo de abertura", "status": "done" }
+  ],
+  "sections": [
+    {
+      "id": "mudancas",
+      "title": "Mudancas",
+      "kicker": "Implementacao",
+      "status": "done",
+      "body": "A skill passa a entregar um kit visual reutilizavel, scripts de geracao e validacao, referencias e exemplos para seis presets."
+    },
+    {
+      "id": "arquitetura",
+      "title": "Arquitetura do fluxo",
+      "kicker": "Diagrama",
+      "component": "diagram",
+      "items": [
+        {
+          "type": "native-flow",
+          "title": "Fluxo nativo",
+          "caption": "JSON estruturado vira HTML autocontido com assets locais.",
+          "nodes": [
+            { "id": "json", "label": "report.json", "tone": "blue" },
+            { "id": "generator", "label": "gerador", "tone": "violet" },
+            { "id": "html", "label": "index.html", "tone": "green" }
+          ],
+          "edges": [
+            { "from": "json", "to": "generator", "label": "entrada" },
+            { "from": "generator", "to": "html", "label": "saida" }
+          ]
+        },
+        {
+          "type": "mermaid",
+          "title": "Fluxo Mermaid",
+          "source": "flowchart LR\n  A[JSON estruturado] --> B[Gerador Node]\n  B --> C[HTML autocontido]\n  B --> D[Assets locais]\n  C --> E[Validacao]"
+        }
+      ]
+    },
+    {
+      "id": "evidencias",
+      "title": "Evidencias",
+      "kicker": "Validacao",
+      "component": "evidence-table",
+      "items": [
+        { "title": "Geracao", "source": "generate-report.mjs", "result": "Cria HTML com CSS e JS embutidos.", "status": "done" },
+        { "title": "Validacao", "source": "validate-report.mjs", "result": "Confere estrutura, links, imagens e placeholders.", "status": "done" }
+      ]
+    },
+    {
+      "id": "decisoes",
+      "title": "Decisoes",
+      "kicker": "Racional",
+      "component": "decision-log",
+      "items": [
+        { "title": "Sem CDN", "status": "done", "body": "A portabilidade local e privacidade valem mais que fontes remotas." },
+        { "title": "JS leve", "status": "done", "body": "Busca, filtros e tabs nao justificam framework." }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "./example-screenshot.svg",
+      "name": "example-screenshot.svg",
+      "alt": "Captura demonstrativa do report",
+      "caption": "Imagem local copiada para a pasta assets do report."
+    }
+  ]
+}

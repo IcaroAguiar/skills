@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" role="img" aria-label="Captura demonstrativa">
+  <rect width="960" height="540" fill="#f6f4ee"/>
+  <rect x="58" y="64" width="844" height="412" rx="14" fill="#fffdfa" stroke="#ded8cc"/>
+  <text x="96" y="126" fill="#191815" font-family="Georgia, serif" font-size="44">Report demonstrativo</text>
+  <rect x="96" y="166" width="212" height="86" rx="8" fill="#ede8ff"/>
+  <rect x="332" y="166" width="212" height="86" rx="8" fill="#e4f4ec"/>
+  <rect x="568" y="166" width="212" height="86" rx="8" fill="#e4eef8"/>
+  <text x="116" y="214" fill="#6545c6" font-family="ui-monospace, monospace" font-size="18">kanban</text>
+  <text x="352" y="214" fill="#247a52" font-family="ui-monospace, monospace" font-size="18">evidencia</text>
+  <text x="588" y="214" fill="#2f5e91" font-family="ui-monospace, monospace" font-size="18">diagrama</text>
+  <line x1="96" y1="306" x2="820" y2="306" stroke="#ded8cc"/>
+  <line x1="96" y1="356" x2="820" y2="356" stroke="#ded8cc"/>
+  <line x1="96" y1="406" x2="820" y2="406" stroke="#ded8cc"/>
+</svg>

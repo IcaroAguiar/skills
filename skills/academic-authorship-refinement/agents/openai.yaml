@@ -1,0 +1,3 @@
+display_name: Academic Authorship Refinement
+short_description: Refine academic writing with source grounding, citation checks, and detector-aware diagnostics.
+default_prompt: Refine this academic draft while preserving my claims, verifying citation support, and reporting unsupported claims and style risks.

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Visual Web Builder"
+  short_description: "Generate visuals, then build faithful frontend"
+  default_prompt: "Use $visual-web-builder to generate section references first, analyze them, and implement a polished landing page."
+
+policy:
+  allow_implicit_invocation: true

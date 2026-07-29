@@ -1,0 +1,48 @@
+{
+  "kitVersion": "0.1.0",
+  "preset": "operation-smoke",
+  "title": "Smoke operacional do report kit",
+  "subtitle": "Exemplo de report para execucao e evidencia de fluxo real.",
+  "language": "pt-BR",
+  "updatedAt": "2026-05-18T10:35:00-03:00",
+  "status": "partial",
+  "source": "interactive-html-reports",
+  "sections": [
+    {
+      "id": "ambiente",
+      "title": "Ambiente",
+      "kicker": "Runtime",
+      "component": "metrics",
+      "items": [
+        { "value": "Node", "label": "Gerador local", "status": "done" },
+        { "value": "mmdc", "label": "Mermaid opcional", "status": "partial" },
+        { "value": "file://", "label": "Abertura local", "status": "done" }
+      ]
+    },
+    {
+      "id": "fluxo",
+      "title": "Fluxo executado",
+      "kicker": "Passo a passo",
+      "component": "timeline",
+      "items": [
+        { "date": "01", "title": "Criar JSON", "body": "Definir preset e secoes obrigatorias.", "status": "done" },
+        { "date": "02", "title": "Gerar HTML", "body": "Executar generate-report.mjs.", "status": "done" },
+        { "date": "03", "title": "Validar", "body": "Executar validate-report.mjs.", "status": "partial" }
+      ]
+    },
+    {
+      "id": "evidencias",
+      "title": "Evidencias",
+      "kicker": "Smoke",
+      "component": "screenshots",
+      "items": [
+        {
+          "src": "./example-screenshot.svg",
+          "name": "operation-smoke.svg",
+          "alt": "Captura visual demonstrativa do smoke",
+          "caption": "Screenshot local usado para validar a galeria."
+        }
+      ]
+    }
+  ]
+}

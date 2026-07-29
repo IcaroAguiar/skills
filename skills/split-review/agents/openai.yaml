@@ -1,0 +1,4 @@
+interface:
+  display_name: "Split Review"
+  short_description: "Uma tarefa dedicada para cada PR"
+  default_prompt: "Use $split-review para revisar cada PR em uma tarefa dedicada até zerar findings e consolidar o resultado."

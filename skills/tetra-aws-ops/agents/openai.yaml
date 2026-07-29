@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tetra AWS Ops"
+  short_description: "Safe AWS operations for Tetra services"
+  default_prompt: "Use $tetra-aws-ops to inspect Tetra AWS ECS services safely."
+
+policy:
+  allow_implicit_invocation: true

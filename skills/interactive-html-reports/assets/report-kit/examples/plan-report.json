@@ -1,0 +1,63 @@
+{
+  "kitVersion": "0.1.0",
+  "preset": "plan",
+  "title": "Plano de padronizacao de reports HTML",
+  "subtitle": "Estrutura visual e operacional para reports interativos reutilizaveis.",
+  "language": "pt-BR",
+  "updatedAt": "2026-05-18T10:20:00-03:00",
+  "status": "partial",
+  "source": "interactive-html-reports",
+  "metrics": [
+    { "value": "6", "label": "presets canonicos", "status": "done" },
+    { "value": "12", "label": "componentes planejados", "status": "done" },
+    { "value": "0", "label": "dependencias de runtime", "status": "done" }
+  ],
+  "sections": [
+    {
+      "id": "objetivo",
+      "title": "Objetivo",
+      "kicker": "Direcao",
+      "status": "done",
+      "body": "Criar um padrao global para reports HTML com evidencias, plano, regras, diagramas, kanban e capturas de tela."
+    },
+    {
+      "id": "plano",
+      "title": "Plano",
+      "kicker": "Execucao",
+      "component": "kanban",
+      "items": [
+        {
+          "title": "Backlog",
+          "status": "pending",
+          "cards": [
+            { "title": "Validar dogfood no Achadinhos", "body": "Gerar report real usando o preset de operacao.", "tag": "docs" }
+          ]
+        },
+        {
+          "title": "Em progresso",
+          "status": "partial",
+          "cards": [
+            { "title": "Skill global", "body": "Criar SKILL.md, assets, references e scripts.", "tag": "skill" }
+          ]
+        },
+        {
+          "title": "Feito",
+          "status": "done",
+          "cards": [
+            { "title": "Contrato do report", "body": "JSON de entrada e destino padrao definidos.", "tag": "schema" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "riscos",
+      "title": "Riscos",
+      "kicker": "Controle",
+      "component": "risks",
+      "items": [
+        { "title": "Drift visual", "status": "partial", "body": "Mitigar exigindo o kit global e proibindo CSS solto por padrao." },
+        { "title": "HTML pesado", "status": "partial", "body": "Mitigar mantendo CSS/JS inline e midia em pasta assets." }
+      ]
+    }
+  ]
+}

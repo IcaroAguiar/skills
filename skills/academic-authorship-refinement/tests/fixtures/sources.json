@@ -1,0 +1,22 @@
+[
+  {
+    "source_id": "s-rag-1",
+    "provider": "openalex",
+    "title": "Retrieval Augmented Generation for Factual Grounding",
+    "authors": ["A. Researcher"],
+    "year": 2025,
+    "venue": "Journal of Scholarly AI",
+    "doi": "10.1234/rag.2025.001",
+    "abstract": "Retrieval augmented generation can improve factual grounding when evidence is verified."
+  },
+  {
+    "source_id": "s-cite-1",
+    "provider": "crossref",
+    "title": "Citation Verification and Claim Support",
+    "authors": ["B. Editor"],
+    "year": 2024,
+    "venue": "Digital Libraries Review",
+    "doi": "10.1234/cite.2024.002",
+    "abstract": "Citation verification checks metadata and whether a source supports a claim."
+  }
+]

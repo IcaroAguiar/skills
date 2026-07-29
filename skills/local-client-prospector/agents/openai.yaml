@@ -1,0 +1,8 @@
+interface:
+  display_name: "Local Client Prospector"
+  short_description: "Find local businesses that may need a website"
+  brand_color: "#2563EB"
+  default_prompt: "Use $local-client-prospector to find potential website clients within 20 km of my area and return the lead sheet in chat."
+
+policy:
+  allow_implicit_invocation: true
