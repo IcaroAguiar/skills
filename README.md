@@ -34,6 +34,8 @@ Run the local catalogue validation before committing:
 node scripts/validate-skills.mjs
 ```
 
+Reusable skills are maintained through the [`catalog-maintenance`](skills/catalog-maintenance/SKILL.md) workflow. The repository is the canonical source; local harness folders are installations.
+
 ## License
 
 [MIT](LICENSE)
