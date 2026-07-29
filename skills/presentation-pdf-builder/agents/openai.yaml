@@ -1,4 +1,0 @@
-interface:
-  display_name: "Presentation PDF Builder"
-  short_description: "Build polished visual PDFs from evidence."
-  default_prompt: "Create a presentation-style PDF from the available screenshots, notes, metrics, and evidence. Ask only for missing audience, tone, language, or direction that materially changes the output."
