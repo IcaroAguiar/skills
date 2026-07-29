@@ -7,13 +7,13 @@ Curated, reusable agent skills maintained by Icaro Aguiar.
 Install one skill:
 
 ```sh
-npx skills add icaroaguiar/icaro-aguiar --skill <skill-name>
+npx skills add IcaroAguiar/agent-skills --skill <skill-name>
 ```
 
 Install the catalogue for a specific agent:
 
 ```sh
-npx skills add icaroaguiar/icaro-aguiar --skill '*' --agent codex
+npx skills add IcaroAguiar/agent-skills --skill '*' --agent codex
 ```
 
 The first public release will be tagged `v0.1.0`. Consumers who need repeatable installations should pin an explicit Git tag or commit.
