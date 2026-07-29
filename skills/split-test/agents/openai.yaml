@@ -1,0 +1,6 @@
+interface:
+  display_name: "Split Test"
+  short_description: "Verify behavior with risk-based test lanes"
+  default_prompt: "Use $split-test to verify this integrated milestone with independent risk-based lanes."
+policy:
+  allow_implicit_invocation: false

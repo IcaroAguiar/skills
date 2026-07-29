@@ -1,0 +1,6 @@
+interface:
+  display_name: "Split Planner"
+  short_description: "Turn a task into an approved execution DAG"
+  default_prompt: "Use $plan-split to turn this task into an approved engineering DAG."
+policy:
+  allow_implicit_invocation: false
