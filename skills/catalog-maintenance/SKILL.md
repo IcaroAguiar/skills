@@ -1,6 +1,8 @@
 ---
 name: catalog-maintenance
 description: Use when creating, updating, publishing, or installing a reusable personal agent skill. Keeps IcaroAguiar/agent-skills as the canonical GitHub source, validates public safety, and synchronizes approved changes to GitHub.
+metadata:
+  internal: true
 ---
 
 # Catalog Maintenance
