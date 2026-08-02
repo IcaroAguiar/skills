@@ -1,0 +1,6 @@
+interface:
+  display_name: "Split Advisor Compatibility"
+  short_description: "Forward legacy Split advice to the advisor"
+  default_prompt: "Use $advisor-split to forward this Split Engineering decision to $engineering-advisor."
+policy:
+  allow_implicit_invocation: false

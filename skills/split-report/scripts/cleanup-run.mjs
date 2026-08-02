@@ -11,17 +11,21 @@ function fail(message) {
 const argv = process.argv.slice(2);
 const positional = [];
 let confirmation = null;
+let retainDirInput = null;
 for (let i = 0; i < argv.length; i += 1) {
   if (argv[i] === "--confirm-run") {
     confirmation = argv[i + 1];
     i += 1;
+  } else if (argv[i] === "--retain-dir") {
+    retainDirInput = argv[i + 1];
+    i += 1;
   } else positional.push(argv[i]);
 }
-const [ledgerPathInput, reportPathInput] = positional;
-if (!ledgerPathInput || !reportPathInput || !confirmation) fail("usage: cleanup-run.mjs <ledger.json> <report.html> --confirm-run <run-id>");
+const [ledgerPathInput] = positional;
+if (!ledgerPathInput || !retainDirInput || !confirmation) fail("usage: cleanup-run.mjs <ledger.json> --retain-dir <final-evidence-dir> --confirm-run <run-id>");
 
 const ledgerPath = path.resolve(ledgerPathInput);
-const reportPath = path.resolve(reportPathInput);
+const retainDir = path.resolve(retainDirInput);
 let ledger;
 try {
   ledger = JSON.parse(fs.readFileSync(ledgerPath, "utf8"));
@@ -33,11 +37,21 @@ if (!ledger.runDir) fail("ledger has no runDir");
 const runDir = path.resolve(ledger.runDir);
 if (path.basename(runDir) !== ledger.runId) fail(`runDir basename must equal runId: ${runDir}`);
 if (ledgerPath !== runDir && !ledgerPath.startsWith(`${runDir}${path.sep}`)) fail("ledger must be inside the exact runDir");
-if (reportPath === runDir || reportPath.startsWith(`${runDir}${path.sep}`)) fail("final report must be outside runDir");
-if (!fs.existsSync(reportPath) || !fs.statSync(reportPath).isFile()) fail(`final report is unavailable: ${reportPath}`);
-const report = fs.readFileSync(reportPath, "utf8");
-if (!report.includes(`Run ${ledger.runId}`) || !report.includes('id="split-ledger"')) fail("final report does not contain the confirmed run and embedded ledger");
+if (retainDir === runDir || retainDir.startsWith(`${runDir}${path.sep}`)) fail("final evidence directory must be outside runDir");
 if (!fs.existsSync(runDir) || !fs.statSync(runDir).isDirectory()) fail(`runDir is unavailable: ${runDir}`);
+
+const retained = ledger.artifacts?.filter((artifact) => artifact.retain === true) ?? [];
+fs.mkdirSync(retainDir, { recursive: true });
+for (const artifact of retained) {
+  if (!artifact.path) fail(`retained artifact has no path: ${artifact.id ?? "unknown"}`);
+  const source = path.isAbsolute(artifact.path) ? path.resolve(artifact.path) : path.resolve(runDir, artifact.path);
+  if (!source.startsWith(`${runDir}${path.sep}`)) fail(`retained artifact must be inside runDir: ${artifact.id ?? source}`);
+  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) fail(`retained artifact is unavailable: ${artifact.id ?? source}`);
+  const destination = path.join(retainDir, path.basename(source));
+  if (fs.existsSync(destination)) fail(`retained artifact would overwrite an existing file: ${destination}`);
+  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  process.stdout.write(`RETAINED ${destination}\n`);
+}
 
 const files = [];
 const directories = [];
@@ -59,4 +73,4 @@ for (const file of files) {
 }
 for (const directory of directories.sort((a, b) => b.length - a.length)) fs.rmdirSync(directory);
 fs.rmdirSync(runDir);
-process.stdout.write(`CLEANED ${runDir}; preserved ${reportPath}\n`);
+process.stdout.write(`CLEANED ${runDir}; retained ${retained.length} artifact(s) in ${retainDir}\n`);

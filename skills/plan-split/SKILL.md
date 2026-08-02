@@ -1,11 +1,11 @@
 ---
 name: plan-split
-description: Turn a complex engineering request into a user-approved, versioned execution DAG with explicit ownership, dependencies, risk, authority, acceptance metrics, and test obligations. Use only when explicitly invoked as the planning phase of Split Engineering or when the user directly asks for plan-split.
+description: Turn a complex engineering request into a concise, user-approved execution plan with bounded missions, ownership, risk, authority, and verification. Use only when explicitly invoked as the planning phase of Split Engineering or when the user directly asks for plan-split.
 ---
 
 # Plan Split
 
-Produce the graph contract. Do not implement it.
+Produce a linear execution plan. Do not implement it.
 
 ## Discover facts
 
@@ -19,26 +19,25 @@ Produce the graph contract. Do not implement it.
 2. Scale the interview to uncertainty. Stop when objective, non-goals, constraints, acceptance, authority, risk, environment, and unresolved decisions are explicit.
 3. Challenge false decomposition, unnecessary parallelism, trivial testing, hidden production authority, and work that does not justify a graph.
 
-## Build the DAG
+## Build the plan
 
-Read [references/plan-contract.md](references/plan-contract.md). Create one node per verifiable delivery, not per arbitrary layer or repository. For each node define:
+Create one mission per verifiable delivery, not per arbitrary layer or repository. For each mission define:
 
 - unique ID, title, kind, repository and environment;
 - observable result and acceptance criteria;
 - exclusive ownership boundary;
-- dependencies and integration milestone;
-- risk and reasoning level;
+- only the dependencies that genuinely block it and its integration milestone;
+- risk, selected binding mode, logical specialist role, and exact profile; in `strict-openai`, fix Explorer to Luna/medium, Reviewer to Luna/high, and writers plus test writers to Luna/xhigh;
 - local executor checks;
 - independent test obligations;
 - authority envelope and prohibited actions;
 - artifacts and receipts required to pass.
 
-Represent integration as dedicated nodes. Plan independent testing by integrated milestone, not by test-count quotas. Treat host capacity, ports, databases, browsers, and shared services as scheduling dependencies.
+Represent integration only when it needs distinct ownership. Plan independent testing by usable milestone, not by test-count quotas.
 
 ## Gate the plan
 
-1. Validate that dependencies are acyclic and every non-root dependency exists.
-2. Show the critical path, ready frontier, ownership boundaries, risk matrix, test matrix, authority, and expected artifacts.
-3. Render the draft canvas.
-4. Ask the user for explicit approval. Do not infer approval from silence or earlier authority.
-5. Record the approved graph version. Any later material change requires a version delta and new approval.
+1. Keep the plan short: objective, non-goals, decision points, missions, ownership, verification, authority, and risks.
+2. Mark advisor consultation as `required`, `optional`, or `not needed`, with its exact question.
+3. Ask the user for approval of the intended outcome, non-goals, authority envelope, and material risks. Do not ask them to approve orchestration mechanics.
+4. Freeze the approved plan. Corrective work continues automatically; replan only when outcome, scope, authority, or irreducible risk changes.

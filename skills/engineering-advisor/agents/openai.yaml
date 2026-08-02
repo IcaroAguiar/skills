@@ -1,0 +1,6 @@
+interface:
+  display_name: "Engineering Advisor"
+  short_description: "Evidence-backed advice for hard decisions"
+  default_prompt: "Use $engineering-advisor to assess this engineering decision without making changes."
+policy:
+  allow_implicit_invocation: false

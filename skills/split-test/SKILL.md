@@ -1,6 +1,6 @@
 ---
 name: split-test
-description: Build and run independent, risk-based verification lanes for an integrated Split Engineering milestone, emphasizing real behavior, production-like isolated environments, non-trivial failure modes, UI journeys, and SHA-bound evidence. Use only when explicitly invoked for split testing or by orchestrate-split after an integration milestone.
+description: Build and run independent, risk-based verification for an integrated Split Engineering milestone, emphasizing real behavior, production-like isolated environments, non-trivial failure modes, UI journeys, and current evidence. Use only when explicitly invoked for split testing or by orchestrate-split after an integration milestone.
 ---
 
 # Split Test
@@ -32,7 +32,7 @@ Prefer fewer high-signal lanes over many trivial ones. Schedule lanes after each
 
 - Give testers the approved contract, acceptance criteria, raw diff or SHA, environment, and raw artifacts.
 - Withhold executor conclusions, suspected bugs, intended fixes, and persuasive rationale until the tester forms its verdict.
-- Use Luna with `high` reasoning by default. Use `medium` or `low` only for mechanical or deterministic work, or when the user explicitly requests a lower-cost tier.
+- Use the reviewer model and reasoning level selected by the orchestrator. Raise reasoning for material risk; do not route by a fixed provider model name.
 - Forbid testers from correcting product code. A failure receipt must return to the smallest responsible execution node.
 
 ## Require real evidence
@@ -40,6 +40,8 @@ Prefer fewer high-signal lanes over many trivial ones. Schedule lanes after each
 - Use a faithful isolated environment with representative synthetic data and applicable sandbox or staging integrations. Production is out of scope without separate authority.
 - Exercise the real production code path when feasible. Avoid tests that prove only a fixture, mock, or helper unrelated to runtime behavior.
 - For UI work, execute critical journeys in a real browser, inspect visible state plus relevant request/response and runtime errors, and capture fresh evidence at applicable viewports.
+- Prefer Playwright as the UI-proof adapter when the runtime and project support it: run an isolated browser with synthetic data, capture the final screenshot, record video for each critical journey, and retain a trace only for a failing journey. Use another real-browser adapter only when Playwright is unavailable, and record that limitation.
+- Record demonstrations at a natural human-review pace. Do not speed up, skip meaningful transitions, or choreograph rapid clicks; keep each decisive state visible long enough to understand what was tested and proven.
 - Bind every verdict to source SHA or diff identity, environment and relevant configuration, exact command or journey, result, and materialized artifact.
 - Require mandatory remote artifacts to be transferred into the run directory. A remote-only path is not materialized evidence.
 
@@ -57,3 +59,7 @@ Each lane returns `PASS`, `PASS_WITH_RISK`, `FAIL`, or `BLOCKED`, plus:
 Deduplicate receipts across lanes. One receipt may satisfy multiple obligations only when its contract and evidence explicitly cover them.
 
 On `FAIL`, reopen the responsible executor and invalidate affected downstream receipts. Permit at most three correction/retest cycles. On `BLOCKED`, never downgrade the gate; report the missing capability, evidence, or authority.
+
+When visual proof is expected but Playwright, capture, or an equivalent browser capability is unavailable, return `PASS_WITH_RISK` rather than a fully verified pass. State the unavailable capability, the substitute evidence, and the residual risk. Use `BLOCKED` only when the approved contract explicitly makes that visual proof mandatory.
+
+Switching the proof collection from a remote worker to an approved local Mac is an operational fallback. It does not require a new graph or user approval when it preserves the source, authority, acceptance criteria, and risk ceiling; record the environment change in the receipt.

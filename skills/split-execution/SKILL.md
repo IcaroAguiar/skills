@@ -1,23 +1,23 @@
 ---
 name: split-execution
-description: Execute approved Split Engineering DAG nodes through isolated persistent tasks or bounded subagents, with exclusive ownership, contract confirmation, event-driven steering, local commits, proportional checks, and dedicated integration nodes. Use only when explicitly invoked for an approved split graph or when the user directly requests split-execution.
+description: Execute approved Split Engineering missions through isolated strict OpenAI role-tiered Luna profiles or declared portable specialist agents, with exclusive ownership, contract confirmation, event-driven steering, local commits, and proportional checks. Use only when explicitly invoked for an approved split plan or when the user directly requests split-execution. Never silently substitute binding mode, model, role, reasoning tier, or isolation adapter.
 ---
 
 # Split Execution
 
-Materialize approved implementation and integration nodes. Do not invent or silently widen the graph.
+Materialize approved missions. Do not invent or silently widen the plan.
 
 ## Select the adapter
 
-Read [references/execution-adapters.md](references/execution-adapters.md). Prefer user-visible persistent project tasks when the harness exposes them. Otherwise use subagents with the same node contract and record degraded durability.
+Read [references/execution-adapters.md](references/execution-adapters.md). Use the exact role profile and effort frozen in the approved plan. If `strict-openai` cannot prove the required role-tiered Luna profile, stop. If `portable` is approved, use the matching `split-*` profile and disclose its inherited or native model semantics.
 
 ## Dispatch ready nodes
 
-1. Re-read the approved graph version and current source state.
-2. Select every node whose graph, ownership, environment, and capacity dependencies are satisfied.
+1. Re-read the approved plan and current source state.
+2. Select every mission whose explicit dependencies, ownership, environment, and capacity needs are satisfied.
 3. Create an isolated branch or worktree per writer. Never dispatch overlapping write ownership concurrently.
-4. Use Luna with `high` reasoning by default. Use `medium` or `low` only when the node is explicitly mechanical, deterministic, or the user requests a lower-cost execution tier.
-5. Give each thread the contract in [references/executor-contract.md](references/executor-contract.md), the raw node inputs, exact checkout, prohibitions, and receipt format.
+4. Route by mission kind: explorer for read-only mapping, executor for implementation or integration, debugger for causal diagnosis, test engineer for test ownership, and reviewer for independent diff review. In `strict-openai`, use the corresponding role-tiered Luna profile. Do not change the frozen binding automatically.
+5. Give each thread the contract in [references/executor-contract.md](references/executor-contract.md), the mission inputs, exact checkout, prohibitions, and receipt format.
 6. Tell every worker it is not alone, must preserve unrelated changes, and must not revert other workers.
 
 ## Confirm before writing
@@ -28,7 +28,7 @@ Require the executor to return its reconstruction of objective, boundaries, depe
 
 - Monitor contract confirmation, milestones, false assumptions, shared-contract edits, scope expansion, risk, blockers, and completion claims.
 - Ask questions or redirect at event boundaries. Avoid fixed-interval micromanagement.
-- When a worker discovers a material graph change, stop that node and request replan. Do not let the worker mutate the graph.
+- When a worker discovers a material plan change, stop that mission and request replan. Do not let the worker widen scope.
 - Reconfirm live head and diff before admitting any receipt.
 
 ## Admit an implementation receipt
@@ -36,16 +36,20 @@ Require the executor to return its reconstruction of objective, boundaries, depe
 Require:
 
 - changed files and behavior-oriented summary;
-- why the implementation satisfies the node contract;
+- why the implementation satisfies the mission contract;
 - source SHA or diff identity;
 - focused tests plus applicable build, typecheck, lint, and `git diff --check`;
 - exact commands, results, environment, and artifact paths;
 - local commit identifiers;
 - skipped checks, blockers, baseline failures, and residual risk;
-- no push, PR, merge, deploy, migration, or external write unless the approved node explicitly authorizes it.
+- no push, PR, merge, deploy, migration, or external write unless the approved mission explicitly authorizes it.
 
-Transition the node to `EVIDENCE_PENDING`; let the orchestrator admit or reject the receipt. A receipt can pass the execution node but never substitutes for independent `$split-test` proof.
+Let the orchestrator admit or reject the receipt. It never substitutes for independent `$split-test` proof.
+
+## Pre-review quality gate
+
+Before presenting a completed delivery for final review, re-read the current diff, run the applicable checks, resolve every defect the executor can reproduce, and refresh stale evidence. Do not pass known defects, ignored failures, or unexamined user-visible behavior to final review as if they were complete. Report only the residual risks that remain after this gate.
 
 ## Integrate
 
-Use a dedicated integrator thread for each integration node. Provide only passed source nodes and the integration contract. The integrator may merge or cherry-pick into the approved integration branch, resolve conflicts inside its ownership, run integration-local checks, and return a new SHA-bound receipt. A cross-node behavioral failure belongs to `$split-test`; a material contract conflict belongs to replan.
+Use a dedicated integrator only when integration has a distinct ownership boundary. Provide the passed mission receipts and the integration contract. A cross-mission behavioral failure belongs to `$split-test`; a material contract conflict belongs to replan.

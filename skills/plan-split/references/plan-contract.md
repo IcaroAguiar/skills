@@ -26,7 +26,7 @@ Each node must contain:
 - repository, host, checkout, base, and target branch when applicable;
 - exclusive ownership paths or responsibility boundary;
 - logical dependencies and operational capacity dependencies;
-- reasoning level, defaulting to `medium` for writers and testers and `low` for mechanical discovery;
+- reasoning level, defaulting to Luna with `xhigh` reasoning for writers and testers and `low` for mechanical discovery;
 - local checks and independent test obligations;
 - prohibited actions and any exceptional authority;
 - expected receipts and artifacts;

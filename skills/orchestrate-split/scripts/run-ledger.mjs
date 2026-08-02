@@ -122,7 +122,7 @@ function validateLedger(ledger) {
     for (const key of ["dependencies", "ownership", "acceptanceCriteria", "receipts", "stateHistory"]) {
       if (!Array.isArray(node[key])) errors.push(`node ${node.id}: ${key} must be an array`);
     }
-    if (!new Set(["low", "medium"]).has(node.reasoning)) errors.push(`node ${node.id}: reasoning must be low or medium`);
+    if (!new Set(["low", "medium", "high", "xhigh"]).has(node.reasoning)) errors.push(`node ${node.id}: reasoning must be low, medium, high, or xhigh`);
     if (!Number.isInteger(node.attempts) || node.attempts < 0) errors.push(`node ${node.id}: attempts must be a non-negative integer`);
     if (!Number.isInteger(node.maxAttempts) || node.maxAttempts < 1 || node.maxAttempts > 3) errors.push(`node ${node.id}: maxAttempts must be 1..3`);
     if (node.attempts > node.maxAttempts) errors.push(`node ${node.id}: attempts exceed maxAttempts`);
@@ -198,11 +198,11 @@ function allowedNext(current, next, transitions, resumeState) {
 
 const { positional, flags } = parseArgs(process.argv.slice(2));
 const [command, ledgerPath, third, fourth] = positional;
-if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|transition-run|transition-node|bump-graph> ...");
+if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|present-canvas|transition-run|transition-node|bump-graph> ...");
 
 if (command === "init") {
   if (!ledgerPath) fail("init requires <ledger.json>");
-  for (const key of ["run-id", "title", "run-dir", "report"]) if (!flags[key]) fail(`init requires --${key}`);
+  for (const key of ["run-id", "title", "run-dir"]) if (!flags[key]) fail(`init requires --${key}`);
   if (fs.existsSync(ledgerPath)) fail(`refusing to overwrite existing ledger: ${ledgerPath}`);
   const timestamp = now();
   const ledger = {
@@ -221,7 +221,7 @@ if (command === "init") {
     artifacts: [],
     stateHistory: [],
     graphVersions: [{ version: 1, at: timestamp, status: "DRAFT", delta: "Initial graph", approval: null }],
-    report: { path: path.resolve(String(flags.report)), lastRenderedAt: null },
+    report: { presentation: null },
     extensions: {},
   };
   assertValid(ledger);
@@ -255,7 +255,7 @@ if (command === "set-plan") {
     dependencies: node.dependencies ?? [],
     ownership: node.ownership ?? [],
     acceptanceCriteria: node.acceptanceCriteria ?? [],
-    reasoning: node.reasoning ?? "medium",
+    reasoning: node.reasoning ?? "xhigh",
     attempts: node.attempts ?? 0,
     maxAttempts: node.maxAttempts ?? 3,
     receipts: node.receipts ?? [],
@@ -275,6 +275,14 @@ if (command === "set-plan") {
   const artifact = loadJson(third);
   if (ledger.artifacts.some((item) => item.id === artifact.id)) fail(`artifact already exists: ${artifact.id}`);
   ledger.artifacts.push(artifact);
+} else if (command === "present-canvas") {
+  const surface = String(flags.surface ?? "native").trim();
+  if (!surface) fail("present-canvas requires a non-empty --surface");
+  ledger.report.presentation = {
+    surface,
+    presentedAt: now(),
+    artifactIds: ledger.artifacts.filter((artifact) => artifact.required || artifact.retain).map((artifact) => artifact.id),
+  };
 } else if (command === "transition-run") {
   const next = third;
   if (!RUN_STATES.has(next)) fail(`invalid run state: ${next}`);
@@ -290,7 +298,7 @@ if (command === "set-plan") {
     const incomplete = ledger.nodes.filter((node) => ["execute", "integrate", "test"].includes(node.kind) && node.state !== "PASSED" && node.state !== "INVALIDATED");
     if (incomplete.length) fail(`REPORTING blocked by nodes: ${incomplete.map((node) => node.id).join(", ")}`);
   }
-  if (next === "AWAITING_REVIEW_DECISION" && !fs.existsSync(ledger.report.path)) fail(`report does not exist: ${ledger.report.path}`);
+  if (next === "AWAITING_REVIEW_DECISION" && !ledger.report.presentation?.presentedAt) fail("AWAITING_REVIEW_DECISION requires a presented native review canvas");
   const previous = ledger.state;
   if (next === "BLOCKED") ledger.resumeState = previous;
   if (previous === "BLOCKED") ledger.resumeState = null;

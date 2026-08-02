@@ -1,41 +1,35 @@
 ---
 name: orchestrate-split
-description: Orchestrate a complex engineering task as a versioned, evidence-gated graph across planning, isolated execution, integration, independent testing, and reporting. Use only when the user explicitly invokes orchestrate-split or asks to run the Split Engineering suite; do not use for small tasks whose coordination overhead exceeds the work.
+description: Coordinate complex engineering work through a linear plan, selective read-only advisor consultation, and bounded executor missions. Use only when explicitly invoked as orchestrate-split or when the user asks to run the Split Engineering suite; avoid it for small tasks whose coordination overhead exceeds the work.
 ---
 
 # Orchestrate Split
 
-Act as the control plane. Keep requirements, decisions, lifecycle state, and user communication in the main thread. Delegate noisy or bounded work; never hide a worker result or treat a worker claim as gate evidence.
+Act as the control plane. Keep requirements, decisions, plan, integration, and user communication in the main thread. Delegate only bounded work; never treat a worker claim as gate evidence.
 
 ## Start the run
 
-1. Check whether the task justifies a graph. For a small task, recommend a direct workflow and wait for confirmation.
+1. Check whether the task justifies split work. For a small task, recommend a direct workflow and wait for confirmation.
 2. Detect capabilities before selecting an adapter. Read [references/adapters.md](references/adapters.md).
-3. Create a run ledger with `scripts/run-ledger.mjs init`. Keep run artifacts outside product repositories.
-4. Invoke `$plan-split`. Permit read-only scouts before approval, but prohibit product writes, branches, commits, pushes, PRs, deploys, or other side effects.
-5. Render the first canvas with `$split-report` when the draft graph exists.
-6. Present the complete graph contract and obtain explicit user approval. Record the approval and graph version in the ledger. Do not start executor or integrator nodes before this gate.
+3. Invoke `$plan-split`. Permit read-only scouts before approval, but prohibit product writes, branches, commits, pushes, PRs, deploys, or other side effects.
+4. Decide whether `$engineering-advisor` is needed. Use it only for architectural choices, ambiguous requirements, risky trade-offs, debugging dead ends, or a final risk check. Build the canonical self-contained packet, put the proposal under review last, and invoke the skill once.
+5. Let `$engineering-advisor` dispatch `engineering-advisor` by default with a fresh-context spawn (`fork_turns: none` when supported), or `engineering-advisor-max` when its escalation gate is met. Do not perform a second advisor dispatch after invoking the skill and never call both profiles to manufacture consensus.
+6. Fix one executable plan after the advisory receipt. The orchestrator may accept or reject advice with a reason; ask the user only when the disagreement needs product or authority input. Do not run a consensus loop.
+7. Obtain explicit approval for material scope, authority, and risk before product writes.
 
-## Drive the graph
+## Drive the plan
 
-1. Invoke `$split-execution` for ready implementation and integration nodes.
-2. Schedule every node whose logical dependencies, ownership boundary, environment, and resource capacity are ready. Never parallelize overlapping writers.
-3. Use Luna with `high` reasoning for implementation, integration, and test threads by default. Use `medium` or `low` only for mechanical or deterministic work, or when the user explicitly requests a lower-cost tier.
-4. Monitor by critical events: contract confirmation, meaningful milestone, false assumption, shared-contract change, scope growth, risk, blocker, or completion claim.
-5. Require a mini-grilling or equivalent contract check before an executor writes code. The main orchestrator resolves ambiguity and drift.
-6. Invoke `$split-test` after each integrated, usable milestone. A failed lane reopens the smallest responsible execution node.
-7. Regenerate `$split-report` after gate, risk, replan, reopen, block, and milestone events. Keep routine progress in the canvas instead of flooding the main thread.
-8. Permit at most three failed correction/retest cycles per lane. Then block and present the attempt history plus a replan proposal.
+1. Invoke `$split-execution` for each approved mission. Parallelize only disjoint writers with named ownership and a known integration point.
+2. Route by the approved binding mode and mission role. `strict-openai` uses `engineering-advisor` or gated `engineering-advisor-max` plus the matching role-tiered Luna specialist. `portable` uses `split-engineering-advisor` and matching `split-*` specialists. Do not change binding, model, effort, or role automatically.
+3. Monitor only material events: changed assumption, shared-boundary conflict, scope growth, risk, blocker, or completion claim. Do not poll or micromanage workers.
+4. Invoke `$split-test` at each usable integrated milestone. A failure returns to the smallest responsible mission.
+5. Use `$engineering-advisor` once before completion only when the outcome is materially risky or the evidence is ambiguous.
 
-## Control change
+## Change control
 
-- After the initial graph approval, automatically dispatch ready nodes, admit conforming receipts, run applicable retests within the three-cycle limit, and regenerate the report. Do not request confirmation for those routine gate transitions.
-- Treat objective, non-goals, acceptance criteria, scope, ownership, dependencies, authority, risk, and the test matrix as the material graph contract.
-- Freeze an approved graph version. When a material contract field changes, invalidate affected receipts, create a new version, show the delta, and wait for user approval.
-- Let the orchestrator judge internal gates against approved metrics. Return to the user for initial plan approval, material replan, new authority, high or unresolved risk, a blocker that prevents further safe progress, or the final review decision.
-- Bind evidence to source SHA or diff identity, environment, relevant configuration, exact command or journey, result, and artifact.
-- Treat a changed source state as invalidating every affected receipt.
-- Follow [references/state-machine.md](references/state-machine.md). Use `scripts/run-ledger.mjs`; do not edit lifecycle history by hand.
+- Keep the plan linear. List dependencies only when one mission truly blocks another; do not create a DAG, run ledger, graph version, or node lifecycle for ordinary work.
+- Replan only for a material outcome, scope, authority, risk, or shared-contract change. The orchestrator handles local corrections and retests without returning to the user.
+- Bind evidence to the current diff or source revision, environment, command or journey, and result.
 
 ## Respect authority
 
@@ -43,20 +37,18 @@ Act as the control plane. Keep requirements, decisions, lifecycle state, and use
 - Require explicit authority in the approved graph for dependency installation, push, PR creation, migration, external writes, production access, or deploy.
 - Never merge automatically. Never weaken sandbox, secrets, destructive-action, or user-owned-change protections.
 - Use a faithful isolated environment for production-like tests. Production remains out of scope unless separately authorized.
-- Require all mandatory remote artifacts to be transferred into the run directory. Block the report gate when transfer is unavailable.
+- Require all mandatory artifacts to be available locally. Remote-only artifacts may be replaced by equivalent locally collected proof; block only when a contractually mandatory proof cannot be reproduced or materialized by any approved adapter.
 
 ## Close the suite
 
-1. Transition to `REPORTING` only after every required execution, integration, and test receipt is current.
-2. Have `$split-report` produce one self-contained HTML report under `~/Documents/Codex/reports` by default.
-3. Present the outcome, graph status, changes, behavioral proof, screenshots or demos, residual risk, and blocked or skipped obligations.
-4. Transition to `AWAITING_REVIEW_DECISION` and ask whether the user wants `$split-review`. Do not launch it automatically.
-5. Complete the suite only after the user makes that decision or explicitly ends the run.
-6. After the user accepts the report, use the report cleanup helper only for the exact run directory and only with its explicit confirmation argument. Preserve the final HTML; remove intermediate artifacts.
+1. Have `$split-report` produce a native, user-visible review canvas.
+2. Present the outcome, changes, behavioral proof, residual risk, and skipped obligations.
+3. Confirm the current diff, applicable checks, and evidence before calling the work complete.
+4. Ask whether the user wants an independent review; do not launch it automatically.
 
 ## Recover
 
-- Resume from the ledger and current task/thread states, not memory or narrative alone.
+- Resume from the approved plan, current task/thread states, and current source evidence.
 - Reconfirm repository, host, checkout, branch, head, runtime, and service state after reconnects.
-- If a persistent-thread API is unavailable, use the generic subagent adapter and mark durability as degraded.
-- A task, subagent, test, or review result is a claim until the orchestrator admits its current receipt through the relevant gate.
+- Re-resolve the approved binding and orchestration adapter after reconnects. A native subagent may replace a persistent task only through the adapter-selection rules and without weakening model guarantees, durability, isolation, or authority.
+- A task, subagent, test, or review result remains a claim until the orchestrator verifies it.

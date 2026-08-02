@@ -10,7 +10,6 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ledgerCli = path.join(here, "run-ledger.mjs");
 const reportDir = path.resolve(here, "../../split-report/scripts");
-const renderer = path.join(reportDir, "render-report.mjs");
 const cleaner = path.join(reportDir, "cleanup-run.mjs");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "split-engineering-fixture-"));
 
@@ -34,8 +33,7 @@ try {
   const runId = "fixture-happy";
   const runDir = path.join(root, runId);
   const ledger = path.join(runDir, "run.json");
-  const report = path.join(root, "reports", `${runId}.html`);
-  run(ledgerCli, ["init", ledger, "--run-id", runId, "--title", "Checkout behavior fixture", "--run-dir", runDir, "--report", report]);
+  run(ledgerCli, ["init", ledger, "--run-id", runId, "--title", "Checkout behavior fixture", "--run-dir", runDir]);
 
   const plan = writeJson(path.join(root, "plan.json"), {
     objective: "Prove an integrated checkout behavior with independent verification.",
@@ -47,15 +45,17 @@ try {
   run(ledgerCli, ["set-plan", ledger, plan]);
 
   const nodes = [
-    { id: "exec-api", title: "Implement checkout contract", kind: "execute", dependencies: [], ownership: ["api/checkout"], acceptanceCriteria: ["Valid checkout returns an order"], reasoning: "medium" },
-    { id: "exec-ui", title: "Implement checkout journey", kind: "execute", dependencies: [], ownership: ["web/checkout"], acceptanceCriteria: ["User can submit checkout"], reasoning: "medium" },
-    { id: "integrate-checkout", title: "Integrate checkout milestone", kind: "integrate", dependencies: ["exec-api", "exec-ui"], ownership: ["integration branch"], acceptanceCriteria: ["API and UI run together"], reasoning: "medium" },
-    { id: "test-checkout", title: "Verify real checkout behavior", kind: "test", dependencies: ["integrate-checkout"], ownership: ["browser and API verification"], acceptanceCriteria: ["Critical journey passes with materialized proof"], reasoning: "medium" },
+    { id: "exec-api", title: "Implement checkout contract", kind: "execute", dependencies: [], ownership: ["api/checkout"], acceptanceCriteria: ["Valid checkout returns an order"] },
+    { id: "exec-ui", title: "Implement checkout journey", kind: "execute", dependencies: [], ownership: ["web/checkout"], acceptanceCriteria: ["User can submit checkout"], reasoning: "high" },
+    { id: "integrate-checkout", title: "Integrate checkout milestone", kind: "integrate", dependencies: ["exec-api", "exec-ui"], ownership: ["integration branch"], acceptanceCriteria: ["API and UI run together"], reasoning: "high" },
+    { id: "test-checkout", title: "Verify real checkout behavior", kind: "test", dependencies: ["integrate-checkout"], ownership: ["browser and API verification"], acceptanceCriteria: ["Critical journey passes with materialized proof"], reasoning: "xhigh" },
   ];
   for (const node of nodes) {
     const file = writeJson(path.join(root, `${node.id}.json`), node);
     run(ledgerCli, ["add-node", ledger, file]);
   }
+  const defaultLedger = JSON.parse(fs.readFileSync(ledger, "utf8"));
+  assert.equal(defaultLedger.nodes.find((node) => node.id === "exec-api").reasoning, "xhigh");
 
   run(ledgerCli, ["transition-run", ledger, "PLAN_PENDING_USER", "--actor", "fixture", "--reason", "plan ready"]);
   const premature = run(ledgerCli, ["transition-run", ledger, "APPROVED", "--actor", "fixture", "--reason", "missing approval"], 1);
@@ -85,7 +85,7 @@ try {
   const screenshot = path.join(runDir, "checkout-proof.svg");
   fs.writeFileSync(screenshot, '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#12151a"/><text x="40" y="190" fill="#63d7a0" font-size="32">Checkout behavior passed</text></svg>');
   const artifact = writeJson(path.join(root, "artifact.json"), {
-    id: "checkout-proof", nodeId: "test-checkout", label: "Checkout success", kind: "image", path: screenshot, mime: "image/svg+xml", required: true, summary: "Fresh evidence from the integrated checkout journey.", redacted: true,
+    id: "checkout-proof", nodeId: "test-checkout", label: "Checkout success", kind: "image", path: screenshot, mime: "image/svg+xml", required: true, retain: true, summary: "Fresh evidence from the integrated checkout journey.", redacted: true,
   });
   run(ledgerCli, ["add-artifact", ledger, artifact]);
   const testEvidence = writeJson(path.join(root, "test-evidence.json"), {
@@ -94,20 +94,16 @@ try {
   run(ledgerCli, ["add-evidence", ledger, testEvidence]);
   run(ledgerCli, ["transition-node", ledger, "test-checkout", "PASSED", "--actor", "fixture", "--reason", "behavior verified", "--receipt", "test-receipt"]);
   run(ledgerCli, ["transition-run", ledger, "REPORTING", "--actor", "fixture", "--reason", "all required nodes passed"]);
-  run(renderer, [ledger, report]);
-  run(ledgerCli, ["transition-run", ledger, "AWAITING_REVIEW_DECISION", "--actor", "fixture", "--reason", "self-contained report ready"]);
-  const html = fs.readFileSync(report, "utf8");
-  assert.match(html, /Checkout behavior fixture/);
-  assert.match(html, /data:image\/svg\+xml;base64/);
-  assert.match(html, /AWAITING_REVIEW_DECISION|REPORTING/);
-  assert.match(html, /id="split-ledger"/);
+  run(ledgerCli, ["present-canvas", ledger, "--surface", "fixture native canvas"]);
+  run(ledgerCli, ["transition-run", ledger, "AWAITING_REVIEW_DECISION", "--actor", "fixture", "--reason", "native review canvas ready"]);
+  assert.equal(fs.existsSync(screenshot), true);
 
   const retryId = "fixture-retry";
   const retryDir = path.join(root, retryId);
   const retryLedger = path.join(retryDir, "run.json");
-  run(ledgerCli, ["init", retryLedger, "--run-id", retryId, "--title", "Retry budget fixture", "--run-dir", retryDir, "--report", path.join(root, "reports", retryId + ".html")]);
+  run(ledgerCli, ["init", retryLedger, "--run-id", retryId, "--title", "Retry budget fixture", "--run-dir", retryDir]);
   run(ledgerCli, ["set-plan", retryLedger, plan]);
-  const retryNodeFile = writeJson(path.join(root, "retry-node.json"), { id: "exec-retry", title: "Exercise retry budget", kind: "execute", dependencies: [], ownership: ["fixture"], acceptanceCriteria: ["Budget blocks fourth attempt"], reasoning: "medium" });
+  const retryNodeFile = writeJson(path.join(root, "retry-node.json"), { id: "exec-retry", title: "Exercise retry budget", kind: "execute", dependencies: [], ownership: ["fixture"], acceptanceCriteria: ["Budget blocks fourth attempt"], reasoning: "high" });
   run(ledgerCli, ["add-node", retryLedger, retryNodeFile]);
   transitionNode(retryLedger, "exec-retry", ["READY", "RUNNING", "FAILED", "REOPENED", "RUNNING", "FAILED", "REOPENED", "RUNNING", "FAILED", "REOPENED"]);
   const exhausted = run(ledgerCli, ["transition-node", retryLedger, "exec-retry", "RUNNING", "--actor", "fixture", "--reason", "fourth attempt"], 1);
@@ -116,16 +112,17 @@ try {
   const missingId = "fixture-missing-artifact";
   const missingDir = path.join(root, missingId);
   const missingLedger = path.join(missingDir, "run.json");
-  run(ledgerCli, ["init", missingLedger, "--run-id", missingId, "--title", "Missing artifact fixture", "--run-dir", missingDir, "--report", path.join(root, "reports", missingId + ".html")]);
-  const missingArtifact = writeJson(path.join(root, "missing-artifact.json"), { id: "missing", label: "Missing proof", kind: "image", path: path.join(missingDir, "absent.png"), required: true, summary: "Must block", redacted: true });
+  run(ledgerCli, ["init", missingLedger, "--run-id", missingId, "--title", "Missing artifact fixture", "--run-dir", missingDir]);
+  const missingArtifact = writeJson(path.join(root, "missing-artifact.json"), { id: "missing", label: "Missing proof", kind: "image", path: path.join(missingDir, "absent.png"), required: true, retain: true, summary: "Must block", redacted: true });
   run(ledgerCli, ["add-artifact", missingLedger, missingArtifact]);
-  const blockedRender = run(renderer, [missingLedger, path.join(root, "reports", missingId + ".html")], 1);
-  assert.match(blockedRender.stderr, /required artifact is unavailable/);
+  const blockedCleanup = run(cleaner, [missingLedger, "--retain-dir", path.join(root, "retained-missing"), "--confirm-run", missingId], 1);
+  assert.match(blockedCleanup.stderr, /retained artifact is unavailable/);
 
-  run(cleaner, [ledger, report, "--confirm-run", runId]);
+  const retainDir = path.join(root, "retained");
+  run(cleaner, [ledger, "--retain-dir", retainDir, "--confirm-run", runId]);
   assert.equal(fs.existsSync(runDir), false);
-  assert.equal(fs.existsSync(report), true);
-  process.stdout.write("PASS split-engineering fixture: approval, DAG, receipts, report embedding, retry budget, missing-artifact block, and guarded cleanup\n");
+  assert.equal(fs.existsSync(path.join(retainDir, "checkout-proof.svg")), true);
+  process.stdout.write("PASS split-engineering fixture: approval, DAG, receipts, native canvas evidence, retry budget, missing-artifact block, and guarded cleanup\n");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }
