@@ -1,0 +1,4 @@
+interface:
+  display_name: "Art Direction"
+  short_description: "Execute product-specific visual systems"
+  default_prompt: "Use $art-direction in execute mode after $design-direction to produce a complete, implementable web or mobile direction with components, assets, states, behavior, and revalidation."
