@@ -26,8 +26,10 @@ Complete every section. Use `N/A` with a reason when genuinely inapplicable.
 21. Do not do
 22. Risks: excess, accessibility, performance, implementation, content, platform
 23. Renewed design-direction verdict
-24. Highest classification demonstrated
-25. Classification and checks still N/V
+24. Before/after evidence conditions and authorship-score delta
+25. Highest classification demonstrated
+26. Classification and checks still N/V
+27. User decision: accept, refine, reject, or N/A with reason
 ```
 
 Prefer executable tables, inventories, and wireframes over conceptual prose.

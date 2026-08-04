@@ -7,6 +7,9 @@ Observed evidence:
 Classification:
 Styled | Composed | Authored | Refined | Premium
 
+Authorship scores:
+| Axis | Score | Evidence | PASS / FAIL / N/V |
+
 Context specificity:
 Visible thesis:
 Composition and attention:

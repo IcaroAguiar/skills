@@ -1,26 +1,17 @@
 # Execute
 
-Use this as the default workflow.
+Use when the direction is already explicit or approved. If a consequential
+visual choice remains ambiguous, route to `explore`; if the thesis is approved
+but execution is inconsistent, route to `refine`. Follow the execute lock and
+local completion criteria in [SKILL.md](../SKILL.md).
 
-## Contract
+Select the strongest context-appropriate direction, explain consequential
+tradeoffs, and make it implementable. Render or implement it when the user
+requested a build. Obtain or direct critical assets when tools allow.
 
-Do not return a menu of possibilities. Select the strongest context-appropriate
-direction, explain consequential tradeoffs, and make it implementable.
-
-1. Import the passing `design-direction` contract and unresolved `N/V` items.
-2. Classify context and set an expression budget.
-3. Select a visual posture and state its observable consequences.
-4. Write one operational thesis.
-5. Choose a dominant composition and map the attention path.
-6. Define type, color, form, image, material, and density roles.
-7. Select components by task and reject plausible weaker alternatives.
-8. Inventory required assets; obtain or direct critical assets when tools allow.
-9. Define one primary signature and at most one supporting device.
-10. Specify states, motion, feedback, focus, assistive response, and recovery.
-11. Produce enough screens or frames to prove the journey.
-12. Adapt the system for each requested platform.
-13. Render or implement the direction when the user requested a build.
-14. Re-run `design-direction` and report evidence boundaries.
+Record or load the [direction decision](../templates/direction-decision.md)
+before implementation. Capture the baseline authorship score and comparable
+evidence conditions before changing the surface.
 
 ## Decision standard
 
@@ -42,5 +33,9 @@ Remove any decision that cannot answer at least the first four.
 - the product remains identifiable after replacing the component library;
 - components, assets, behavior, states, and screens are specified;
 - the direction survives realistic content and constraints;
+- every local completion criterion in `SKILL.md` passes;
+- every applicable section of the executable-direction template is complete;
+- equivalent before/after evidence and authorship scores are present when a
+  trustworthy baseline exists;
 - revalidation passes or names exact blockers;
 - the quality claim does not exceed the evidence.

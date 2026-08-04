@@ -1,56 +1,60 @@
 ---
 name: art-direction
-description: Create or audit an executable, product-specific visual direction for web or mobile when a structurally sound interface still feels generic, under-authored, library-driven, visually interchangeable, or insufficiently specific to its domain and brand. Use after design-direction for authored composition, visual systems, contextual components, assets, motion, states, multi-screen coherence, reference translation, and evidence-bounded refined or premium claims.
+description: Art-direct structurally sound web or mobile interfaces. Use to collaboratively explore and approve a product-specific direction; refine a partially approved direction; translate a visual reference into contextual rules; execute an approved direction; audit authorship and taste; or continue a passing design-direction result that still feels generic.
 ---
 
 # Art Direction
 
-Turn a sound interface contract into a rendered experience that visibly belongs
-to this product. Default to `execute`. Do not stop at a thesis, mood, palette,
-or recommendations.
+Turn a passing interface contract into an executable experience that visibly
+belongs to its product. Explore with the user when the governing direction is
+unclear; execute directly when the direction is already explicit or approved.
 
-## Required relationship
+## 1. Establish the handoff
 
-Use `design-direction` before and after this skill.
+Receive a passing context lock from `design-direction`, then read
+[foundations-and-handoff.md](references/foundations-and-handoff.md). Preserve
+the inherited task, data, permissions, lifecycle, consequences, accessibility,
+and platform constraints while changing their presentation.
 
-1. Receive a passing functional contract from `design-direction`.
-2. Apply art direction without silently changing tasks, data, permissions,
-   lifecycle, or consequences.
-3. Return the result to `design-direction` for revalidation.
+**Complete when:** the inherited contract and every open `N/V` item are
+explicit, with no fundamental design-direction failure entering art direction.
 
-If accessibility, semantics, navigation, hierarchy, responsiveness, state
-logic, or task flow fails, stop and repair the foundation first. Read
-[foundations-and-handoff.md](references/foundations-and-handoff.md).
+## 2. Select one mode
 
-## Select one mode
-
-- **execute** — default. Make decisions and produce an implementable direction.
-  Read [execute.md](workflows/execute.md).
-- **explore** — compare at most two genuinely different directions, recommend
-  one, then continue with `execute`. Read [explore.md](workflows/explore.md).
-- **translate-reference** — extract function, proportion, rhythm, material,
-  behavior, and asset roles without copying. Read
+- **explore** — calibrate intent, compare at most two governing directions on
+  equivalent prototypes, guide critique, and freeze the decision before
+  production changes. Read [explore.md](workflows/explore.md).
+- **refine** — preserve a partially approved thesis while correcting limited
+  inconsistency or under-execution. Read [refine.md](workflows/refine.md).
+- **translate-reference** — extract functional relationships from a reference,
+  then route to `explore`, `refine`, or `execute`. Read
   [translate-reference.md](workflows/translate-reference.md) and
   [reference-translation.md](references/reference-translation.md).
-- **audit** — distinguish authored direction from styling or generic polish.
-  Read [audit.md](workflows/audit.md).
+- **execute** — render or implement one approved or sufficiently specified
+  direction. Read [execute.md](workflows/execute.md).
+- **audit** — classify the rendered result and its evidence. Read
+  [audit.md](workflows/audit.md).
+
+**Complete when:** one mode, its inspected artifact, and its deliverable are
+named. For `audit` and `explore`, follow the selected workflow and stop at its
+completion criterion. `translate-reference` must name the next mode. The
+remaining numbered steps are the `refine` and `execute` path.
 
 ## Execute lock
 
 Follow this sequence:
 
 ```text
-context → posture → thesis → composition → visual system → components
-→ assets → behavior → states → screens → platform adaptation → revalidation
+context -> posture -> thesis -> composition -> visual system -> components
+-> assets -> behavior -> states -> screens -> platform adaptation -> revalidation
 ```
 
-Do not advance with unnamed phrases such as “modern components,” “premium
-visuals,” “better hierarchy,” or “subtle animation.” Make each decision
-observable and buildable.
+Use concrete, buildable terms. Each decision names what changes in the rendered
+result and why it fits this product, task, and platform.
 
-### 1. Interpret context
+## 3. Interpret context
 
-Declare product, domain, users, dominant task, frequency, consequence of error,
+Declare product, domain, users, dominant task, frequency, error consequence,
 density, trust requirement, brand posture, expression budget, platform,
 physical context, and expected visual maturity. Read
 [product-context.md](references/product-context.md) and the closest context:
@@ -61,99 +65,85 @@ physical context, and expected visual maturity. Read
 [consumer](contexts/consumer-products.md), or
 [institutional](contexts/institutional-products.md).
 
-### 2. Commit to a direction
+**Complete when:** every context axis is explicit, the expression budget is
+bounded, and exactly one closest context module has been applied.
 
-Choose one concrete visual posture, one operational thesis, and one dominant
-composition. State the attention path and the relationship between selection,
-state, and action. Read [visual-postures.md](references/visual-postures.md) and
-[composition-models.md](references/composition-models.md).
+## 4. Commit to a direction
 
-### 3. Synthesize the system
+Choose one visual posture, one operational thesis, and one dominant
+composition. Map the attention path and the relationship between selection,
+state, and action. Read [visual-postures.md](references/visual-postures.md),
+[composition-models.md](references/composition-models.md), and the recorded
+[direction decision](templates/direction-decision.md). When using precedent,
+also read [precedent-library.md](references/precedent-library.md).
+
+**Complete when:** posture, thesis, composition, and attention path describe
+one coherent direction whose rendered consequences are observable; its status
+is approved, user-authorized for direct execution, or explicitly awaiting a
+decision before production changes.
+
+## 5. Synthesize the visual system
 
 Define semantic roles for typography, color, form, imagery, surfaces, depth,
-and density. Define where each role appears and when it disappears. Read
+and density. Define where each role appears, what it communicates, and when it
+recedes. Read
 [visual-system-synthesis.md](references/visual-system-synthesis.md).
 
-### 4. Specify implementation
+**Complete when:** every visual medium has a named semantic role and the roles
+form one hierarchy rather than a collection of effects.
 
-For every material component, state its function, behavior, states,
-justification, and rejected alternative. Produce an asset inventory with
-function, placement, direction, variants, fallback, and genericity risk. Read
+## 6. Specify components and assets
+
+For every material component, state its function, behavior, states, rationale,
+and strongest rejected alternative. Inventory critical assets with function,
+placement, direction, variants, fallback, and genericity risk. Read
 [contextual-components.md](references/contextual-components.md) and
 [asset-direction.md](references/asset-direction.md).
 
-### 5. Make behavior visible
+**Complete when:** every material component is justified by the task and every
+critical asset has an executable direction and fallback.
+
+## 7. Carry the system through behavior
 
 Choose at most one primary signature and one supporting device. Specify motion,
-feedback, reduced-motion behavior, focus, assistive response, and failure or
-undo. Read [signature-elements.md](references/signature-elements.md) and
-[motion-and-feedback.md](references/motion-and-feedback.md).
+feedback, reduced motion, focus, assistive response, failure, and recovery.
+Cover the minimum screen sequence that proves entry, selection, depth, action,
+response, and recovery. Adapt composition, navigation, density, action
+geography, input, materials, and motion for each requested platform. Read
+[signature-elements.md](references/signature-elements.md),
+[motion-and-feedback.md](references/motion-and-feedback.md),
+[multi-screen-coherence.md](references/multi-screen-coherence.md), and the
+applicable [web](references/web-art-direction.md) or
+[mobile](references/mobile-art-direction.md) module.
 
-### 6. Prove a system, not one hero frame
+**Complete when:** signature, behavior, critical states, screen sequence, and
+each requested platform express the same direction through platform-appropriate
+composition.
 
-Cover the real states and the minimum screen sequence needed to demonstrate
-entry, selection, depth, action, response, and recovery. Preserve the system
-without repeating one layout. Read
-[multi-screen-coherence.md](references/multi-screen-coherence.md).
+## 8. Countercheck, revalidate, and deliver
 
-### 7. Adapt rather than scale
+Run [art-direction-antipatterns.md](references/art-direction-antipatterns.md),
+then execute every applicable hard gate in
+[behavioral-revalidation.md](references/behavioral-revalidation.md) before the
+authorship score in [authorship-evaluation.md](references/authorship-evaluation.md)
+and visual classification in [validation-gates.md](references/validation-gates.md).
+Return the recorded result to `design-direction` for final revalidation.
 
-Preserve concept, posture, terminology, and signature. Adapt composition,
-navigation, density, action geography, input, materials, and motion. Read
-[web-art-direction.md](references/web-art-direction.md) and/or
-[mobile-art-direction.md](references/mobile-art-direction.md).
+For user-visible implementation, provide a before/after pair whenever a
+trustworthy baseline is available. Keep state, viewport, theme, data, content,
+and interaction conditions equivalent. Label a non-integrated render as a
+proposal, not as factual implementation evidence. When the workflow remains
+interactive, ask the user to accept, refine, or reject the direction; scope any
+recorded preference before persisting it.
 
-### 8. Countercheck and revalidate
+Use [executable-direction.md](templates/executable-direction.md); for a journey,
+also use [multi-screen-system.md](templates/multi-screen-system.md). Use the
+branch template for reference translation or audit.
 
-Run [art-direction-antipatterns.md](references/art-direction-antipatterns.md)
-and [validation-gates.md](references/validation-gates.md). Re-run
-`design-direction`. Reduce expression rather than weakening a higher-order
-constraint.
+Read [portability.md](references/portability.md) only when adapting the skill to
+another harness.
 
-## Required output
-
-Use [executable-direction.md](templates/executable-direction.md). Include all
-25 sections or mark a section `N/A` with a reason. For a journey, also use
-[multi-screen-system.md](templates/multi-screen-system.md).
-For reference work use
-[reference-translation.md](templates/reference-translation.md); for audits use
-[audit-report.md](templates/audit-report.md).
-
-Never omit:
-
-- exact experience structure;
-- type, color, form, and surface roles;
-- contextual component decisions;
-- asset inventory and fallbacks;
-- signature behavior;
-- meaningful states;
-- motion and feedback plan;
-- web/mobile or platform adaptation;
-- removal list and explicit “do not” list;
-- renewed `design-direction` verdict;
-- highest evidenced claim and remaining `N/V`.
-
-## Non-negotiable gates
-
-Reject the result as art-directed when the direction exists only in prose,
-composition remains interchangeable, only tokens changed, assets are avoided,
-all screens repeat one layout, components were not chosen by task, or the
-signature is a decorative gimmick.
-
-“Premium” is an earned evidence level, not a requested style. Static imagery
-can prove composition and visual craft only. Mobile web does not prove native
-behavior. Never convert `N/V` into presumed approval.
-
-## Validation protocol
-
-Use [blind-three-stage-protocol.md](references/blind-three-stage-protocol.md)
-for formal comparison:
-
-```text
-A. no skill
-B. design-direction
-C. design-direction + art-direction
-```
-
-Keep authors isolated and freeze the brief, content, stack, tools, and budget.
-Include a sober counterexample where restraint is the correct direction.
+**Complete when:** every applicable hard gate passes, each unsupported check is
+`N/V` with its effect on the claim, the authorship score and classification are
+evidence-bounded, the branch template is exhaustive, and the renewed
+`design-direction` verdict accepts the inherited contract.
