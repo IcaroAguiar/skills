@@ -16,6 +16,18 @@ Pass only when:
 - platform adaptation is structural;
 - `design-direction` passes again.
 
+Before applying this visual gate, execute every applicable gate in
+[behavioral-revalidation.md](behavioral-revalidation.md). A `FAIL` returns the
+work to `design-direction`; `N/V` fixes the highest supportable claim.
+
+## Restraint counterproof
+
+When the direction uses a high expression budget, compare it with a deliberately
+restrained treatment of the same task, content, constraints, and platform.
+Retain expression where it improves comprehension, recognition, continuity,
+or task confidence. Prefer the restrained treatment wherever it is equally
+effective and safer.
+
 ## Quality levels
 
 - **Styled** — surface changes only.
@@ -25,7 +37,7 @@ Pass only when:
 - **Premium** — refined quality plus verified implementation precision,
   platform behavior, resilience, and accessibility.
 
-Do not average away foundation failures.
+A foundation failure fixes the maximum verdict; averages cannot override it.
 
 ## Evidence boundary
 

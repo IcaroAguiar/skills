@@ -1,119 +1,78 @@
 ---
 name: design-direction
-description: Projete, revise e redesenhe interfaces web e mobile com direção autoral e qualidade funcional. Use ao criar ou auditar páginas, fluxos e componentes; detectar cardificação excessiva, megacards, excesso de moldura, clichês de interface gerada por IA (AI slop), hierarquia genérica, estados fragmentados, formulários extensos, coleções com ações dominantes ou overflow oculto, ciclos de vida ambíguos, tabelas infladas, problemas de acessibilidade ou usabilidade; propor um redesign; ou converter uma referência em preferência candidata.
+description: Design context-aware web or mobile interfaces. Use to create an interface; audit an existing screen, flow, component, screenshot, or implementation; propose or implement a redesign; or capture a visual reference or stated preference as a candidate design rule.
 ---
 
 # Design Direction
 
-Produzir interfaces específicas para a tarefa e o produto. Aplicar os mesmos critérios ao gerar e revisar: uma solução só está pronta quando estrutura, linguagem visual e comportamento passam pelos fundamentos.
+Shape the interface around its task, product context, and users. Apply the same standards when creating and reviewing. Respond in the user's language; keep the skill's internal terminology in English.
 
-## 1. Escolher o ramo
+## 1. Select one branch
 
-Selecionar um ramo principal:
+- **Create** — define a new interface, flow, or component.
+- **Review** — audit evidence, score observable categories, and issue a verdict without editing.
+- **Redesign** — diagnose an existing interface and propose a complete replacement without editing production.
+- **Implement** — apply an authorized redesign, validate it, and prove the result.
+- **Capture preference** — convert a reference or comment into a candidate rule.
 
-- **Gerar** — criar uma interface, fluxo ou componente.
-- **Revisar** — avaliar um artefato e emitir veredito.
-- **Redesenhar** — diagnosticar e propor uma solução completa.
-- **Capturar preferência** — transformar uma referência ou comentário em regra candidata.
+Combine review and redesign when the request is to improve or refactor. Enter
+`Implement` only when the request already authorizes editing or the user
+approves the proposed redesign.
 
-Combinar revisão e redesign quando o pedido for melhorar, refatorar ou corrigir. Implementar apenas quando o pedido também autorizar edição; a stack do projeto orienta o código, não os princípios.
+**Complete when:** the branch, artifact, and expected deliverable are explicit.
 
-**Concluído quando:** o ramo, o artefato avaliado e o resultado esperado estão explícitos.
+When a passing result is structurally sound but the user asks for a more
+authored, differentiated, expressive, or art-directed result, finish this
+skill's gate first and then hand the approved context lock to `art-direction`
+when that complementary skill is available. Reapply this skill after the art
+direction pass.
 
-## 2. Carregar a base certa
+## 2. Establish the context lock
 
-Em geração, revisão ou redesign, ler:
+Read:
 
-- [fundamentos.md](references/fundamentos.md) — precedência e mínimos obrigatórios;
-- [direcao-autoral.md](references/direcao-autoral.md) — princípios autorais;
-- [qualidade-visual.md](references/qualidade-visual.md) — escala, moldura, megacards, avisos em destaque e clichês;
-- [acessibilidade-e-usabilidade.md](references/acessibilidade-e-usabilidade.md) — critérios funcionais;
-- [estados-e-feedback.md](references/estados-e-feedback.md) — escopo, hierarquia, redundância e metadados;
-- [colecoes-operacionais.md](references/colecoes-operacionais.md) — ações, continuidade, ciclo de vida e tabelas;
-- [workflows.md](references/workflows.md) — passos e critérios de conclusão.
+- [foundations.md](references/foundations.md) for precedence and evidence limits;
+- [contexts.md](references/contexts.md) to classify the product profile and surface mode;
+- [workflows.md](references/workflows.md) for the selected branch.
 
-Em captura de preferência, ler:
+Record the primary task, surface mode, usage frequency, navigation topology, minimum functional density, action geography, required data, and required states. Treat these as the **context lock**: visual refinement may reorganize them, but may not silently change their purpose.
 
-- [captura-de-preferencias.md](references/captura-de-preferencias.md);
-- [fundamentos.md](references/fundamentos.md);
-- [direcao-autoral.md](references/direcao-autoral.md);
-- [contextos.md](references/contextos.md);
-- a referência que receberia a mudança.
+Distinguish observation, inference, preference, requirement, and unverified behavior. Use the user's language in deliverables.
 
-Acrescentar conforme o ramo:
+**Complete when:** the context lock and evidence boundary are explicit, and every material ambiguity is either resolved or declared.
 
-- [contextos.md](references/contextos.md) ao inferir o perfil do produto;
-- [avaliacao.md](references/avaliacao.md) em toda revisão ou autoavaliação;
-- [templates-de-saida.md](references/templates-de-saida.md) antes de redigir a entrega;
-- [referencias-visuais.md](references/referencias-visuais.md) ao analisar referências ou buscar precedentes;
-- [portabilidade.md](references/portabilidade.md) ao adaptar o núcleo para outro agente.
+## 3. Load only relevant reference
 
-**Concluído quando:** toda referência obrigatória do ramo foi lida por inteiro.
+For create, review, redesign, or implement, read [design-direction.md](references/design-direction.md), then load the modules that match the artifact. Read [antipattern-index.md](references/antipattern-index.md) when diagnosing an existing interface, then open only the authoritative modules that match observed signals:
 
-## 3. Aplicar a precedência
+| Condition | Read |
+|---|---|
+| Full page, PageHeader, or content division | [hierarchy-and-layout.md](references/hierarchy-and-layout.md) |
+| Surface treatment, scale, elevation, component integration, or generic visual language | [visual-quality.md](references/visual-quality.md) |
+| Interactive UI, forms, input methods, or responsive behavior | [accessibility-and-usability.md](references/accessibility-and-usability.md) |
+| Native mobile application, phone/tablet screen, mobile flow, or device runtime | [mobile-interfaces.md](references/mobile-interfaces.md) |
+| Mobile visual refinement, premium finish, craft critique, or a result that is correct but still generic | [mobile-craft.md](references/mobile-craft.md) |
+| Status, feedback, alerts, metadata, or async behavior | [states-and-feedback.md](references/states-and-feedback.md) |
+| Lists, tables, repeated actions, overflow, or lifecycle transitions | [operational-collections.md](references/operational-collections.md) |
 
-Resolver conflitos nesta ordem:
+For review or self-evaluation, also read [evaluation.md](references/evaluation.md). Before writing a structured deliverable, read [output-templates.md](references/output-templates.md).
 
-1. segurança;
-2. acessibilidade;
-3. usabilidade;
-4. clareza;
-5. consistência de interação;
-6. adequação ao contexto;
-7. hierarquia visual;
-8. direção autoral;
-9. preferência estética local.
+For preference capture, read [preference-capture.md](references/preference-capture.md) and the single authoritative module the candidate would change. Read [visual-references.md](references/visual-references.md) when researching precedent. Read [portability.md](references/portability.md) only when adapting the skill to another harness.
 
-Uma decisão inferior nunca compensa uma falha superior. Registrar exceções com contexto, justificativa, limite e prova.
+**Complete when:** every loaded module is relevant to an observed element, requirement, or branch output; no required module remains unread.
 
-## 4. Fixar contexto e evidência
+## 4. Execute the branch
 
-Escolher um perfil principal e, quando útil, no máximo duas influências secundárias. Declarar perfil, sinais observados, premissas e ambiguidades materiais.
+Follow the matching sequence in [workflows.md](references/workflows.md). Preserve content, behavior, states, and positive patterns unless a requirement explicitly changes them.
 
-Perfis: SaaS, dashboard analítico, sistema interno, landing page, site institucional, aplicação mobile e componente isolado.
+Use implementation evidence when available. A screenshot proves static composition, not interaction. Source code proves intent, not the rendered experience. Mark unsupported claims `N/V` rather than inferring success.
 
-- Distinguir observação, inferência, preferência e requisito.
-- Não inventar requisitos, estados, conteúdo, marca ou prova comercial.
-- Em revisão visual, ancorar cada finding em uma região ou estado identificável.
-- Um screenshot não prova teclado, foco, zoom, responsividade ou estados assíncronos.
-- Código sem interface em execução não prova composição, escala ou superfícies renderizadas.
-- Usar referências para extrair princípios, não para copiar identidade ou composição.
+**Complete when:** the branch's completion criterion passes and every proposed change maps to an observed problem or explicit requirement.
 
-**Concluído quando:** cada afirmação está marcada como observada, inferida ou não verificada.
+## 5. Prove the result
 
-## 5. Executar e provar
+For user-visible implementation, validate the rendered interface at relevant widths and input methods. For every completed redesign surface, provide a before/after pair whenever trustworthy baseline evidence is available. Capture both at the same state, viewport, theme, data condition, and relevant interaction state whenever those conditions can be reproduced. Label each image and identify the requested behavior or visual rule it proves. If a comparable baseline cannot be obtained, state why; never reconstruct or present an approximate image as factual “before” evidence.
 
-Seguir o ramo em [workflows.md](references/workflows.md). Em revisão completa, entregar:
+For reviews, apply every relevant limiter in [evaluation.md](references/evaluation.md); a verdict is not an average. For redesign proposals, map each finding to a change and request authorization before editing. For implemented redesigns, show the evidence and ask whether to accept, refine, or revert when the workflow remains interactive. For captured preferences, wait for explicit approval before changing the skill.
 
-1. perfil, evidência e veredito;
-2. diagnóstico e notas justificadas;
-3. achados priorizados por impacto;
-4. padrões positivos a preservar;
-5. recomendações; redesign quando solicitado;
-6. wireframe ASCII quando esclarecer relações;
-7. não verificado, exceções e risco residual.
-
-O veredito não é uma média. Falhas críticas de acesso, uso ou clareza limitam a aprovação.
-
-## Critério de conclusão
-
-Marcar cada item aplicável como `PASSA`, `FALHA` ou `N/V`:
-
-- tarefa principal e ação prioritária permanecem claras;
-- proporção, densidade e ritmo correspondem ao contexto;
-- cada moldura ou superfície possui função verificável;
-- nenhum megacard atua apenas como embalagem da página;
-- nenhum título de seção atua como card ou banner sem função independente;
-- avisos em destaque comunicam severidade ou ação, não decoração;
-- a composição evita uma constelação de clichês genéricos;
-- formulários extensos estruturam complexidade, progresso e revisão sem esconder requisitos essenciais;
-- indicadores distinguem estado global, estado local, feedback transitório e metadados sem contradição aparente;
-- coleções revelam todos os registros, priorizam dados e usam ações proporcionais;
-- transições permitem prever estado atual, ação, próximo estado e reversibilidade;
-- tabelas preservam varredura, comparação e seleção;
-- acessibilidade e usabilidade aplicáveis foram verificadas;
-- desktop, mobile e métodos de entrada relevantes foram cobertos;
-- conteúdo, ações e estados necessários foram preservados;
-- a interface em execução confirma a experiência quando está disponível.
-
-**Concluído quando:** não há `FALHA` aberta nos fundamentos; `N/V` está declarado e limita o veredito.
+**Complete when:** all applicable checks are `PASS`, unsupported checks are `N/V` with stated impact, and no fundamental `FAIL` remains hidden.

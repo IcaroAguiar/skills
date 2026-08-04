@@ -1,4 +1,4 @@
 interface:
   display_name: "Art Direction"
-  short_description: "Execute product-specific visual systems"
-  default_prompt: "Use $art-direction in execute mode after $design-direction to produce a complete, implementable web or mobile direction with components, assets, states, behavior, and revalidation."
+  short_description: "Explore and execute authored interfaces"
+  default_prompt: "Use $art-direction after $design-direction to explore, refine, translate, execute, or audit a product-specific web or mobile direction with evidence-bounded revalidation."
