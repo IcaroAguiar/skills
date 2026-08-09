@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summarize"
+  short_description: "Concise summaries that preserve critical facts"
+  default_prompt: "Use $summarize to condense this content while preserving every material decision, risk, blocker, uncertainty, and next action."

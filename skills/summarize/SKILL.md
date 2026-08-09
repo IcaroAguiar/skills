@@ -1,9 +1,9 @@
 ---
-name: summarize-with-fidelity
+name: summarize
 description: Fidelity-first concise summaries that preserve material decisions, status, evidence, blockers, risks, conditions, uncertainty, and next actions. Use when asked to summarize, shorten, condense, give a TL;DR, executive summary, brief update, or answer in a few lines, especially when omission could mislead.
 ---
 
-# Summarize With Fidelity
+# Summarize
 
 Produce the shortest summary that preserves the reader's decisions, safety, expectations, timing, and confidence.
 
