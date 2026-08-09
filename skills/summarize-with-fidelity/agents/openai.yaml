@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summarize With Fidelity"
+  short_description: "Concise summaries that preserve critical facts"
+  default_prompt: "Use $summarize-with-fidelity to condense this content while preserving every material decision, risk, blocker, uncertainty, and next action."
