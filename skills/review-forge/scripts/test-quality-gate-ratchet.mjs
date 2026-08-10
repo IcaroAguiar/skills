@@ -119,6 +119,11 @@ try {
   expect(workflow.includes("GITHUB_EVENT_PATH: ${{ github.event_path }}"), "generated workflow does not pass event path through env");
   expect(workflow.includes("GITHUB_SHA: ${{ github.sha }}"), "generated workflow does not pass checked-out SHA through env");
   expect(workflow.includes("workflow_dispatch"), "generated workflow does not include workflow_dispatch-safe base fallback");
+  expect(!/uses:\s+\S+@v\d+\b/.test(workflow), "generated workflow still pins mutable action tags such as @v4 or @v2");
+  expect(/uses:\s+actions\/checkout@[0-9a-f]{40}/.test(workflow), "generated workflow must pin actions/checkout to an immutable commit SHA");
+  expect(/uses:\s+actions\/setup-node@[0-9a-f]{40}/.test(workflow), "generated workflow must pin actions/setup-node to an immutable commit SHA");
+  expect(/uses:\s+gitleaks\/gitleaks-action@[0-9a-f]{40}/.test(workflow), "generated workflow must pin gitleaks/gitleaks-action to an immutable commit SHA");
+  expect(/uses:\s+actions\/upload-artifact@[0-9a-f]{40}/.test(workflow), "generated workflow must pin actions/upload-artifact to an immutable commit SHA");
 
   const vendoredFiles = [
     "vendor/collect-review-context.mjs",

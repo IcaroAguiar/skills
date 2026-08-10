@@ -16,19 +16,19 @@ with concrete evidence. A generic clean verdict is invalid.
   redundant comments, and speculative hooks.
 - Ask whether a state model, direct flow, canonical helper, or ownership change
   can remove branches, flags, adapters, wrappers, casts, or modes.
-- Flag duplicated logic and near-duplicate helpers when one canonical
-  implementation can serve the domain.
-- Reject thin wrappers, identity helpers, pass-through layers, and abstractions
-  that add vocabulary without hiding meaningful complexity.
+- Flag duplicated helpers, thin wrappers, and pass-through layers that add
+  vocabulary without hiding meaningful complexity.
 - Treat scattered booleans, nullable modes, feature checks, and condition chains
   in busy paths as design pressure.
+- Flag incomplete renames that leave dual-purpose callers, and narrow guards that
+  cover one form of a hazard while sibling paths keep the same leak or branch.
+- Flag dual pins or two sources of truth after a version bump when one canonical
+  owner can express the pin.
 - Make types and invariants explicit instead of preserving `any`, `unknown`,
   casts, silent fallbacks, or optionality that hides the real contract.
-- Keep logic in the package, service, or module that owns the concept.
-- Separate orchestration from business rules when both become difficult to
-  scan, test, or reuse.
-- Prefer atomic related updates and simple parallelism where sequential or
-  partial flow creates brittleness.
+- Keep logic with its owner; separate orchestration from rules when both become
+  hard to scan, test, or reuse; prefer atomic related updates over brittle
+  partial flow.
 - Require decomposition when a change crosses a repository-defined limit or
   pushes a source file from below 1,000 lines to above it without a compelling
   cohesive reason.

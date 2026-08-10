@@ -72,7 +72,7 @@ Reviewer:
 - blocker precision after adjudicating novel findings;
 - critical/high escapes and severity calibration;
 - five-gate receipt completeness;
-- accepted-state false blocker rate;
+- accepted-state false blocker rate (high/critical on accepted snapshots);
 - wall time, tokens/cost when observable, and review rounds.
 
 Fixer:
@@ -97,15 +97,13 @@ Do not promote a prompt, engine, or routing change unless:
 - no known critical/high finding regresses or escapes;
 - targeted simplification, semantic, and documentation recall meets the corpus
   requirement;
-- the hidden ground truth includes at least one critical/high correctness
-  finding and one critical/high verification finding; these are finding-level
-  coverage gates, while the three six-case categories remain aligned with the
-  engine selector's per-gate recall metrics;
+- hidden ground truth covers critical/high correctness and verification findings
+  (finding-level gates; the three six-case categories still drive per-gate recall);
 - accepted-state false blockers do not worsen beyond the declared margin;
 - fixer changes introduce no critical regression and meet acceptance targets;
 - cost or latency improves without lowering the quality floor;
 - Codex, Cursor, and Claude Code adapters report actual engines truthfully;
-- results include median and worst-case behavior, not only the best run.
+- results include median and worst-case across independent repeats, not one best run.
 
 Keep discovery cases separate from adjudicated promotion cases. A real PR URL
 without hidden ground truth and accepted-state control is useful exploration,

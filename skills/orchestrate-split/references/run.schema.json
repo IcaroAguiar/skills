@@ -69,12 +69,21 @@
   "$defs": {
     "candidate": {
       "type": "object",
-      "required": ["fingerprint", "mode", "repositoryId"],
+      "required": ["fingerprint", "mode", "repositoryId", "schemaVersion", "base"],
       "properties": {
         "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "mode": { "enum": ["commit", "index", "worktree"] },
-        "repositoryId": { "type": "string", "minLength": 1 }
+        "repositoryId": { "type": "string", "minLength": 1 },
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "base": { "type": "string", "minLength": 1 },
+        "head": { "type": "string", "minLength": 1 }
       },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "commit" } }, "required": ["mode"] },
+          "then": { "required": ["head"] }
+        }
+      ],
       "additionalProperties": true
     },
     "gateReceipt": {
