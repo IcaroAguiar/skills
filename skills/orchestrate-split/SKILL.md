@@ -41,10 +41,32 @@ Act as the control plane. Keep requirements, decisions, plan, integration, and u
 
 ## Close the suite
 
-1. Have `$split-report` produce a native, user-visible review canvas.
-2. Present the outcome, changes, behavioral proof, residual risk, and skipped obligations.
-3. Confirm the current diff, applicable checks, and evidence before calling the work complete.
-4. Ask whether the user wants an independent review; do not launch it automatically.
+1. Transition to `REPORTING` only after every required execution, integration, and test receipt is current.
+2. Have `$split-report` produce a native, user-visible review canvas and materialize any contractually required artifacts.
+3. Present the outcome, graph status, changes, behavioral proof, residual risk, and blocked or skipped obligations.
+4. For material code, invoke `$review-forge` automatically on the immutable final
+   candidate identity. Reuse a current Review Forge receipt only when it covers
+   that exact commit, index, or worktree fingerprint; otherwise require a fresh
+   review. Non-code runs must record why review is `NOT_APPLICABLE`.
+5. Admit a structured completion receipt while in `AWAITING_REVIEW_DECISION`.
+   For a Review Forge closeout it must be `REVIEW_FORGE_APPROVAL`, carry the
+   current candidate SHA-256/mode/repository identity and graph version, name a
+   Review Forge evidence receipt with verdict `APPROVE`, and link a current
+   receipt for each of `CORRECTNESS`, `SIMPLIFICATION`, `SEMANTICS`,
+   `DOCUMENTATION`, and `VERIFICATION`. The gate receipts must be bound to that
+   same fingerprint; a stale, divergent, negative, or incomplete receipt is not
+   admissible.
+6. The only material-code alternative is `USER_RISK_ACCEPTANCE`: an explicit,
+   structured user acceptance naming the same current candidate fingerprint,
+   every gate receipt, the reported risk evidence, who accepted it, and the
+   acceptance statement. Never infer this acceptance from silence, a skipped
+   review, or a tracker/report status.
+7. Use `scripts/run-ledger.mjs admit-completion-receipt <ledger.json>
+   <completion-receipt.json>`, then transition with both
+   `--completion-receipt <id>` and `--candidate-fingerprint <sha256>`. The CLI
+   rejects `COMPLETE` when either value is absent or differs from the admitted
+   receipt.
+8. After the user accepts the report, use the report cleanup helper only for the exact run directory and only with its explicit confirmation argument. Preserve the final HTML; remove intermediate artifacts.
 
 ## Recover
 

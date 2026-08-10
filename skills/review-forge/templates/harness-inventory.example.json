@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "fixture": true,
+  "observedAt": "2026-08-09T00:00:00Z",
+  "trust": {
+    "sourceClass": "protected-harness-config",
+    "identifier": "example-live-harness-inventory"
+  },
+  "engines": [
+    {
+      "harness": "example-harness",
+      "id": "review-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "not_observable",
+      "roles": ["reviewer"],
+      "capabilities": {
+        "readOnly": true,
+        "freshContext": true,
+        "workspaceWrite": false,
+        "contextTokens": 128000,
+        "repositoryAccess": true,
+        "toolAccess": ["git", "rg"],
+        "risks": ["low", "medium", "high"]
+      },
+      "cost": {
+        "tier": "high",
+        "expectedRunUsd": 2.4,
+        "retryMultiplier": 1
+      }
+    }
+  ]
+}

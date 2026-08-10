@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Forge Config",
+  "description": "Protected Review Forge policy. Do not place this file in a candidate PR and expect it to control that PR: load it from a harness path outside the candidate worktree with --config, or from a declared base revision with --base and --base-config.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "rules": {
+      "type": "object",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "severities": {
+      "type": "object",
+      "additionalProperties": { "enum": ["low", "medium", "high"] }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "appType": {
+      "enum": ["", "monolith", "microservice", "public-api", "frontend", "library"]
+    },
+    "ignorePaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "customQuestions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "customDomainQuestions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "domainCatalogs": {
+      "type": "array",
+      "items": { "enum": ["lgpd", "privacy", "finance", "financial", "health", "ecommerce", "education", "social", "iot"] }
+    },
+    "dastTargets": {
+      "type": "array",
+      "description": "Protected targets only. Running probes additionally requires --authorize-external-probes and one matching --allow-external-target origin in the current invocation. URLs with userinfo, query strings, or fragments are rejected.",
+      "items": { "type": "string" }
+    },
+    "performanceTargets": {
+      "type": "array",
+      "description": "Protected targets only. Running probes additionally requires --authorize-external-probes and one matching --allow-external-target origin in the current invocation. URLs with userinfo, query strings, or fragments are rejected.",
+      "items": { "type": "string" }
+    },
+    "a11yTargets": {
+      "type": "array",
+      "description": "Protected targets only. Running probes additionally requires --authorize-external-probes and one matching --allow-external-target origin in the current invocation. URLs with userinfo, query strings, or fragments are rejected.",
+      "items": { "type": "string" }
+    },
+    "e2eCoverageReportPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "contractTestReportPaths": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "criticalFlowKeywords": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "e2eCoverageMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "contractPassRateMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "graphqlBaseSchema": {
+      "type": "string"
+    },
+    "graphqlHeadSchema": {
+      "type": "string"
+    },
+    "bundleStatsPath": {
+      "type": "string"
+    },
+    "coverageLinesMin": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "reviewFeedbackPath": {
+      "type": "string"
+    },
+    "externalToolTimeoutMs": {
+      "type": "number",
+      "minimum": 1000
+    }
+  }
+}

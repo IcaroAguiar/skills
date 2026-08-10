@@ -13,6 +13,9 @@ const NODE_STATES = new Set([
   "PASSED", "FAILED", "REOPENED", "BLOCKED", "INVALIDATED",
 ]);
 const NODE_KINDS = new Set(["scout", "execute", "integrate", "test", "report"]);
+const REVIEW_GATES = ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"];
+const COMPLETION_RECEIPT_KINDS = new Set(["REVIEW_FORGE_APPROVAL", "USER_RISK_ACCEPTANCE"]);
+const CANDIDATE_FINGERPRINT = /^[a-f0-9]{64}$/;
 const RUN_TRANSITIONS = {
   DRAFT: ["PLAN_PENDING_USER", "BLOCKED", "CANCELLED"],
   PLAN_PENDING_USER: ["DRAFT", "APPROVED", "BLOCKED", "CANCELLED"],
@@ -88,6 +91,91 @@ function requireString(value, label, errors) {
   if (typeof value !== "string" || value.trim() === "") errors.push(`${label} must be a non-empty string`);
 }
 
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function evidenceById(ledger) {
+  return new Map((ledger.evidence ?? []).map((receipt) => [receipt.id, receipt]));
+}
+
+function validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence = false } = {}) {
+  const errors = [];
+  if (!isObject(receipt)) return ["completionReceipt must be an object"];
+  requireString(receipt.id, "completionReceipt.id", errors);
+  if (!COMPLETION_RECEIPT_KINDS.has(receipt.kind)) errors.push(`completionReceipt.kind must be one of ${[...COMPLETION_RECEIPT_KINDS].join(", ")}`);
+  if (!isObject(receipt.candidate)) errors.push("completionReceipt.candidate must be an object");
+  else {
+    if (!CANDIDATE_FINGERPRINT.test(receipt.candidate.fingerprint ?? "")) errors.push("completionReceipt.candidate.fingerprint must be a lowercase SHA-256");
+    if (!new Set(["commit", "index", "worktree"]).has(receipt.candidate.mode)) errors.push("completionReceipt.candidate.mode must be commit, index, or worktree");
+    requireString(receipt.candidate.repositoryId, "completionReceipt.candidate.repositoryId", errors);
+  }
+  if (receipt.graphVersion !== ledger.graphVersion) errors.push("completionReceipt.graphVersion must match the current graph version");
+  if (!isObject(receipt.gates)) errors.push("completionReceipt.gates must be an object");
+
+  const evidence = evidenceById(ledger);
+  for (const gate of REVIEW_GATES) {
+    const gateReceipt = receipt.gates?.[gate];
+    if (!isObject(gateReceipt)) {
+      errors.push(`completionReceipt.gates.${gate} is required`);
+      continue;
+    }
+    if (!new Set(["PASS", "NOT_APPLICABLE", "BLOCKED"]).has(gateReceipt.status)) errors.push(`completionReceipt.gates.${gate}.status is invalid`);
+    if (!Array.isArray(gateReceipt.receiptIds) || gateReceipt.receiptIds.length === 0) errors.push(`completionReceipt.gates.${gate}.receiptIds must contain at least one receipt`);
+    if (gateReceipt.status === "NOT_APPLICABLE" || gateReceipt.status === "BLOCKED") requireString(gateReceipt.rationale, `completionReceipt.gates.${gate}.rationale`, errors);
+    for (const receiptId of gateReceipt.receiptIds ?? []) {
+      const admitted = evidence.get(receiptId);
+      if (!admitted) {
+        errors.push(`completionReceipt.gates.${gate} references unknown evidence ${receiptId}`);
+        continue;
+      }
+      if (requireAdmittedEvidence && admitted.current !== true) errors.push(`completionReceipt.gates.${gate} receipt is stale: ${receiptId}`);
+      if (admitted.candidateFingerprint !== receipt.candidate?.fingerprint) errors.push(`completionReceipt.gates.${gate} receipt fingerprint diverges: ${receiptId}`);
+      if (admitted.gate !== gate) errors.push(`completionReceipt.gates.${gate} receipt is not scoped to ${gate}: ${receiptId}`);
+    }
+  }
+
+  if (receipt.kind === "REVIEW_FORGE_APPROVAL") {
+    requireString(receipt.reviewForgeReceiptId, "completionReceipt.reviewForgeReceiptId", errors);
+    const review = evidence.get(receipt.reviewForgeReceiptId);
+    if (!review) errors.push(`completionReceipt review receipt is missing: ${receipt.reviewForgeReceiptId}`);
+    else {
+      if (requireAdmittedEvidence && review.current !== true) errors.push(`completionReceipt review receipt is stale: ${receipt.reviewForgeReceiptId}`);
+      if (review.candidateFingerprint !== receipt.candidate?.fingerprint) errors.push(`completionReceipt review receipt fingerprint diverges: ${receipt.reviewForgeReceiptId}`);
+      if (review.source !== "review-forge") errors.push(`completionReceipt review receipt is not from Review Forge: ${receipt.reviewForgeReceiptId}`);
+      if (review.verdict !== "APPROVE") errors.push(`completionReceipt requires Review Forge APPROVE, received ${review.verdict ?? "no verdict"}`);
+    }
+    for (const gate of REVIEW_GATES) {
+      const status = receipt.gates?.[gate]?.status;
+      if (!["PASS", "NOT_APPLICABLE"].includes(status)) errors.push(`completionReceipt Review Forge gate ${gate} must be PASS or NOT_APPLICABLE`);
+      for (const receiptId of receipt.gates?.[gate]?.receiptIds ?? []) {
+        if (evidence.get(receiptId)?.source !== "review-forge") errors.push(`completionReceipt Review Forge gate ${gate} receipt is not from Review Forge: ${receiptId}`);
+      }
+    }
+  }
+
+  if (receipt.kind === "USER_RISK_ACCEPTANCE") {
+    if (!isObject(receipt.userAcceptance)) errors.push("completionReceipt.userAcceptance must be an object");
+    else {
+      requireString(receipt.userAcceptance.by, "completionReceipt.userAcceptance.by", errors);
+      requireString(receipt.userAcceptance.at, "completionReceipt.userAcceptance.at", errors);
+      requireString(receipt.userAcceptance.statement, "completionReceipt.userAcceptance.statement", errors);
+      if (receipt.userAcceptance.explicit !== true) errors.push("completionReceipt.userAcceptance.explicit must be true");
+      if (!Array.isArray(receipt.userAcceptance.acceptedRiskReceiptIds) || receipt.userAcceptance.acceptedRiskReceiptIds.length === 0) errors.push("completionReceipt.userAcceptance.acceptedRiskReceiptIds must contain reported risk evidence");
+      for (const receiptId of receipt.userAcceptance.acceptedRiskReceiptIds ?? []) {
+        const admitted = evidence.get(receiptId);
+        if (!admitted) errors.push(`completionReceipt user acceptance references unknown evidence ${receiptId}`);
+        else {
+          if (requireAdmittedEvidence && admitted.current !== true) errors.push(`completionReceipt user acceptance receipt is stale: ${receiptId}`);
+          if (admitted.candidateFingerprint !== receipt.candidate?.fingerprint) errors.push(`completionReceipt user acceptance receipt fingerprint diverges: ${receiptId}`);
+          if (!["BLOCKED", "RESIDUAL_RISK"].includes(admitted.result)) errors.push(`completionReceipt user acceptance receipt is not reported blocker or residual risk evidence: ${receiptId}`);
+        }
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
 function validateLedger(ledger) {
   const errors = [];
   if (!ledger || typeof ledger !== "object" || Array.isArray(ledger)) return ["ledger must be an object"];
@@ -109,6 +197,8 @@ function validateLedger(ledger) {
   if (!Array.isArray(ledger.stateHistory)) errors.push("stateHistory must be an array");
   if (!Array.isArray(ledger.graphVersions) || ledger.graphVersions.length === 0) errors.push("graphVersions must contain at least one version");
   if (!ledger.report || typeof ledger.report !== "object") errors.push("report must be an object");
+  if (ledger.completionReceipt !== undefined && ledger.completionReceipt !== null) errors.push(...validateCompletionReceipt(ledger, ledger.completionReceipt, { requireAdmittedEvidence: true }));
+  if (ledger.state === "COMPLETE" && ledger.completionReceipt == null) errors.push("COMPLETE requires a completionReceipt");
   if (errors.length || !Array.isArray(ledger.nodes)) return errors;
 
   const ids = new Set();
@@ -198,7 +288,7 @@ function allowedNext(current, next, transitions, resumeState) {
 
 const { positional, flags } = parseArgs(process.argv.slice(2));
 const [command, ledgerPath, third, fourth] = positional;
-if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|present-canvas|transition-run|transition-node|bump-graph> ...");
+if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|present-canvas|admit-completion-receipt|transition-run|transition-node|bump-graph> ...");
 
 if (command === "init") {
   if (!ledgerPath) fail("init requires <ledger.json>");
@@ -221,7 +311,12 @@ if (command === "init") {
     artifacts: [],
     stateHistory: [],
     graphVersions: [{ version: 1, at: timestamp, status: "DRAFT", delta: "Initial graph", approval: null }],
-    report: { presentation: null },
+    report: {
+      path: path.resolve(String(flags.report ?? path.join(String(flags["run-dir"]), "report.html"))),
+      lastRenderedAt: null,
+      presentation: null,
+    },
+    completionReceipt: null,
     extensions: {},
   };
   assertValid(ledger);
@@ -283,6 +378,13 @@ if (command === "set-plan") {
     presentedAt: now(),
     artifactIds: ledger.artifacts.filter((artifact) => artifact.required || artifact.retain).map((artifact) => artifact.id),
   };
+} else if (command === "admit-completion-receipt") {
+  if (!third) fail("admit-completion-receipt requires <completion-receipt.json>");
+  if (ledger.state !== "AWAITING_REVIEW_DECISION") fail("completion receipt can be admitted only while awaiting the review decision");
+  const receipt = loadJson(third);
+  const errors = validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence: true });
+  if (errors.length) fail(`completion receipt rejected:\n- ${errors.join("\n- ")}`);
+  ledger.completionReceipt = { ...receipt, admittedAt: now() };
 } else if (command === "transition-run") {
   const next = third;
   if (!RUN_STATES.has(next)) fail(`invalid run state: ${next}`);
@@ -298,7 +400,18 @@ if (command === "set-plan") {
     const incomplete = ledger.nodes.filter((node) => ["execute", "integrate", "test"].includes(node.kind) && node.state !== "PASSED" && node.state !== "INVALIDATED");
     if (incomplete.length) fail(`REPORTING blocked by nodes: ${incomplete.map((node) => node.id).join(", ")}`);
   }
-  if (next === "AWAITING_REVIEW_DECISION" && !ledger.report.presentation?.presentedAt) fail("AWAITING_REVIEW_DECISION requires a presented native review canvas");
+  if (next === "AWAITING_REVIEW_DECISION" && !ledger.report.presentation?.presentedAt && !fs.existsSync(ledger.report.path)) {
+    fail(`AWAITING_REVIEW_DECISION requires a presented review canvas or report: ${ledger.report.path}`);
+  }
+  if (next === "COMPLETE") {
+    if (!flags["completion-receipt"]) fail("COMPLETE requires --completion-receipt");
+    if (!CANDIDATE_FINGERPRINT.test(String(flags["candidate-fingerprint"] ?? ""))) fail("COMPLETE requires --candidate-fingerprint as a lowercase SHA-256");
+    const receipt = ledger.completionReceipt;
+    if (!receipt || receipt.id !== String(flags["completion-receipt"])) fail("COMPLETE requires the admitted completion receipt named by --completion-receipt");
+    const errors = validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence: true });
+    if (errors.length) fail(`COMPLETE rejected by completion receipt:\n- ${errors.join("\n- ")}`);
+    if (receipt.candidate.fingerprint !== String(flags["candidate-fingerprint"])) fail("COMPLETE rejected: completion receipt does not match the current candidate fingerprint");
+  }
   const previous = ledger.state;
   if (next === "BLOCKED") ledger.resumeState = previous;
   if (previous === "BLOCKED") ledger.resumeState = null;
