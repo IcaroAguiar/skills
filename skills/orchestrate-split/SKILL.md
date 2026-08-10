@@ -50,22 +50,25 @@ Act as the control plane. Keep requirements, decisions, plan, integration, and u
    review. Non-code runs must record why review is `NOT_APPLICABLE`.
 5. Admit a structured completion receipt while in `AWAITING_REVIEW_DECISION`.
    For a Review Forge closeout it must be `REVIEW_FORGE_APPROVAL`, carry the
-   current candidate SHA-256/mode/repository identity and graph version, name a
-   Review Forge evidence receipt with verdict `APPROVE`, and link a current
-   receipt for each of `CORRECTNESS`, `SIMPLIFICATION`, `SEMANTICS`,
-   `DOCUMENTATION`, and `VERIFICATION`. The gate receipts must be bound to that
-   same fingerprint; a stale, divergent, negative, or incomplete receipt is not
-   admissible.
+   current candidate SHA-256/mode/base/repository/schema identity and graph
+   version, name a Review Forge evidence receipt with verdict `APPROVE`, and
+   link a current receipt for each of `CORRECTNESS`, `SIMPLIFICATION`,
+   `SEMANTICS`, `DOCUMENTATION`, and `VERIFICATION`. Gate and review receipts
+   must be bound to that same identity; a stale, forged, divergent, negative,
+   incomplete, or second completion receipt is not admissible. A material graph
+   bump clears any previously admitted completion receipt.
 6. The only material-code alternative is `USER_RISK_ACCEPTANCE`: an explicit,
-   structured user acceptance naming the same current candidate fingerprint,
+   structured user acceptance naming the same current candidate identity,
    every gate receipt, the reported risk evidence, who accepted it, and the
    acceptance statement. Never infer this acceptance from silence, a skipped
    review, or a tracker/report status.
 7. Use `scripts/run-ledger.mjs admit-completion-receipt <ledger.json>
-   <completion-receipt.json>`, then transition with both
-   `--completion-receipt <id>` and `--candidate-fingerprint <sha256>`. The CLI
-   rejects `COMPLETE` when either value is absent or differs from the admitted
-   receipt.
+   <completion-receipt.json> --repo <protected-repo>`, then transition with
+   `--completion-receipt <id>`, `--repo <protected-repo>`, and optional
+   `--candidate-fingerprint <sha256>` confirmation. The CLI recomputes the
+   fingerprint from protected commit/index/worktree state and rejects
+   `COMPLETE` when the receipt is missing, already replaced by a graph bump, or
+   diverges from the recomputed identity.
 8. After the user accepts the report, use the report cleanup helper only for the exact run directory and only with its explicit confirmation argument. Preserve the final HTML; remove intermediate artifacts.
 
 ## Recover
