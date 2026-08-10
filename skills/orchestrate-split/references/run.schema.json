@@ -50,12 +50,98 @@
     "graphVersions": { "type": "array", "minItems": 1 },
     "report": {
       "type": "object",
-      "required": ["presentation"],
+      "required": ["path", "lastRenderedAt", "presentation"],
       "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "lastRenderedAt": { "type": ["string", "null"] },
         "presentation": { "type": ["object", "null"] }
       }
     },
+    "completionReceipt": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/completionReceipt" }] },
     "extensions": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "COMPLETE" } }, "required": ["state"] },
+      "then": { "required": ["completionReceipt"], "properties": { "completionReceipt": { "$ref": "#/$defs/completionReceipt" } } }
+    }
+  ],
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "required": ["fingerprint", "mode", "repositoryId", "schemaVersion", "base"],
+      "properties": {
+        "fingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "mode": { "enum": ["commit", "index", "worktree"] },
+        "repositoryId": { "type": "string", "minLength": 1 },
+        "schemaVersion": { "type": "integer", "minimum": 1 },
+        "base": { "type": "string", "minLength": 1 },
+        "head": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "commit" } }, "required": ["mode"] },
+          "then": { "required": ["head"] }
+        }
+      ],
+      "additionalProperties": true
+    },
+    "gateReceipt": {
+      "type": "object",
+      "required": ["status", "receiptIds"],
+      "properties": {
+        "status": { "enum": ["PASS", "NOT_APPLICABLE", "BLOCKED"] },
+        "receiptIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "rationale": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "completionReceipt": {
+      "type": "object",
+      "required": ["id", "kind", "candidate", "graphVersion", "gates"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["REVIEW_LOOP_APPROVAL", "USER_RISK_ACCEPTANCE"] },
+        "candidate": { "$ref": "#/$defs/candidate" },
+        "graphVersion": { "type": "integer", "minimum": 1 },
+        "reviewLoopReceiptId": { "type": "string", "minLength": 1 },
+        "gates": {
+          "type": "object",
+          "required": ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"],
+          "properties": {
+            "CORRECTNESS": { "$ref": "#/$defs/gateReceipt" },
+            "SIMPLIFICATION": { "$ref": "#/$defs/gateReceipt" },
+            "SEMANTICS": { "$ref": "#/$defs/gateReceipt" },
+            "DOCUMENTATION": { "$ref": "#/$defs/gateReceipt" },
+            "VERIFICATION": { "$ref": "#/$defs/gateReceipt" }
+          },
+          "additionalProperties": false
+        },
+        "userAcceptance": {
+          "type": "object",
+          "required": ["by", "at", "statement", "explicit", "acceptedRiskReceiptIds"],
+          "properties": {
+            "by": { "type": "string", "minLength": 1 },
+            "at": { "type": "string", "minLength": 1 },
+            "statement": { "type": "string", "minLength": 1 },
+            "explicit": { "const": true },
+            "acceptedRiskReceiptIds": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+          },
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "REVIEW_LOOP_APPROVAL" } }, "required": ["kind"] },
+          "then": { "required": ["reviewLoopReceiptId"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "USER_RISK_ACCEPTANCE" } }, "required": ["kind"] },
+          "then": { "required": ["userAcceptance"] }
+        }
+      ],
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

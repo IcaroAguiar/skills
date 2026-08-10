@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const RUN_STATES = new Set([
   "DRAFT", "PLAN_PENDING_USER", "APPROVED", "EXECUTING", "INTEGRATING",
@@ -13,6 +15,14 @@ const NODE_STATES = new Set([
   "PASSED", "FAILED", "REOPENED", "BLOCKED", "INVALIDATED",
 ]);
 const NODE_KINDS = new Set(["scout", "execute", "integrate", "test", "report"]);
+const REVIEW_GATES = ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"];
+const COMPLETION_RECEIPT_KINDS = new Set(["REVIEW_LOOP_APPROVAL", "USER_RISK_ACCEPTANCE"]);
+const CANDIDATE_MODES = new Set(["commit", "index", "worktree"]);
+const CANDIDATE_FINGERPRINT = /^[a-f0-9]{64}$/;
+const FINGERPRINT_SCRIPT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../review-loop/scripts/fingerprint-review-state.mjs",
+);
 const RUN_TRANSITIONS = {
   DRAFT: ["PLAN_PENDING_USER", "BLOCKED", "CANCELLED"],
   PLAN_PENDING_USER: ["DRAFT", "APPROVED", "BLOCKED", "CANCELLED"],
@@ -88,6 +98,178 @@ function requireString(value, label, errors) {
   if (typeof value !== "string" || value.trim() === "") errors.push(`${label} must be a non-empty string`);
 }
 
+function isObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function evidenceById(ledger) {
+  return new Map((ledger.evidence ?? []).map((receipt) => [receipt.id, receipt]));
+}
+
+function candidateBindingErrors(candidate, label) {
+  const errors = [];
+  if (!isObject(candidate)) return [`${label} must be an object`];
+  if (!CANDIDATE_FINGERPRINT.test(candidate.fingerprint ?? "")) errors.push(`${label}.fingerprint must be a lowercase SHA-256`);
+  if (!CANDIDATE_MODES.has(candidate.mode)) errors.push(`${label}.mode must be commit, index, or worktree`);
+  requireString(candidate.repositoryId, `${label}.repositoryId`, errors);
+  if (!Number.isInteger(candidate.schemaVersion) || candidate.schemaVersion < 1) errors.push(`${label}.schemaVersion must be a positive integer`);
+  requireString(candidate.base, `${label}.base`, errors);
+  if (candidate.mode === "commit") requireString(candidate.head, `${label}.head`, errors);
+  return errors;
+}
+
+function evidenceCandidateBinding(evidence) {
+  return {
+    fingerprint: evidence.candidateFingerprint,
+    mode: evidence.candidateMode,
+    repositoryId: evidence.candidateRepositoryId,
+    schemaVersion: evidence.candidateSchemaVersion,
+    base: evidence.candidateBase,
+    head: evidence.candidateHead,
+  };
+}
+
+function evidenceHasCandidateClaim(evidence) {
+  return Boolean(
+    evidence.candidateFingerprint
+    || evidence.candidateMode
+    || evidence.candidateRepositoryId
+    || evidence.candidateSchemaVersion
+    || evidence.candidateBase
+    || evidence.candidateHead,
+  );
+}
+
+function evidenceBindingErrors(evidence, label) {
+  if (!evidenceHasCandidateClaim(evidence)) return [];
+  return candidateBindingErrors(evidenceCandidateBinding(evidence), label);
+}
+
+function evidenceMatchesCandidate(evidence, candidate) {
+  const binding = evidenceCandidateBinding(evidence);
+  return binding.fingerprint === candidate.fingerprint
+    && binding.mode === candidate.mode
+    && binding.repositoryId === candidate.repositoryId
+    && binding.schemaVersion === candidate.schemaVersion
+    && binding.base === candidate.base
+    && (candidate.mode !== "commit" || binding.head === candidate.head);
+}
+
+function recomputeCandidateIdentity({ repo, candidate }) {
+  if (!repo) fail("candidate fingerprint verification requires --repo pointing at the protected repository state");
+  if (!fs.existsSync(FINGERPRINT_SCRIPT)) fail(`review-loop fingerprint script is missing: ${FINGERPRINT_SCRIPT}`);
+  const args = [
+    FINGERPRINT_SCRIPT,
+    "--repo", String(repo),
+    "--mode", candidate.mode,
+    "--repository-id", candidate.repositoryId,
+    "--base", candidate.base,
+    "--json",
+  ];
+  if (candidate.mode === "commit") args.push("--head", candidate.head);
+  const result = spawnSync(process.execPath, args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  if (result.status !== 0) {
+    fail(`cannot recompute candidate fingerprint from protected state:\n${String(result.stderr || result.stdout || "").trim()}`);
+  }
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    fail(`fingerprint script returned invalid JSON: ${error.message}`);
+  }
+}
+
+function assertCandidateMatchesProtectedState(candidate, identity, label = "candidate") {
+  const errors = [];
+  if (candidate.fingerprint !== identity.sha256) errors.push(`${label} fingerprint diverges from protected state`);
+  if (candidate.mode !== identity.mode) errors.push(`${label} mode diverges from protected state`);
+  if (candidate.repositoryId !== identity.repositoryId) errors.push(`${label} repositoryId diverges from protected state`);
+  if (candidate.schemaVersion !== identity.schemaVersion) errors.push(`${label} schemaVersion diverges from protected state`);
+  if (candidate.base !== identity.base) errors.push(`${label} base diverges from protected state`);
+  if (candidate.mode === "commit" && candidate.head !== identity.head) errors.push(`${label} head diverges from protected state`);
+  if (errors.length) fail(`${label} rejected as forged, stale, or self-declared:\n- ${errors.join("\n- ")}`);
+}
+
+function validateBoundEvidenceAgainstCandidate(admitted, candidate, label) {
+  const errors = [];
+  errors.push(...evidenceBindingErrors(admitted, label));
+  if (!evidenceMatchesCandidate(admitted, candidate)) {
+    errors.push(`${label} is not bound to the exact candidate fingerprint/mode/base/repository/version`);
+  }
+  return errors;
+}
+
+function validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence = false } = {}) {
+  const errors = [];
+  if (!isObject(receipt)) return ["completionReceipt must be an object"];
+  requireString(receipt.id, "completionReceipt.id", errors);
+  if (!COMPLETION_RECEIPT_KINDS.has(receipt.kind)) errors.push(`completionReceipt.kind must be one of ${[...COMPLETION_RECEIPT_KINDS].join(", ")}`);
+  errors.push(...candidateBindingErrors(receipt.candidate, "completionReceipt.candidate"));
+  if (receipt.graphVersion !== ledger.graphVersion) errors.push("completionReceipt.graphVersion must match the current graph version");
+  if (!isObject(receipt.gates)) errors.push("completionReceipt.gates must be an object");
+
+  const evidence = evidenceById(ledger);
+  for (const gate of REVIEW_GATES) {
+    const gateReceipt = receipt.gates?.[gate];
+    if (!isObject(gateReceipt)) {
+      errors.push(`completionReceipt.gates.${gate} is required`);
+      continue;
+    }
+    if (!new Set(["PASS", "NOT_APPLICABLE", "BLOCKED"]).has(gateReceipt.status)) errors.push(`completionReceipt.gates.${gate}.status is invalid`);
+    if (!Array.isArray(gateReceipt.receiptIds) || gateReceipt.receiptIds.length === 0) errors.push(`completionReceipt.gates.${gate}.receiptIds must contain at least one receipt`);
+    if (gateReceipt.status === "NOT_APPLICABLE" || gateReceipt.status === "BLOCKED") requireString(gateReceipt.rationale, `completionReceipt.gates.${gate}.rationale`, errors);
+    for (const receiptId of gateReceipt.receiptIds ?? []) {
+      const admitted = evidence.get(receiptId);
+      if (!admitted) {
+        errors.push(`completionReceipt.gates.${gate} references unknown evidence ${receiptId}`);
+        continue;
+      }
+      if (requireAdmittedEvidence && admitted.current !== true) errors.push(`completionReceipt.gates.${gate} receipt is stale: ${receiptId}`);
+      errors.push(...validateBoundEvidenceAgainstCandidate(admitted, receipt.candidate, `completionReceipt.gates.${gate} receipt ${receiptId}`));
+      if (admitted.gate !== gate) errors.push(`completionReceipt.gates.${gate} receipt is not scoped to ${gate}: ${receiptId}`);
+    }
+  }
+
+  if (receipt.kind === "REVIEW_LOOP_APPROVAL") {
+    requireString(receipt.reviewLoopReceiptId, "completionReceipt.reviewLoopReceiptId", errors);
+    const review = evidence.get(receipt.reviewLoopReceiptId);
+    if (!review) errors.push(`completionReceipt review receipt is missing: ${receipt.reviewLoopReceiptId}`);
+    else {
+      if (requireAdmittedEvidence && review.current !== true) errors.push(`completionReceipt review receipt is stale: ${receipt.reviewLoopReceiptId}`);
+      errors.push(...validateBoundEvidenceAgainstCandidate(review, receipt.candidate, `completionReceipt review receipt ${receipt.reviewLoopReceiptId}`));
+      if (review.source !== "review-loop") errors.push(`completionReceipt review receipt is not from Review Loop: ${receipt.reviewLoopReceiptId}`);
+      if (review.verdict !== "APPROVE") errors.push(`completionReceipt requires Review Loop APPROVE, received ${review.verdict ?? "no verdict"}`);
+    }
+    for (const gate of REVIEW_GATES) {
+      const status = receipt.gates?.[gate]?.status;
+      if (!["PASS", "NOT_APPLICABLE"].includes(status)) errors.push(`completionReceipt Review Loop gate ${gate} must be PASS or NOT_APPLICABLE`);
+      for (const receiptId of receipt.gates?.[gate]?.receiptIds ?? []) {
+        if (evidence.get(receiptId)?.source !== "review-loop") errors.push(`completionReceipt Review Loop gate ${gate} receipt is not from Review Loop: ${receiptId}`);
+      }
+    }
+  }
+
+  if (receipt.kind === "USER_RISK_ACCEPTANCE") {
+    if (!isObject(receipt.userAcceptance)) errors.push("completionReceipt.userAcceptance must be an object");
+    else {
+      requireString(receipt.userAcceptance.by, "completionReceipt.userAcceptance.by", errors);
+      requireString(receipt.userAcceptance.at, "completionReceipt.userAcceptance.at", errors);
+      requireString(receipt.userAcceptance.statement, "completionReceipt.userAcceptance.statement", errors);
+      if (receipt.userAcceptance.explicit !== true) errors.push("completionReceipt.userAcceptance.explicit must be true");
+      if (!Array.isArray(receipt.userAcceptance.acceptedRiskReceiptIds) || receipt.userAcceptance.acceptedRiskReceiptIds.length === 0) errors.push("completionReceipt.userAcceptance.acceptedRiskReceiptIds must contain reported risk evidence");
+      for (const receiptId of receipt.userAcceptance.acceptedRiskReceiptIds ?? []) {
+        const admitted = evidence.get(receiptId);
+        if (!admitted) errors.push(`completionReceipt user acceptance references unknown evidence ${receiptId}`);
+        else {
+          if (requireAdmittedEvidence && admitted.current !== true) errors.push(`completionReceipt user acceptance receipt is stale: ${receiptId}`);
+          errors.push(...validateBoundEvidenceAgainstCandidate(admitted, receipt.candidate, `completionReceipt user acceptance receipt ${receiptId}`));
+          if (!["BLOCKED", "RESIDUAL_RISK"].includes(admitted.result)) errors.push(`completionReceipt user acceptance receipt is not reported blocker or residual risk evidence: ${receiptId}`);
+        }
+      }
+    }
+  }
+  return [...new Set(errors)];
+}
+
 function validateLedger(ledger) {
   const errors = [];
   if (!ledger || typeof ledger !== "object" || Array.isArray(ledger)) return ["ledger must be an object"];
@@ -109,6 +291,8 @@ function validateLedger(ledger) {
   if (!Array.isArray(ledger.stateHistory)) errors.push("stateHistory must be an array");
   if (!Array.isArray(ledger.graphVersions) || ledger.graphVersions.length === 0) errors.push("graphVersions must contain at least one version");
   if (!ledger.report || typeof ledger.report !== "object") errors.push("report must be an object");
+  if (ledger.completionReceipt !== undefined && ledger.completionReceipt !== null) errors.push(...validateCompletionReceipt(ledger, ledger.completionReceipt, { requireAdmittedEvidence: true }));
+  if (ledger.state === "COMPLETE" && ledger.completionReceipt == null) errors.push("COMPLETE requires a completionReceipt");
   if (errors.length || !Array.isArray(ledger.nodes)) return errors;
 
   const ids = new Set();
@@ -158,6 +342,7 @@ function validateLedger(ledger) {
     requireString(receipt.nodeId, `evidence ${receipt.id ?? "?"}.nodeId`, errors);
     if (!ids.has(receipt.nodeId)) errors.push(`evidence ${receipt.id}: unknown node ${receipt.nodeId}`);
     for (const key of ["source", "environment", "procedure", "result"]) requireString(receipt[key], `evidence ${receipt.id ?? "?"}.${key}`, errors);
+    errors.push(...evidenceBindingErrors(receipt, `evidence ${receipt.id ?? "?"}`));
   }
   for (const node of ledger.nodes) {
     for (const receipt of node.receipts ?? []) if (!evidenceIds.has(receipt)) errors.push(`node ${node.id}: unknown receipt ${receipt}`);
@@ -198,7 +383,7 @@ function allowedNext(current, next, transitions, resumeState) {
 
 const { positional, flags } = parseArgs(process.argv.slice(2));
 const [command, ledgerPath, third, fourth] = positional;
-if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|present-canvas|transition-run|transition-node|bump-graph> ...");
+if (!command) fail("usage: run-ledger.mjs <init|validate|set-plan|add-node|add-evidence|add-artifact|present-canvas|admit-completion-receipt|transition-run|transition-node|bump-graph> ...");
 
 if (command === "init") {
   if (!ledgerPath) fail("init requires <ledger.json>");
@@ -221,7 +406,12 @@ if (command === "init") {
     artifacts: [],
     stateHistory: [],
     graphVersions: [{ version: 1, at: timestamp, status: "DRAFT", delta: "Initial graph", approval: null }],
-    report: { presentation: null },
+    report: {
+      path: path.resolve(String(flags.report ?? path.join(String(flags["run-dir"]), "report.html"))),
+      lastRenderedAt: null,
+      presentation: null,
+    },
+    completionReceipt: null,
     extensions: {},
   };
   assertValid(ledger);
@@ -266,6 +456,12 @@ if (command === "set-plan") {
   if (!third) fail("add-evidence requires <evidence.json>");
   const evidence = { ...loadJson(third), current: true, admittedAt: now() };
   if (ledger.evidence.some((item) => item.id === evidence.id)) fail(`evidence already exists: ${evidence.id}`);
+  const bindingErrors = evidenceBindingErrors(evidence, `evidence ${evidence.id ?? "?"}`);
+  if (bindingErrors.length) fail(`evidence rejected:\n- ${bindingErrors.join("\n- ")}`);
+  if (evidenceHasCandidateClaim(evidence)) {
+    const identity = recomputeCandidateIdentity({ repo: flags.repo, candidate: evidenceCandidateBinding(evidence) });
+    assertCandidateMatchesProtectedState(evidenceCandidateBinding(evidence), identity, `evidence ${evidence.id}`);
+  }
   ledger.evidence.push(evidence);
   const node = ledger.nodes.find((item) => item.id === evidence.nodeId);
   if (!node) fail(`evidence references unknown node: ${evidence.nodeId}`);
@@ -283,6 +479,16 @@ if (command === "set-plan") {
     presentedAt: now(),
     artifactIds: ledger.artifacts.filter((artifact) => artifact.required || artifact.retain).map((artifact) => artifact.id),
   };
+} else if (command === "admit-completion-receipt") {
+  if (!third) fail("admit-completion-receipt requires <completion-receipt.json>");
+  if (ledger.state !== "AWAITING_REVIEW_DECISION") fail("completion receipt can be admitted only while awaiting the review decision");
+  if (ledger.completionReceipt != null) fail("completion receipt already admitted; exactly one valid completion receipt is allowed");
+  const receipt = loadJson(third);
+  const errors = validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence: true });
+  if (errors.length) fail(`completion receipt rejected:\n- ${errors.join("\n- ")}`);
+  const identity = recomputeCandidateIdentity({ repo: flags.repo, candidate: receipt.candidate });
+  assertCandidateMatchesProtectedState(receipt.candidate, identity, "completionReceipt.candidate");
+  ledger.completionReceipt = { ...receipt, admittedAt: now() };
 } else if (command === "transition-run") {
   const next = third;
   if (!RUN_STATES.has(next)) fail(`invalid run state: ${next}`);
@@ -298,7 +504,23 @@ if (command === "set-plan") {
     const incomplete = ledger.nodes.filter((node) => ["execute", "integrate", "test"].includes(node.kind) && node.state !== "PASSED" && node.state !== "INVALIDATED");
     if (incomplete.length) fail(`REPORTING blocked by nodes: ${incomplete.map((node) => node.id).join(", ")}`);
   }
-  if (next === "AWAITING_REVIEW_DECISION" && !ledger.report.presentation?.presentedAt) fail("AWAITING_REVIEW_DECISION requires a presented native review canvas");
+  if (next === "AWAITING_REVIEW_DECISION" && !ledger.report.presentation?.presentedAt && !fs.existsSync(ledger.report.path)) {
+    fail(`AWAITING_REVIEW_DECISION requires a presented review canvas or report: ${ledger.report.path}`);
+  }
+  if (next === "COMPLETE") {
+    if (!flags["completion-receipt"]) fail("COMPLETE requires --completion-receipt");
+    if (!flags.repo) fail("COMPLETE requires --repo so the candidate fingerprint can be recomputed from protected state");
+    const receipt = ledger.completionReceipt;
+    if (!receipt || receipt.id !== String(flags["completion-receipt"])) fail("COMPLETE requires the admitted completion receipt named by --completion-receipt");
+    const errors = validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence: true });
+    if (errors.length) fail(`COMPLETE rejected by completion receipt:\n- ${errors.join("\n- ")}`);
+    const identity = recomputeCandidateIdentity({ repo: flags.repo, candidate: receipt.candidate });
+    assertCandidateMatchesProtectedState(receipt.candidate, identity, "completionReceipt.candidate");
+    if (flags["candidate-fingerprint"]) {
+      if (!CANDIDATE_FINGERPRINT.test(String(flags["candidate-fingerprint"]))) fail("COMPLETE --candidate-fingerprint must be a lowercase SHA-256 when provided");
+      if (String(flags["candidate-fingerprint"]) !== identity.sha256) fail("COMPLETE rejected: --candidate-fingerprint does not match the recomputed protected candidate fingerprint");
+    }
+  }
   const previous = ledger.state;
   if (next === "BLOCKED") ledger.resumeState = previous;
   if (previous === "BLOCKED") ledger.resumeState = null;
@@ -334,6 +556,7 @@ if (command === "set-plan") {
   if (!Array.isArray(delta.affectedNodeIds)) fail("delta.affectedNodeIds must be an array");
   ledger.graphVersion += 1;
   ledger.plan.approval = null;
+  ledger.completionReceipt = null;
   ledger.graphVersions.push({ version: ledger.graphVersion, at: now(), status: "DRAFT", delta, approval: null });
   for (const nodeId of delta.affectedNodeIds) {
     const node = ledger.nodes.find((item) => item.id === nodeId);

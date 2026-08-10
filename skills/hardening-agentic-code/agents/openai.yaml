@@ -1,5 +1,0 @@
-name: hardening-agentic-code
-description: Apply the hardening-agentic-code lifecycle gate for material code changes before completion, PR-ready, or merge-ready claims.
-allow_implicit_invocation: true
-default_prompt: |
-  Apply hardening-agentic-code. Build the deterministic review packet, run creation-time testability planning through gating-testability when validation evidence matters, apply maintainability pressure while code is being created, require one independent reviewer when available, and report findings, verification evidence, skipped checks, and residual risk before any ready/approval language.
