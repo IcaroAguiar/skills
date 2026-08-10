@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ledgerCli = path.join(here, "run-ledger.mjs");
+const fingerprintCli = path.resolve(here, "../../review-loop/scripts/fingerprint-review-state.mjs");
 const reportDir = path.resolve(here, "../../split-report/scripts");
 const cleaner = path.join(reportDir, "cleanup-run.mjs");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "split-engineering-fixture-"));
@@ -17,6 +18,12 @@ function run(script, args, expected = 0) {
   const result = spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
   assert.equal(result.status, expected, `command failed (${result.status}): node ${path.basename(script)} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
   return result;
+}
+
+function runGit(repo, args) {
+  const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+  assert.equal(result.status, 0, `git ${args.join(" ")} failed:\n${result.stdout}\n${result.stderr}`);
+  return result.stdout.trim();
 }
 
 function writeJson(file, value) {
@@ -29,7 +36,54 @@ function transitionNode(ledger, id, states) {
   for (const state of states) run(ledgerCli, ["transition-node", ledger, id, state, "--actor", "fixture", "--reason", `fixture ${state}`]);
 }
 
+function fingerprintRepo(repo, repositoryId = "fixture/checkout") {
+  const result = spawnSync(process.execPath, [
+    fingerprintCli,
+    "--repo", repo,
+    "--repository-id", repositoryId,
+    "--mode", "worktree",
+    "--json",
+  ], { encoding: "utf8" });
+  assert.equal(result.status, 0, `fingerprint failed:\n${result.stdout}\n${result.stderr}`);
+  return JSON.parse(result.stdout);
+}
+
+function candidateFromIdentity(identity) {
+  return {
+    fingerprint: identity.sha256,
+    mode: identity.mode,
+    repositoryId: identity.repositoryId,
+    schemaVersion: identity.schemaVersion,
+    base: identity.base,
+    ...(identity.head ? { head: identity.head } : {}),
+  };
+}
+
+function boundEvidenceFields(candidate) {
+  return {
+    candidateFingerprint: candidate.fingerprint,
+    candidateMode: candidate.mode,
+    candidateRepositoryId: candidate.repositoryId,
+    candidateSchemaVersion: candidate.schemaVersion,
+    candidateBase: candidate.base,
+    ...(candidate.head ? { candidateHead: candidate.head } : {}),
+  };
+}
+
 try {
+  const candidateRepo = path.join(root, "candidate-repo");
+  fs.mkdirSync(candidateRepo, { recursive: true });
+  runGit(candidateRepo, ["init", "-q"]);
+  runGit(candidateRepo, ["config", "user.name", "Fixture"]);
+  runGit(candidateRepo, ["config", "user.email", "fixture@example.local"]);
+  fs.writeFileSync(path.join(candidateRepo, "checkout.txt"), "baseline\n");
+  runGit(candidateRepo, ["add", "checkout.txt"]);
+  runGit(candidateRepo, ["commit", "-q", "-m", "baseline"]);
+  fs.writeFileSync(path.join(candidateRepo, "checkout.txt"), "candidate\n");
+  const identity = fingerprintRepo(candidateRepo);
+  const candidate = candidateFromIdentity(identity);
+  const candidateFingerprint = candidate.fingerprint;
+
   const runId = "fixture-happy";
   const runDir = path.join(root, runId);
   const ledger = path.join(runDir, "run.json");
@@ -98,6 +152,112 @@ try {
   run(ledgerCli, ["transition-run", ledger, "AWAITING_REVIEW_DECISION", "--actor", "fixture", "--reason", "native review canvas ready"]);
   assert.equal(fs.existsSync(screenshot), true);
 
+  const gates = ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"];
+  const noCompletionReceipt = run(ledgerCli, ["transition-run", ledger, "COMPLETE", "--actor", "fixture", "--reason", "must not complete without a receipt"], 1);
+  assert.match(noCompletionReceipt.stderr, /requires --completion-receipt/);
+
+  const reviewEvidence = writeJson(path.join(root, "review-loop-evidence.json"), {
+    id: "review-loop-approval", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "fresh independent review", result: "PASS", artifacts: [], verdict: "APPROVE",
+    ...boundEvidenceFields(candidate),
+  });
+  run(ledgerCli, ["add-evidence", ledger, reviewEvidence, "--repo", candidateRepo]);
+  for (const gate of gates) {
+    const gateEvidence = writeJson(path.join(root, `review-${gate.toLowerCase()}-evidence.json`), {
+      id: `review-${gate.toLowerCase()}`, nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: `${gate} review gate`, result: "PASS", artifacts: [], gate, gateStatus: "PASS",
+      ...boundEvidenceFields(candidate),
+    });
+    run(ledgerCli, ["add-evidence", ledger, gateEvidence, "--repo", candidateRepo]);
+  }
+  const completionReceipt = {
+    id: "completion-review-loop", kind: "REVIEW_LOOP_APPROVAL", graphVersion: 1,
+    candidate,
+    reviewLoopReceiptId: "review-loop-approval",
+    gates: Object.fromEntries(gates.map((gate) => [gate, { status: "PASS", receiptIds: [`review-${gate.toLowerCase()}`] }])),
+  };
+  const userRiskEvidence = writeJson(path.join(root, "user-risk-evidence.json"), {
+    id: "reported-residual-risk", nodeId: "test-checkout", source: "fixture report", environment: "isolated fixture", procedure: "record residual risk", result: "BLOCKED", artifacts: [],
+    ...boundEvidenceFields(candidate),
+  });
+  run(ledgerCli, ["add-evidence", ledger, userRiskEvidence, "--repo", candidateRepo]);
+  const userAcceptance = writeJson(path.join(root, "completion-user-acceptance.json"), {
+    id: "completion-user-acceptance", kind: "USER_RISK_ACCEPTANCE", graphVersion: 1,
+    candidate,
+    gates: completionReceipt.gates,
+    userAcceptance: { by: "fixture-user", at: "2026-08-09T00:00:00.000Z", statement: "I accept the reported residual risk for this exact candidate.", explicit: true, acceptedRiskReceiptIds: ["reported-residual-risk"] },
+  });
+  const acceptanceLedger = path.join(root, "fixture-user-acceptance.json");
+  fs.copyFileSync(ledger, acceptanceLedger);
+  run(ledgerCli, ["admit-completion-receipt", acceptanceLedger, userAcceptance, "--repo", candidateRepo]);
+  run(ledgerCli, ["transition-run", acceptanceLedger, "COMPLETE", "--actor", "fixture", "--reason", "user explicitly accepted reported residual risk", "--completion-receipt", "completion-user-acceptance", "--repo", candidateRepo, "--candidate-fingerprint", candidateFingerprint]);
+  assert.equal(JSON.parse(fs.readFileSync(acceptanceLedger, "utf8")).completionReceipt.kind, "USER_RISK_ACCEPTANCE");
+
+  const incompleteCompletion = writeJson(path.join(root, "completion-incomplete.json"), {
+    ...completionReceipt,
+    id: "completion-incomplete",
+    gates: Object.fromEntries(gates.slice(0, -1).map((gate) => [gate, { status: "PASS", receiptIds: [`review-${gate.toLowerCase()}`] }])),
+  });
+  const missingGate = run(ledgerCli, ["admit-completion-receipt", ledger, incompleteCompletion, "--repo", candidateRepo], 1);
+  assert.match(missingGate.stderr, /gates\.VERIFICATION is required/);
+
+  const negativeReviewEvidence = writeJson(path.join(root, "review-loop-negative-evidence.json"), {
+    id: "review-loop-negative", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "fresh independent review", result: "FAIL", artifacts: [], verdict: "REQUEST_CHANGES",
+    ...boundEvidenceFields(candidate),
+  });
+  run(ledgerCli, ["add-evidence", ledger, negativeReviewEvidence, "--repo", candidateRepo]);
+  const negativeCompletion = writeJson(path.join(root, "completion-negative.json"), { ...completionReceipt, id: "completion-negative", reviewLoopReceiptId: "review-loop-negative" });
+  const negativeVerdict = run(ledgerCli, ["admit-completion-receipt", ledger, negativeCompletion, "--repo", candidateRepo], 1);
+  assert.match(negativeVerdict.stderr, /requires Review Loop APPROVE/);
+
+  const staleLedger = JSON.parse(fs.readFileSync(ledger, "utf8"));
+  staleLedger.evidence.find((entry) => entry.id === "review-correctness").current = false;
+  fs.writeFileSync(ledger, `${JSON.stringify(staleLedger, null, 2)}\n`);
+  const staleCompletion = writeJson(path.join(root, "completion-stale.json"), { ...completionReceipt, id: "completion-stale" });
+  const staleReceipt = run(ledgerCli, ["admit-completion-receipt", ledger, staleCompletion, "--repo", candidateRepo], 1);
+  assert.match(staleReceipt.stderr, /receipt is stale: review-correctness/);
+  staleLedger.evidence.find((entry) => entry.id === "review-correctness").current = true;
+  fs.writeFileSync(ledger, `${JSON.stringify(staleLedger, null, 2)}\n`);
+
+  const divergentGraph = writeJson(path.join(root, "completion-divergent-graph.json"), { ...completionReceipt, id: "completion-divergent-graph", graphVersion: 2 });
+  const divergentGraphResult = run(ledgerCli, ["admit-completion-receipt", ledger, divergentGraph, "--repo", candidateRepo], 1);
+  assert.match(divergentGraphResult.stderr, /graphVersion must match the current graph version/);
+
+  const forgedCandidate = { ...candidate, fingerprint: "b".repeat(64) };
+  const forgedEvidence = writeJson(path.join(root, "forged-evidence.json"), {
+    id: "forged-review", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "forged fingerprint", result: "PASS", artifacts: [], verdict: "APPROVE",
+    ...boundEvidenceFields(forgedCandidate),
+  });
+  const forgedEvidenceResult = run(ledgerCli, ["add-evidence", ledger, forgedEvidence, "--repo", candidateRepo], 1);
+  assert.match(forgedEvidenceResult.stderr, /fingerprint diverges from protected state/);
+
+  const divergentFingerprintCompletion = writeJson(path.join(root, "completion-divergent-fingerprint.json"), {
+    ...completionReceipt,
+    id: "completion-divergent-fingerprint",
+    candidate: forgedCandidate,
+  });
+  const divergentFingerprint = run(ledgerCli, ["admit-completion-receipt", ledger, divergentFingerprintCompletion, "--repo", candidateRepo], 1);
+  assert.match(divergentFingerprint.stderr, /fingerprint diverges|not bound to the exact candidate/);
+
+  const completionFile = writeJson(path.join(root, "completion-review-loop.json"), completionReceipt);
+  run(ledgerCli, ["admit-completion-receipt", ledger, completionFile, "--repo", candidateRepo]);
+  const doubleAdmit = run(ledgerCli, ["admit-completion-receipt", ledger, writeJson(path.join(root, "completion-double.json"), { ...completionReceipt, id: "completion-double" }), "--repo", candidateRepo], 1);
+  assert.match(doubleAdmit.stderr, /exactly one valid completion receipt/);
+
+  const bumpLedger = path.join(root, "fixture-bump.json");
+  fs.copyFileSync(ledger, bumpLedger);
+  const bump = writeJson(path.join(root, "bump-delta.json"), { affectedNodeIds: ["test-checkout"], reason: "material scope change" });
+  run(ledgerCli, ["bump-graph", bumpLedger, bump, "--actor", "fixture", "--reason", "material scope change"]);
+  const bumped = JSON.parse(fs.readFileSync(bumpLedger, "utf8"));
+  assert.equal(bumped.completionReceipt, null);
+  assert.equal(bumped.graphVersion, 2);
+  assert.equal(bumped.state, "DRAFT");
+
+  const selfDeclared = run(ledgerCli, ["transition-run", ledger, "COMPLETE", "--actor", "fixture", "--reason", "missing repo", "--completion-receipt", completionReceipt.id], 1);
+  assert.match(selfDeclared.stderr, /requires --repo/);
+  const divergentCandidate = run(ledgerCli, ["transition-run", ledger, "COMPLETE", "--actor", "fixture", "--reason", "different candidate", "--completion-receipt", completionReceipt.id, "--repo", candidateRepo, "--candidate-fingerprint", "b".repeat(64)], 1);
+  assert.match(divergentCandidate.stderr, /does not match the recomputed protected candidate fingerprint/);
+  run(ledgerCli, ["transition-run", ledger, "COMPLETE", "--actor", "fixture", "--reason", "review gate approved", "--completion-receipt", completionReceipt.id, "--repo", candidateRepo, "--candidate-fingerprint", candidateFingerprint]);
+  run(ledgerCli, ["validate", ledger]);
+
   const retryId = "fixture-retry";
   const retryDir = path.join(root, retryId);
   const retryLedger = path.join(retryDir, "run.json");
@@ -122,7 +282,7 @@ try {
   run(cleaner, [ledger, "--retain-dir", retainDir, "--confirm-run", runId]);
   assert.equal(fs.existsSync(runDir), false);
   assert.equal(fs.existsSync(path.join(retainDir, "checkout-proof.svg")), true);
-  process.stdout.write("PASS split-engineering fixture: approval, DAG, receipts, native canvas evidence, retry budget, missing-artifact block, and guarded cleanup\n");
+  process.stdout.write("PASS split-engineering fixture: approval, DAG, receipts, fingerprint binding, completion negatives, native canvas evidence, retry budget, missing-artifact block, and guarded cleanup\n");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

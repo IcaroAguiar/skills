@@ -1,13 +1,13 @@
 ---
 name: gating-testability
-description: Gating testability for material code, bugfix, UI/browser, auth/permission, API/contract/data/config, shared-library, CI, PR, release, and hardening-agentic-code workflows that need reliable evidence.
+description: Gating testability for material code, bugfix, UI/browser, auth/permission, API/contract/data/config, shared-library, CI, PR, release, and review-loop workflows that need reliable evidence.
 ---
 
 # Gating Testability
 
 Use this gate to stop optimistic validation. The agent must name what must be testable, run evidence at the right stack level, and state residual risk before claiming code is ready.
 
-This complements `hardening-agentic-code`: hardening finds implementation and maintainability risk; this gate decides whether the changed behavior was proven.
+This complements `review-loop`: review finds implementation and maintainability risk; this gate decides whether the changed behavior was proven.
 
 ## Reference Router
 
@@ -17,7 +17,7 @@ Read only what the current branch needs:
 - `references/test-quality-calibration.md`: unit, integration, contract, E2E, coverage, flake, mutation, regression choice.
 - `references/browser-visual-evidence.md`: UI, browser, visual, accessibility, responsive, branding, tenant, personalization evidence.
 - `references/ci-monorepo-gates.md`: monorepo, microservice, affected graph, full service suite, pipeline hardening.
-- `references/agentic-code-review-integration.md`: closeout and review-approval integration.
+- `references/review-loop-integration.md`: closeout and review-approval integration.
 - `references/pressure-tests.md`: audit whether this skill is being applied correctly.
 - `references/research-notes.md`: background only; load when revising the skill, not during ordinary gates.
 

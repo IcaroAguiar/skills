@@ -1,0 +1,39 @@
+{
+  "$schema": "./real-diff-corpus.schema.json",
+  "version": 1,
+  "status": "discovery",
+  "cases": [
+    {
+      "id": "flask-pr-5799-discovery",
+      "mode": "discovery",
+      "category": "simplification",
+      "language": "Python",
+      "size": "medium",
+      "repository": "https://github.com/pallets/flask",
+      "prUrl": "https://github.com/pallets/flask/pull/5799",
+      "license": "BSD-3-Clause",
+      "retrievalStatus": "verified",
+      "retrievedAt": "2026-08-09T00:00:00Z",
+      "candidate": {
+        "baseSha": "49b7e7bc8fb69d605719991d1c0a99fcee689053",
+        "headSha": "9822a0351574790cb66c652fcc396ad7aa2b09d8"
+      },
+      "diffSha256": "e36bf8c9a8c12df628fff40b8092e9174bcf6220094da384e12d9cba0656f622",
+      "stats": {
+        "files": 3,
+        "additions": 63,
+        "deletions": 32
+      },
+      "evidenceUrls": [
+        "https://github.com/pallets/flask/commit/9822a0351574790cb66c652fcc396ad7aa2b09d8"
+      ],
+      "projectChecks": [
+        "project-owned tests for tests/test_helpers.py"
+      ],
+      "documentationSources": [
+        "CHANGES.rst"
+      ],
+      "notes": "Public discovery case only. It intentionally has no accepted snapshot or acceptedFinality, is not hidden ground truth, and cannot support engine promotion."
+    }
+  ]
+}
