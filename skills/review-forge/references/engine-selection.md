@@ -67,6 +67,8 @@ The protected input is collected differently per runtime:
 - Claude Code: enumerate only current runtime models and protected agent
   profiles. Resolve `inherit` only when the runtime exposes the concrete model;
   otherwise record `not_observable`.
+- Absent runtime: keep the adapter fail-closed with `not_observable`; never invent
+  a profile or claim live empirical coverage for that harness.
 
 Each engine identity is the exact tuple `harness`, profile `id`, `modelId`, and
 `reasoningMode`. Join the live inventory to the protected benchmark ledger in
