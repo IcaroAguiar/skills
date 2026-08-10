@@ -18,17 +18,17 @@ jobs:
           node-version: 22
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-design-art-direction-contracts.mjs
-      - name: Validate Review Forge package
-        run: node skills/review-forge/scripts/validate-skill-package.mjs skills/review-forge
-      - name: Test Review Forge engine routing
+      - name: Validate Review Loop package
+        run: node skills/review-loop/scripts/validate-skill-package.mjs skills/review-loop
+      - name: Test Review Loop engine routing
         run: |
-          node skills/review-forge/scripts/test-engine-selection.mjs
-          node skills/review-forge/scripts/test-harness-adapters.mjs
-      - name: Test Review Forge state and corpus guards
+          node skills/review-loop/scripts/test-engine-selection.mjs
+          node skills/review-loop/scripts/test-harness-adapters.mjs
+      - name: Test Review Loop state and corpus guards
         run: |
-          node skills/review-forge/scripts/test-review-state-fingerprint.mjs
-          node skills/review-forge/scripts/test-real-diff-corpus.mjs
-          node skills/review-forge/scripts/test-quality-gate-ratchet.mjs
-          node skills/review-forge/scripts/validate-real-diff-corpus.mjs skills/review-forge/templates/real-diff-corpus.example.json
-      - name: Test Review Forge deterministic collector
-        run: node skills/review-forge/scripts/test-smoke-cleanup.mjs
+          node skills/review-loop/scripts/test-review-state-fingerprint.mjs
+          node skills/review-loop/scripts/test-real-diff-corpus.mjs
+          node skills/review-loop/scripts/test-quality-gate-ratchet.mjs
+          node skills/review-loop/scripts/validate-real-diff-corpus.mjs skills/review-loop/templates/real-diff-corpus.example.json
+      - name: Test Review Loop deterministic collector
+        run: node skills/review-loop/scripts/test-smoke-cleanup.mjs

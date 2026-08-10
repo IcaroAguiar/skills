@@ -14,7 +14,7 @@ const retiredSkillNames = new Set([
   ["split", "review"].join("-"),
   ["hardening", "agentic", "code"].join("-"),
 ]);
-const requiredSkillNames = new Set(["review-forge"]);
+const requiredSkillNames = new Set(["review-loop"]);
 const publicTextExtensions = new Set([".json", ".md", ".mjs", ".py", ".toml", ".ts", ".yaml", ".yml"]);
 let failures = 0;
 

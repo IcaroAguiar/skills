@@ -10,7 +10,7 @@ Orchestrate verification. Reuse existing quality standards; do not create test v
 ## Build the obligation matrix
 
 1. Compose `$gating-testability` when available. Use its Test Obligation Matrix and evidence discipline as the canonical quality bar.
-2. Compose the independent review obligation from `$review-forge` as one lane when material code requires it. Do not run an equivalent reviewer twice.
+2. Compose the independent review obligation from `$review-loop` as one lane when material code requires it. Do not run an equivalent reviewer twice.
 3. Read [references/test-lane-contract.md](references/test-lane-contract.md).
 4. Start from changed behavior and credible failure modes. Reject a proposed test unless it names the behavior or risk it protects, the failure it detects, and why existing evidence is insufficient.
 5. Treat coverage, test count, snapshots of implementation detail, and assertions that only restate mocks as signals, never goals.

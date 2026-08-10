@@ -1,6 +1,0 @@
-interface:
-  display_name: "Review Forge"
-  short_description: "Revisão, correção e aprovação sustentável"
-  default_prompt: "Use $review-forge para revisar esta mudança; quando a tarefa autorizar correções, encaminhe findings a um fixer qualificado e obtenha novo veredito no head final."
-policy:
-  allow_implicit_invocation: true

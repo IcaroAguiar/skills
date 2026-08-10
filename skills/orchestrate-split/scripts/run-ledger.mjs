@@ -16,12 +16,12 @@ const NODE_STATES = new Set([
 ]);
 const NODE_KINDS = new Set(["scout", "execute", "integrate", "test", "report"]);
 const REVIEW_GATES = ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"];
-const COMPLETION_RECEIPT_KINDS = new Set(["REVIEW_FORGE_APPROVAL", "USER_RISK_ACCEPTANCE"]);
+const COMPLETION_RECEIPT_KINDS = new Set(["REVIEW_LOOP_APPROVAL", "USER_RISK_ACCEPTANCE"]);
 const CANDIDATE_MODES = new Set(["commit", "index", "worktree"]);
 const CANDIDATE_FINGERPRINT = /^[a-f0-9]{64}$/;
 const FINGERPRINT_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../review-forge/scripts/fingerprint-review-state.mjs",
+  "../../review-loop/scripts/fingerprint-review-state.mjs",
 );
 const RUN_TRANSITIONS = {
   DRAFT: ["PLAN_PENDING_USER", "BLOCKED", "CANCELLED"],
@@ -157,7 +157,7 @@ function evidenceMatchesCandidate(evidence, candidate) {
 
 function recomputeCandidateIdentity({ repo, candidate }) {
   if (!repo) fail("candidate fingerprint verification requires --repo pointing at the protected repository state");
-  if (!fs.existsSync(FINGERPRINT_SCRIPT)) fail(`review-forge fingerprint script is missing: ${FINGERPRINT_SCRIPT}`);
+  if (!fs.existsSync(FINGERPRINT_SCRIPT)) fail(`review-loop fingerprint script is missing: ${FINGERPRINT_SCRIPT}`);
   const args = [
     FINGERPRINT_SCRIPT,
     "--repo", String(repo),
@@ -229,21 +229,21 @@ function validateCompletionReceipt(ledger, receipt, { requireAdmittedEvidence = 
     }
   }
 
-  if (receipt.kind === "REVIEW_FORGE_APPROVAL") {
-    requireString(receipt.reviewForgeReceiptId, "completionReceipt.reviewForgeReceiptId", errors);
-    const review = evidence.get(receipt.reviewForgeReceiptId);
-    if (!review) errors.push(`completionReceipt review receipt is missing: ${receipt.reviewForgeReceiptId}`);
+  if (receipt.kind === "REVIEW_LOOP_APPROVAL") {
+    requireString(receipt.reviewLoopReceiptId, "completionReceipt.reviewLoopReceiptId", errors);
+    const review = evidence.get(receipt.reviewLoopReceiptId);
+    if (!review) errors.push(`completionReceipt review receipt is missing: ${receipt.reviewLoopReceiptId}`);
     else {
-      if (requireAdmittedEvidence && review.current !== true) errors.push(`completionReceipt review receipt is stale: ${receipt.reviewForgeReceiptId}`);
-      errors.push(...validateBoundEvidenceAgainstCandidate(review, receipt.candidate, `completionReceipt review receipt ${receipt.reviewForgeReceiptId}`));
-      if (review.source !== "review-forge") errors.push(`completionReceipt review receipt is not from Review Forge: ${receipt.reviewForgeReceiptId}`);
-      if (review.verdict !== "APPROVE") errors.push(`completionReceipt requires Review Forge APPROVE, received ${review.verdict ?? "no verdict"}`);
+      if (requireAdmittedEvidence && review.current !== true) errors.push(`completionReceipt review receipt is stale: ${receipt.reviewLoopReceiptId}`);
+      errors.push(...validateBoundEvidenceAgainstCandidate(review, receipt.candidate, `completionReceipt review receipt ${receipt.reviewLoopReceiptId}`));
+      if (review.source !== "review-loop") errors.push(`completionReceipt review receipt is not from Review Loop: ${receipt.reviewLoopReceiptId}`);
+      if (review.verdict !== "APPROVE") errors.push(`completionReceipt requires Review Loop APPROVE, received ${review.verdict ?? "no verdict"}`);
     }
     for (const gate of REVIEW_GATES) {
       const status = receipt.gates?.[gate]?.status;
-      if (!["PASS", "NOT_APPLICABLE"].includes(status)) errors.push(`completionReceipt Review Forge gate ${gate} must be PASS or NOT_APPLICABLE`);
+      if (!["PASS", "NOT_APPLICABLE"].includes(status)) errors.push(`completionReceipt Review Loop gate ${gate} must be PASS or NOT_APPLICABLE`);
       for (const receiptId of receipt.gates?.[gate]?.receiptIds ?? []) {
-        if (evidence.get(receiptId)?.source !== "review-forge") errors.push(`completionReceipt Review Forge gate ${gate} receipt is not from Review Forge: ${receiptId}`);
+        if (evidence.get(receiptId)?.source !== "review-loop") errors.push(`completionReceipt Review Loop gate ${gate} receipt is not from Review Loop: ${receiptId}`);
       }
     }
   }

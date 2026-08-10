@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ledgerCli = path.join(here, "run-ledger.mjs");
-const fingerprintCli = path.resolve(here, "../../review-forge/scripts/fingerprint-review-state.mjs");
+const fingerprintCli = path.resolve(here, "../../review-loop/scripts/fingerprint-review-state.mjs");
 const reportDir = path.resolve(here, "../../split-report/scripts");
 const cleaner = path.join(reportDir, "cleanup-run.mjs");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "split-engineering-fixture-"));
@@ -156,22 +156,22 @@ try {
   const noCompletionReceipt = run(ledgerCli, ["transition-run", ledger, "COMPLETE", "--actor", "fixture", "--reason", "must not complete without a receipt"], 1);
   assert.match(noCompletionReceipt.stderr, /requires --completion-receipt/);
 
-  const reviewEvidence = writeJson(path.join(root, "review-forge-evidence.json"), {
-    id: "review-forge-approval", nodeId: "test-checkout", source: "review-forge", environment: "isolated fixture", procedure: "fresh independent review", result: "PASS", artifacts: [], verdict: "APPROVE",
+  const reviewEvidence = writeJson(path.join(root, "review-loop-evidence.json"), {
+    id: "review-loop-approval", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "fresh independent review", result: "PASS", artifacts: [], verdict: "APPROVE",
     ...boundEvidenceFields(candidate),
   });
   run(ledgerCli, ["add-evidence", ledger, reviewEvidence, "--repo", candidateRepo]);
   for (const gate of gates) {
     const gateEvidence = writeJson(path.join(root, `review-${gate.toLowerCase()}-evidence.json`), {
-      id: `review-${gate.toLowerCase()}`, nodeId: "test-checkout", source: "review-forge", environment: "isolated fixture", procedure: `${gate} review gate`, result: "PASS", artifacts: [], gate, gateStatus: "PASS",
+      id: `review-${gate.toLowerCase()}`, nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: `${gate} review gate`, result: "PASS", artifacts: [], gate, gateStatus: "PASS",
       ...boundEvidenceFields(candidate),
     });
     run(ledgerCli, ["add-evidence", ledger, gateEvidence, "--repo", candidateRepo]);
   }
   const completionReceipt = {
-    id: "completion-review-forge", kind: "REVIEW_FORGE_APPROVAL", graphVersion: 1,
+    id: "completion-review-loop", kind: "REVIEW_LOOP_APPROVAL", graphVersion: 1,
     candidate,
-    reviewForgeReceiptId: "review-forge-approval",
+    reviewLoopReceiptId: "review-loop-approval",
     gates: Object.fromEntries(gates.map((gate) => [gate, { status: "PASS", receiptIds: [`review-${gate.toLowerCase()}`] }])),
   };
   const userRiskEvidence = writeJson(path.join(root, "user-risk-evidence.json"), {
@@ -199,14 +199,14 @@ try {
   const missingGate = run(ledgerCli, ["admit-completion-receipt", ledger, incompleteCompletion, "--repo", candidateRepo], 1);
   assert.match(missingGate.stderr, /gates\.VERIFICATION is required/);
 
-  const negativeReviewEvidence = writeJson(path.join(root, "review-forge-negative-evidence.json"), {
-    id: "review-forge-negative", nodeId: "test-checkout", source: "review-forge", environment: "isolated fixture", procedure: "fresh independent review", result: "FAIL", artifacts: [], verdict: "REQUEST_CHANGES",
+  const negativeReviewEvidence = writeJson(path.join(root, "review-loop-negative-evidence.json"), {
+    id: "review-loop-negative", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "fresh independent review", result: "FAIL", artifacts: [], verdict: "REQUEST_CHANGES",
     ...boundEvidenceFields(candidate),
   });
   run(ledgerCli, ["add-evidence", ledger, negativeReviewEvidence, "--repo", candidateRepo]);
-  const negativeCompletion = writeJson(path.join(root, "completion-negative.json"), { ...completionReceipt, id: "completion-negative", reviewForgeReceiptId: "review-forge-negative" });
+  const negativeCompletion = writeJson(path.join(root, "completion-negative.json"), { ...completionReceipt, id: "completion-negative", reviewLoopReceiptId: "review-loop-negative" });
   const negativeVerdict = run(ledgerCli, ["admit-completion-receipt", ledger, negativeCompletion, "--repo", candidateRepo], 1);
-  assert.match(negativeVerdict.stderr, /requires Review Forge APPROVE/);
+  assert.match(negativeVerdict.stderr, /requires Review Loop APPROVE/);
 
   const staleLedger = JSON.parse(fs.readFileSync(ledger, "utf8"));
   staleLedger.evidence.find((entry) => entry.id === "review-correctness").current = false;
@@ -223,7 +223,7 @@ try {
 
   const forgedCandidate = { ...candidate, fingerprint: "b".repeat(64) };
   const forgedEvidence = writeJson(path.join(root, "forged-evidence.json"), {
-    id: "forged-review", nodeId: "test-checkout", source: "review-forge", environment: "isolated fixture", procedure: "forged fingerprint", result: "PASS", artifacts: [], verdict: "APPROVE",
+    id: "forged-review", nodeId: "test-checkout", source: "review-loop", environment: "isolated fixture", procedure: "forged fingerprint", result: "PASS", artifacts: [], verdict: "APPROVE",
     ...boundEvidenceFields(forgedCandidate),
   });
   const forgedEvidenceResult = run(ledgerCli, ["add-evidence", ledger, forgedEvidence, "--repo", candidateRepo], 1);
@@ -237,7 +237,7 @@ try {
   const divergentFingerprint = run(ledgerCli, ["admit-completion-receipt", ledger, divergentFingerprintCompletion, "--repo", candidateRepo], 1);
   assert.match(divergentFingerprint.stderr, /fingerprint diverges|not bound to the exact candidate/);
 
-  const completionFile = writeJson(path.join(root, "completion-review-forge.json"), completionReceipt);
+  const completionFile = writeJson(path.join(root, "completion-review-loop.json"), completionReceipt);
   run(ledgerCli, ["admit-completion-receipt", ledger, completionFile, "--repo", candidateRepo]);
   const doubleAdmit = run(ledgerCli, ["admit-completion-receipt", ledger, writeJson(path.join(root, "completion-double.json"), { ...completionReceipt, id: "completion-double" }), "--repo", candidateRepo], 1);
   assert.match(doubleAdmit.stderr, /exactly one valid completion receipt/);

@@ -1,5 +1,5 @@
 name: gating-testability
-description: Gating testability for material code, bugfix, UI/browser, auth/permission, API/contract/data/config, shared-library, CI, PR, release, and review-forge workflows that need reliable evidence.
+description: Gating testability for material code, bugfix, UI/browser, auth/permission, API/contract/data/config, shared-library, CI, PR, release, and review-loop workflows that need reliable evidence.
 allow_implicit_invocation: true
 default_prompt: |
   Apply gating-testability. Identify changed surfaces, classify risk, create or update the Test Obligation Matrix, choose the minimum credible validation, run or request required evidence, and report PASS, PASS_WITH_RISK, BLOCKED, or FAIL with exact commands and residual risk.

@@ -11,7 +11,7 @@ const REQUIRED_FILES = [
   "references/test-quality-calibration.md",
   "references/browser-visual-evidence.md",
   "references/ci-monorepo-gates.md",
-  "references/review-forge-integration.md",
+  "references/review-loop-integration.md",
   "references/pressure-tests.md",
   "references/research-notes.md",
   "agents/openai.yaml",
@@ -75,7 +75,7 @@ if (frontmatter) {
 assert(skill.length < 9000, "SKILL.md should remain concise; move detail into references");
 assert(skill.includes("Test Obligation Matrix"), "SKILL.md must require the Test Obligation Matrix");
 assert(skill.includes("Final Testability Gate Result") || skill.includes("Testability gate:"), "SKILL.md must define final gate output");
-assert(skill.includes("review-forge"), "SKILL.md must explain code-review integration");
+assert(skill.includes("review-loop"), "SKILL.md must explain code-review integration");
 assert(skill.includes("browser evidence"), "SKILL.md must require browser evidence for UI/visual work");
 
 for (const file of REQUIRED_FILES) {
