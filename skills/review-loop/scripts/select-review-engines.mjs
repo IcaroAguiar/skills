@@ -7,6 +7,10 @@ import { basename, isAbsolute, relative, resolve } from "node:path";
 const args = process.argv.slice(2);
 const VALID_ROLES = ["reviewer", "fixer"];
 const VALID_RISKS = ["low", "medium", "high", "critical"];
+const CODEX_DEFAULT_ENGINE_POLICY = {
+  reviewer: { modelId: "gpt-5.6-sol", reasoningModes: ["high"] },
+  fixer: { modelId: "gpt-5.6-luna", reasoningModes: ["xhigh", "max"] },
+};
 const MILLISECONDS_PER_DAY = 86_400_000;
 const DEFAULT_MAX_QUALIFICATION_AGE_DAYS = 180;
 const DEFAULT_MAX_REGISTRY_AGE_HOURS = 24;
@@ -113,7 +117,7 @@ if (has("--help")) {
   console.log(`review-loop engine selection
 
 Usage:
-  node select-review-engines.mjs --registry <file> --role reviewer|fixer --risk low|medium|high|critical [--premium-reason <reason>] [--json]
+  node select-review-engines.mjs --registry <file> --role reviewer|fixer --risk low|medium|high|critical [--harness <name>] [--premium-reason <reason>] [--json]
     [--candidate-root <repo>] [--required-context-tokens <integer>]
     [--require-repository-access] [--required-tool <name>]
     [--sensitive [--sensitive-class <auth|tenancy|credentials|migrations|transactions|concurrency|public-contracts-ops>]]
@@ -160,6 +164,13 @@ try {
 if (!Array.isArray(registry.candidates) || registry.candidates.length === 0) {
   die("registry.candidates must be a non-empty array");
 }
+const observedHarnesses = [...new Set(registry.candidates.map((candidate) => candidate.harness).filter(Boolean))];
+const requestedHarness = option("--harness").trim();
+if (!requestedHarness && observedHarnesses.length !== 1) {
+  die("registry contains multiple or unobservable harnesses; provide --harness from protected runtime state");
+}
+const activeHarness = requestedHarness || observedHarnesses[0];
+if (!observedHarnesses.includes(activeHarness)) die(`active harness ${activeHarness} is absent from the protected registry`);
 const registryTrust = registry.trust;
 if (!registryTrust || typeof registryTrust !== "object" || Array.isArray(registryTrust)) {
   die("registry.trust must declare a protected source class and identifier");
@@ -229,6 +240,16 @@ function repeatedNonEmptyOptions(name) {
 function reject(candidate, reason) {
   rejections.push({ id: receiptIdentifier(candidate.id), reason });
   return false;
+}
+
+function matchesHarnessPolicy(candidate) {
+  if (candidate.harness !== activeHarness) return reject(candidate, `belongs to inactive harness ${candidate.harness ?? "not_observable"}`);
+  if (activeHarness !== "codex") return true;
+  const required = CODEX_DEFAULT_ENGINE_POLICY[role];
+  if (candidate.modelId !== required.modelId || !required.reasoningModes.includes(candidate.reasoningMode)) {
+    return reject(candidate, `Codex ${role} default requires ${required.modelId} with reasoning ${required.reasoningModes.join("|")}`);
+  }
+  return true;
 }
 
 function receiptIdentifier(value) {
@@ -479,7 +500,8 @@ function verifyFailClosed() {
 
 if (has("--self-test")) verifyFailClosed();
 
-const qualified = registry.candidates.filter(role === "reviewer" ? qualifiesReviewer : qualifiesFixer);
+const qualifiesRole = role === "reviewer" ? qualifiesReviewer : qualifiesFixer;
+const qualified = registry.candidates.filter((candidate) => matchesHarnessPolicy(candidate) && qualifiesRole(candidate));
 if (qualified.length === 0) {
   const detail = rejections.map(({ id, reason }) => `${id}: ${reason}`).join("; ");
   die(`no qualified ${role} for ${risk} risk${detail ? ` (${detail})` : ""}`);
@@ -547,6 +569,11 @@ const receipt = {
   status: "selected",
   role,
   risk,
+  defaultPolicy: activeHarness === "codex" ? {
+    enforced: true,
+    modelId: CODEX_DEFAULT_ENGINE_POLICY[role].modelId,
+    allowedReasoningModes: CODEX_DEFAULT_ENGINE_POLICY[role].reasoningModes,
+  } : { enforced: false },
   registry: {
     sourceClass: registryTrust.sourceClass,
     identifierHash: identifierHash(registryTrust.identifier || basename(registryPath)),
@@ -593,6 +620,8 @@ const receipt = {
   premiumEscalation: selectedExtremeTier || selectedAboveCeiling ? premiumEscalation : null,
   rationale: selectedExtremeTier || selectedAboveCeiling
     ? `selected through explicit premium escalation (${premiumEscalation})${selectedExtremeTier ? "; extreme tier" : ""}${selectedAboveCeiling ? "; above sustainable reviewer cost ceiling" : ""}`
+    : activeHarness === "codex"
+      ? `required Codex ${role} default; ranked within the protected ${CODEX_DEFAULT_ENGINE_POLICY[role].modelId} reasoning policy`
     : role === "reviewer"
       ? "highest qualified capability inside the sustainable cost ceiling"
       : "lowest expected total cost among qualified capable fixers",

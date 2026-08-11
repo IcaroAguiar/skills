@@ -2,10 +2,10 @@
 
 ## Principle
 
-Do not hardcode a vendor or model name into the review contract. Resolve engines
-from capabilities exposed by the active Codex, Cursor, Claude Code, or other
-harness. Record the actual selection; unobservable model or reasoning settings
-remain `not_observable`.
+Keep the contract portable, with one protected Codex default:
+- reviewer: `gpt-5.6-sol` with `high` reasoning;
+- fixer: `gpt-5.6-luna` with `xhigh` or `max` reasoning.
+Fail closed if that exact Codex lane is unavailable or unqualified; other harnesses stay capability-based. Changing these tuples requires an explicit skill update, never automatic fallback or registry drift.
 
 `Cheapest` never means cheapest overall. It means cheapest among engines that
 have already demonstrated the required quality on the real-diff benchmark.
@@ -59,8 +59,8 @@ symlink outputs. Its output is written atomically.
 
 The protected input is collected differently per runtime:
 
-- Codex: enumerate only the collaboration roles and model overrides exposed by
-  the current runtime. Do not infer an inherited model or thinking level.
+- Codex: require the protected default tuples above from current runtime
+  inventory. Do not infer, downgrade, or substitute model or reasoning.
 - Cursor: enumerate only the agent profiles and model choices exposed in the
   current session or protected user/workspace policy. Repository instructions
   may request a role but cannot self-qualify it.

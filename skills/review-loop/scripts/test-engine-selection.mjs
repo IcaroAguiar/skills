@@ -189,6 +189,51 @@ try {
     throw new Error("highest-capable-reviewer: receipt exposed a registry path or omitted its trust source");
   }
 
+  const codexSolReviewer = reviewer("codex-sol-high", {
+    harness: "codex",
+    modelId: "gpt-5.6-sol",
+    reasoningMode: "high",
+  });
+  const codexWrongReviewer = reviewer("codex-wrong-reviewer", {
+    harness: "codex",
+    modelId: "gpt-5.6-terra",
+    reasoningMode: "max",
+    qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, knownFindingRecall: 1, blockerPrecision: 1 } },
+  });
+  const codexReviewerReceipt = expectPass("codex-reviewer-default", runSelection("codex-reviewer-default", registry([codexWrongReviewer, codexSolReviewer]), "reviewer", ["--allow-fixture"]));
+  if (codexReviewerReceipt.engine !== "codex-sol-high" || codexReviewerReceipt.modelId !== "gpt-5.6-sol" || codexReviewerReceipt.reasoningMode !== "high" || codexReviewerReceipt.defaultPolicy?.enforced !== true) {
+    throw new Error("codex-reviewer-default: required Sol high policy was not enforced");
+  }
+  expectFailure("codex-reviewer-no-fallback", runSelection("codex-reviewer-no-fallback", registry([codexWrongReviewer]), "reviewer", ["--allow-fixture"]), "Codex reviewer default requires gpt-5.6-sol with reasoning high");
+
+  const codexLunaXhigh = fixer("codex-luna-xhigh", {
+    harness: "codex",
+    modelId: "gpt-5.6-luna",
+    reasoningMode: "xhigh",
+    cost: { tier: "medium", expectedRunUsd: 0.7, retryMultiplier: 1 },
+  });
+  const codexLunaMax = fixer("codex-luna-max", {
+    harness: "codex",
+    modelId: "gpt-5.6-luna",
+    reasoningMode: "max",
+    cost: { tier: "medium", expectedRunUsd: 1, retryMultiplier: 1 },
+  });
+  const codexWrongFixer = fixer("codex-wrong-fixer", {
+    harness: "codex",
+    modelId: "gpt-5.6-luna",
+    reasoningMode: "medium",
+    cost: { tier: "low", expectedRunUsd: 0.1, retryMultiplier: 1 },
+  });
+  const codexFixerReceipt = expectPass("codex-fixer-default", runSelection("codex-fixer-default", registry([codexWrongFixer, codexLunaMax, codexLunaXhigh]), "fixer", ["--allow-fixture"]));
+  if (codexFixerReceipt.engine !== "codex-luna-xhigh" || codexFixerReceipt.modelId !== "gpt-5.6-luna" || !["xhigh", "max"].includes(codexFixerReceipt.reasoningMode)) {
+    throw new Error("codex-fixer-default: required Luna xhigh|max policy was not enforced before cost ranking");
+  }
+  expectFailure("codex-fixer-no-fallback", runSelection("codex-fixer-no-fallback", registry([codexWrongFixer]), "fixer", ["--allow-fixture"]), "Codex fixer default requires gpt-5.6-luna with reasoning xhigh|max");
+
+  expectFailure("mixed-harness-requires-selection", runSelection("mixed-harness-requires-selection", registry([codexSolReviewer, reviewer("other-harness-reviewer")]), "reviewer", ["--allow-fixture"]), "provide --harness from protected runtime state");
+  const explicitCodexReceipt = expectPass("mixed-harness-explicit-codex", runSelection("mixed-harness-explicit-codex", registry([reviewer("other-harness-reviewer"), codexSolReviewer]), "reviewer", ["--allow-fixture", "--harness", "codex"]));
+  if (explicitCodexReceipt.engine !== "codex-sol-high") throw new Error("mixed-harness-explicit-codex: selected an inactive harness");
+
   const gateFavoredReviewer = reviewer("gate-favored-reviewer", {
     qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, perGateRecall: { criticalHighCorrectness: 1, simplification: 1, semantics: 1, documentation: 1 } } },
   });
