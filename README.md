@@ -36,6 +36,10 @@ node scripts/validate-skills.mjs
 
 Reusable skills are maintained through the [`catalog-maintenance`](skills/catalog-maintenance/SKILL.md) workflow. The repository is the canonical source; local harness folders are installations.
 
+## Glossary
+
+Shared delivery terms are defined in the [glossary](GLOSSARY.md). Each entry points to its canonical skill when an executable contract exists.
+
 ## License
 
 [MIT](LICENSE)
