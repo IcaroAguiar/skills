@@ -8,7 +8,7 @@ import { externalToolbelt, redactExternalReceiptArgs, redactExternalReceiptValue
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const collector = join(scriptDir, "collect-review-context.mjs");
-const SELF_SCAN_REVIEW_SIGNAL_BUDGET = 925;
+const SELF_SCAN_REVIEW_SIGNAL_BUDGET = 960;
 const configuredRoot = process.env.REVIEW_LOOP_SMOKE_ROOT;
 const root = configuredRoot ? resolve(configuredRoot) : mkdtempSync(join(tmpdir(), "review-loop-smoke-"));
 if (configuredRoot) {
@@ -1573,7 +1573,8 @@ expectIncludes("fresh-candidate-review", skillText, "verdict never survives a ch
 expectIncludes("simplification-gate", skillCorpus, "Prefer deleting incidental complexity");
 expectIncludes("semantic-gate", skillCorpus, "roadmap phases");
 expectIncludes("documentation-gate", skillCorpus, "NOT_APPLICABLE");
-expectIncludes("engine-capability-floor", skillCorpus, "Cheapest` never means cheapest overall");
+expectIncludes("engine-explicit-choice", skillCorpus, "The user chooses one exact reviewer and one exact fixer per harness");
+expectIncludes("engine-no-fallback", skillCorpus, "default, ranking, substitution, or fallback");
 expectIncludes("engine-cost-ceiling", skillCorpus, "extreme premium candidate only through a recorded escalation");
 expectIncludes("fixer-boundary", skillCorpus, "The fixer must not approve");
 expectNotIncludes("no-local-user-paths", skillCorpus, "/Users/");

@@ -118,9 +118,33 @@ function writeRegistry(name, value) {
   return path;
 }
 
+function explicitChoice(name, value, role, requestedId = "") {
+  const selected = value.candidates.find((candidate) => candidate.id === requestedId)
+    || value.candidates.find((candidate) => candidate.roles?.includes(role));
+  if (!selected) throw new Error(`${name}: no candidate available for explicit ${role} choice`);
+  const placeholder = { id: "unused-profile", modelId: "unused-model", reasoningMode: "unused" };
+  const choice = {
+    version: 1,
+    harness: selected.harness,
+    source: "explicit-user-choice",
+    configuredAt: FIXTURE_DATE,
+    reviewer: role === "reviewer" ? { id: selected.id, modelId: selected.modelId, reasoningMode: selected.reasoningMode ?? "not_observable" } : placeholder,
+    fixer: role === "fixer" ? { id: selected.id, modelId: selected.modelId, reasoningMode: selected.reasoningMode ?? "not_observable" } : placeholder,
+  };
+  const path = join(protectedDirectory, `${name}-choice.json`);
+  writeFileSync(path, JSON.stringify(choice, null, 2));
+  return path;
+}
+
 function runSelection(name, value, role, extraArgs = []) {
   const path = writeRegistry(name, value);
-  const args = [selectorPath, "--registry", path, "--role", role, "--risk", HIGH_RISK, "--json", ...extraArgs];
+  const userChoiceIndex = extraArgs.indexOf("--user-choice");
+  const requestedId = userChoiceIndex >= 0 ? extraArgs[userChoiceIndex + 1] : "";
+  const selectorArgs = userChoiceIndex >= 0
+    ? extraArgs.filter((_, index) => index !== userChoiceIndex && index !== userChoiceIndex + 1)
+    : extraArgs;
+  const choicePath = explicitChoice(name, value, role, requestedId);
+  const args = [selectorPath, "--registry", path, "--choice", choicePath, "--role", role, "--risk", HIGH_RISK, "--json", ...selectorArgs];
   try {
     return { ok: true, output: execFileSync(process.execPath, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) };
   } catch (error) {
@@ -176,17 +200,20 @@ function expectFailure(label, result, expectedMessage) {
 }
 
 try {
+  const noChoiceRegistry = writeRegistry("engine-choice-required", registry([reviewer("choice-required-reviewer")]));
+  expectFailure("engine-choice-required", runRegistryPath(noChoiceRegistry, "reviewer", ["--allow-fixture"]), "ENGINE_CHOICE_REQUIRED");
+
   const strongReviewer = reviewer("strong-reviewer", {
     cost: { tier: "high", expectedRunUsd: 3.5, retryMultiplier: 1 },
     qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, knownFindingRecall: 0.98, blockerPrecision: 0.9, severityCalibration: 0.95, acceptedFalseBlockerRate: 0.05 } },
   });
   const cheapReviewer = reviewer("cheap-reviewer");
-  const reviewerReceipt = expectPass("highest-capable-reviewer", runSelection("reviewer-ranking", registry([cheapReviewer, strongReviewer]), "reviewer", ["--allow-fixture"]));
-  if (reviewerReceipt.engine !== "strong-reviewer" || reviewerReceipt.aboveCeiling !== false || reviewerReceipt.costCeilingUsd !== REVIEWER_CEILING_USD || reviewerReceipt.premiumEscalation !== null) {
-    throw new Error("highest-capable-reviewer: receipt does not describe the sustainable selection");
+  const reviewerReceipt = expectPass("explicit-reviewer-choice", runSelection("reviewer-choice", registry([cheapReviewer, strongReviewer]), "reviewer", ["--allow-fixture", "--user-choice", "cheap-reviewer"]));
+  if (reviewerReceipt.engine !== "cheap-reviewer" || reviewerReceipt.choicePolicy?.automaticFallback !== false) {
+    throw new Error("explicit-reviewer-choice: selector overrode the user's reviewer");
   }
   if (JSON.stringify(reviewerReceipt).includes(testDirectory) || reviewerReceipt.registry.sourceClass !== "protected-harness-config" || reviewerReceipt.registry.identifier) {
-    throw new Error("highest-capable-reviewer: receipt exposed a registry path or omitted its trust source");
+    throw new Error("explicit-reviewer-choice: receipt exposed a registry path or omitted its trust source");
   }
 
   const codexSolReviewer = reviewer("codex-sol-high", {
@@ -200,11 +227,12 @@ try {
     reasoningMode: "max",
     qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, knownFindingRecall: 1, blockerPrecision: 1 } },
   });
-  const codexReviewerReceipt = expectPass("codex-reviewer-default", runSelection("codex-reviewer-default", registry([codexWrongReviewer, codexSolReviewer]), "reviewer", ["--allow-fixture"]));
-  if (codexReviewerReceipt.engine !== "codex-sol-high" || codexReviewerReceipt.modelId !== "gpt-5.6-sol" || codexReviewerReceipt.reasoningMode !== "high" || codexReviewerReceipt.defaultPolicy?.enforced !== true) {
-    throw new Error("codex-reviewer-default: required Sol high policy was not enforced");
+  const codexReviewerReceipt = expectPass("codex-reviewer-choice", runSelection("codex-reviewer-choice", registry([codexWrongReviewer, codexSolReviewer]), "reviewer", ["--allow-fixture", "--user-choice", "codex-sol-high"]));
+  if (codexReviewerReceipt.engine !== "codex-sol-high" || codexReviewerReceipt.choicePolicy?.source !== "explicit-user-choice") {
+    throw new Error("codex-reviewer-choice: explicit Codex reviewer was not enforced");
   }
-  expectFailure("codex-reviewer-no-fallback", runSelection("codex-reviewer-no-fallback", registry([codexWrongReviewer]), "reviewer", ["--allow-fixture"]), "Codex reviewer default requires gpt-5.6-sol with reasoning high");
+  const nonDefaultReviewerReceipt = expectPass("codex-non-default-choice", runSelection("codex-non-default-choice", registry([codexWrongReviewer]), "reviewer", ["--allow-fixture"]));
+  if (nonDefaultReviewerReceipt.engine !== "codex-wrong-reviewer") throw new Error("Codex explicit non-default choice was overridden");
 
   const codexLunaXhigh = fixer("codex-luna-xhigh", {
     harness: "codex",
@@ -224,14 +252,13 @@ try {
     reasoningMode: "medium",
     cost: { tier: "low", expectedRunUsd: 0.1, retryMultiplier: 1 },
   });
-  const codexFixerReceipt = expectPass("codex-fixer-default", runSelection("codex-fixer-default", registry([codexWrongFixer, codexLunaMax, codexLunaXhigh]), "fixer", ["--allow-fixture"]));
+  const codexFixerReceipt = expectPass("codex-fixer-choice", runSelection("codex-fixer-choice", registry([codexWrongFixer, codexLunaMax, codexLunaXhigh]), "fixer", ["--allow-fixture", "--user-choice", "codex-luna-xhigh"]));
   if (codexFixerReceipt.engine !== "codex-luna-xhigh" || codexFixerReceipt.modelId !== "gpt-5.6-luna" || !["xhigh", "max"].includes(codexFixerReceipt.reasoningMode)) {
-    throw new Error("codex-fixer-default: required Luna xhigh|max policy was not enforced before cost ranking");
+    throw new Error("codex-fixer-choice: explicit fixer was not enforced");
   }
-  expectFailure("codex-fixer-no-fallback", runSelection("codex-fixer-no-fallback", registry([codexWrongFixer]), "fixer", ["--allow-fixture"]), "Codex fixer default requires gpt-5.6-luna with reasoning xhigh|max");
 
   expectFailure("mixed-harness-requires-selection", runSelection("mixed-harness-requires-selection", registry([codexSolReviewer, reviewer("other-harness-reviewer")]), "reviewer", ["--allow-fixture"]), "provide --harness from protected runtime state");
-  const explicitCodexReceipt = expectPass("mixed-harness-explicit-codex", runSelection("mixed-harness-explicit-codex", registry([reviewer("other-harness-reviewer"), codexSolReviewer]), "reviewer", ["--allow-fixture", "--harness", "codex"]));
+  const explicitCodexReceipt = expectPass("mixed-harness-explicit-codex", runSelection("mixed-harness-explicit-codex", registry([reviewer("other-harness-reviewer"), codexSolReviewer]), "reviewer", ["--allow-fixture", "--harness", "codex", "--user-choice", "codex-sol-high"]));
   if (explicitCodexReceipt.engine !== "codex-sol-high") throw new Error("mixed-harness-explicit-codex: selected an inactive harness");
 
   const gateFavoredReviewer = reviewer("gate-favored-reviewer", {
@@ -240,24 +267,24 @@ try {
   const aggregateFavoredReviewer = reviewer("aggregate-favored-reviewer", {
     qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, knownFindingRecall: 0.95, perGateRecall: { criticalHighCorrectness: 0.85, simplification: 0.85, semantics: 0.85, documentation: 0.85 } } },
   });
-  const gateReceipt = expectPass("reviewer-gate-recall-ranking", runSelection("reviewer-gate-recall-ranking", registry([aggregateFavoredReviewer, gateFavoredReviewer]), "reviewer", ["--allow-fixture"]));
-  if (gateReceipt.engine !== "gate-favored-reviewer") throw new Error("reviewer-gate-recall-ranking: perGateRecall did not affect ranking");
+  const gateReceipt = expectPass("reviewer-choice-not-ranking", runSelection("reviewer-choice-not-ranking", registry([aggregateFavoredReviewer, gateFavoredReviewer]), "reviewer", ["--allow-fixture", "--user-choice", "aggregate-favored-reviewer"]));
+  if (gateReceipt.engine !== "aggregate-favored-reviewer") throw new Error("reviewer-choice-not-ranking: selector ranked over the explicit choice");
 
   const ParetoLeader = reviewer("pareto-leader", {
     qualification: { ...reviewer("source").qualification, metrics: { ...reviewer("source").qualification.metrics, knownFindingRecall: 0.95, blockerPrecision: 0.9, severityCalibration: 0.95, acceptedFalseBlockerRate: 0.05, perGateRecall: { criticalHighCorrectness: 0.95, simplification: 0.95, semantics: 0.95, documentation: 0.95 } } },
   });
   const dominatedReviewer = reviewer("dominated-reviewer");
-  const paretoForward = expectPass("reviewer-pareto-forward", runSelection("reviewer-pareto-forward", registry([dominatedReviewer, ParetoLeader]), "reviewer", ["--allow-fixture"]));
-  const paretoReverse = expectPass("reviewer-pareto-reverse", runSelection("reviewer-pareto-reverse", registry([ParetoLeader, dominatedReviewer]), "reviewer", ["--allow-fixture"]));
-  if (paretoForward.engine !== "pareto-leader" || JSON.stringify(paretoForward) !== JSON.stringify(paretoReverse) || !paretoForward.rejected.some(({ id, reason }) => id === "dominated-reviewer" && reason.includes("Pareto-dominated"))) {
-    throw new Error("reviewer-pareto-ranking: dominated reviewers were retained or candidate order changed the receipt");
+  const paretoForward = expectPass("reviewer-choice-forward", runSelection("reviewer-choice-forward", registry([dominatedReviewer, ParetoLeader]), "reviewer", ["--allow-fixture", "--user-choice", "dominated-reviewer"]));
+  const paretoReverse = expectPass("reviewer-choice-reverse", runSelection("reviewer-choice-reverse", registry([ParetoLeader, dominatedReviewer]), "reviewer", ["--allow-fixture", "--user-choice", "dominated-reviewer"]));
+  if (paretoForward.engine !== "dominated-reviewer" || paretoReverse.engine !== "dominated-reviewer") {
+    throw new Error("reviewer-choice-order: candidate order overrode explicit choice");
   }
 
   const lowExpectedCostFixer = fixer("low-expected-cost-fixer", { cost: { tier: "medium", expectedRunUsd: 0.4, retryMultiplier: 2 } });
   const higherExpectedCostFixer = fixer("higher-expected-cost-fixer", { cost: { tier: "medium", expectedRunUsd: 0.75, retryMultiplier: 1.2 } });
-  const fixerReceipt = expectPass("cheapest-qualified-fixer", runSelection("fixer-ranking", registry([higherExpectedCostFixer, lowExpectedCostFixer]), "fixer", ["--allow-fixture"]));
-  if (fixerReceipt.engine !== "low-expected-cost-fixer" || fixerReceipt.expectedTotalCostUsd !== 0.8) {
-    throw new Error("cheapest-qualified-fixer: expected total cost was not used for ranking");
+  const fixerReceipt = expectPass("explicit-fixer-choice", runSelection("fixer-choice", registry([higherExpectedCostFixer, lowExpectedCostFixer]), "fixer", ["--allow-fixture", "--user-choice", "higher-expected-cost-fixer"]));
+  if (fixerReceipt.engine !== "higher-expected-cost-fixer" || Math.abs(fixerReceipt.expectedTotalCostUsd - 0.9) > Number.EPSILON) {
+    throw new Error("explicit-fixer-choice: cost ranking overrode explicit choice");
   }
 
   const incompleteReviewer = reviewer("incomplete-reviewer");

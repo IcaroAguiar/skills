@@ -94,10 +94,8 @@ for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION
   expectIncludes("SKILL.md", skillText, `\`${gate}\``);
 }
 for (const phrase of [
-  "highest-sustainable qualified reviewer",
-  "cheapest qualified fixer",
-  "reviewer `gpt-5.6-sol`/`high`",
-  "fixer `gpt-5.6-luna`/`xhigh|max`",
+  "ask the user which exact model/profile",
+  "Never rank or substitute a model automatically",
   "fresh, read-only reviewer",
   "fixing agent must never approve",
   "In a review-only task, return the findings without",
@@ -135,7 +133,7 @@ for (const [label, phrase] of [
   ["simplification", "Prefer deleting incidental complexity"],
   ["semantics", "roadmap phases"],
   ["documentation", "NOT_APPLICABLE"],
-  ["engine selection", "Cheapest` never means cheapest overall"],
+  ["engine selection", "The user chooses one exact reviewer and one exact fixer per harness"],
   ["engine adapters", "exact tuple `harness`, profile `id`, `modelId`, and"],
   ["benchmark", "at least 18 adjudicated merged PR cases"],
   ["benchmark", "accepted-state false blocker rate"],
@@ -162,11 +160,13 @@ for (const marker of ["/Users/", "/home/", "/private/tmp/"]) {
 for (const requiredPath of [
   "scripts/collect-review-context.mjs",
   "scripts/compose-engine-registry.mjs",
+  "scripts/configure-review-engines.mjs",
   "scripts/select-review-engines.mjs",
   "scripts/fingerprint-review-state.mjs",
   "scripts/validate-real-diff-corpus.mjs",
   "scripts/smoke-review-toolbelt.mjs",
   "scripts/test-engine-selection.mjs",
+  "scripts/test-engine-choice.mjs",
   "scripts/test-harness-adapters.mjs",
   "scripts/test-quality-gate-ratchet.mjs",
   "scripts/test-real-diff-corpus.mjs",
@@ -191,7 +191,7 @@ expectIncludes("agents/openai.yaml", openaiText, "$review-loop");
 expectIncludes("agents/openai.yaml", openaiText, "allow_implicit_invocation: true");
 
 const selectorText = readRequired("scripts/select-review-engines.mjs");
-for (const phrase of ["CODEX_DEFAULT_ENGINE_POLICY", "gpt-5.6-sol", "gpt-5.6-luna", "reasoningModes: [\"xhigh\", \"max\"]", "reviewerCostCeilingUsd", "no qualified", "premium candidate requires a non-empty --premium-reason", "fixture registry cannot select production engines", "lowest expected total cost among qualified capable fixers"]) {
+for (const phrase of ["ENGINE_CHOICE_REQUIRED", "explicit-user-choice", "automaticFallback: false", "configured ${role} is not present", "reviewerCostCeilingUsd", "no qualified", "premium candidate requires a non-empty --premium-reason", "fixture registry cannot select production engines"]) {
   expectIncludes("select-review-engines.mjs", selectorText, phrase);
 }
 const composerText = readRequired("scripts/compose-engine-registry.mjs");
@@ -220,7 +220,7 @@ const result = {
     frontmatter: frontmatterKeys,
     references: actualReferences,
     mandatoryGates: 5,
-    portableEnginePolicy: true,
+    explicitEngineChoice: true,
     realDiffPolicy: true,
   },
   failures,
