@@ -1,4 +1,4 @@
 interface:
   display_name: "Luna Executor"
-  short_description: "One cheap task from fix through cleanup"
-  default_prompt: "Use $luna-executor to deliver one bounded package in a dedicated Luna task, with an isolated worktree, evidence handoff, audit, cleanup, and a human gate."
+  short_description: "One governed Luna or Terra subagent package"
+  default_prompt: "Use $luna-executor to deliver one bounded package with a native Luna subagent by default or Terra only when escalation is justified, including an isolated worktree, evidence handoff, controller audit, owner cleanup, and a human gate."
