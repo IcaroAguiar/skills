@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "package_id", "cause", "correction", "implementation_anchor", "diff", "checks", "git", "pending_proof", "residual_risk", "next_action"],
+  "properties": {
+    "status": { "enum": ["RETURN_TO_CONTROLLER", "RETURN_TO_CONTROLLER_PENDING", "BLOCKED_RETAINED", "NEEDS_HUMAN"] },
+    "package_id": { "type": "string", "minLength": 1 },
+    "cause": { "type": "string" },
+    "correction": { "type": "string" },
+    "implementation_anchor": { "type": "string" },
+    "diff": { "type": "array", "items": { "type": "string" } },
+    "checks": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["command", "result"], "properties": { "command": { "type": "string" }, "result": { "type": "string" } } } },
+    "git": { "type": "object", "additionalProperties": false, "required": ["branch", "head", "clean", "published", "pr"], "properties": { "branch": { "type": "string" }, "head": { "type": "string" }, "clean": { "type": "boolean" }, "published": { "type": "boolean" }, "pr": { "type": ["string", "null"] } } },
+    "pending_proof": { "type": "array", "items": { "type": "string" } },
+    "residual_risk": { "type": "array", "items": { "type": "string" } },
+    "next_action": { "type": "string" }
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Antigravity Executor"
+  short_description: "Fast audited delivery through Antigravity"
+  default_prompt: "Use $antigravity-executor to deliver this bounded package through Gemini 3.7 Flash High."
