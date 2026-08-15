@@ -85,6 +85,8 @@ Load conditionally:
    the detailed Test Obligation Matrix when material behavior changed.
 5. Generate the deterministic packet from the exact identity when available with
    `collect-review-context.mjs`; interpret its signals, never as approval.
+   For JS/TS, request anti-slop; install via `$install-anti-slop` only with tooling
+   authority. Its result is never approval.
 6. Dispatch a fresh, read-only reviewer with the complete diff, obligation card,
    relevant context, checks, and exact engine receipt. Do not expose previous
    review output before its independent pass finishes.
