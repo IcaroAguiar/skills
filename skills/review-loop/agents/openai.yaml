@@ -1,6 +1,6 @@
 interface:
   display_name: "Review Loop"
   short_description: "Revisão, correção e aprovação sustentável"
-  default_prompt: "Use $review-loop para revisar esta mudança; quando a tarefa autorizar correções, encaminhe findings a um fixer qualificado e obtenha novo veredito no head final."
+  default_prompt: "Use $review-loop para revisar esta mudança; respeite a escolha explícita de reviewer/fixer do harness e encaminhe PRs grandes para uma stack GitHub nativa com $gh-stack."
 policy:
   allow_implicit_invocation: true

@@ -10,8 +10,7 @@ Give the independent reviewer:
 - request/spec, acceptance criteria, risk and five-gate obligation cards;
 - relevant instructions, contracts, documentation, and conditional references;
 - deterministic packet as evidence, not a verdict;
-- protected round and cumulative-cost controls, plus prior attempt/cost history
-  when a correction loop already ran;
+- protected PR-size receipt, three-pass and cost controls, plus prior attempt history;
 - tests and real runtime paths exercised by behavior;
 - skipped checks, baseline failures, residual risk, and engine receipt.
 
@@ -46,15 +45,13 @@ Then return:
 3. rejected leads and why;
 4. checks/probes evaluated and residual uncertainty;
 5. engine receipt;
-6. convergence receipt: round number, configured limits, expected/observed
-   cumulative cost, and remaining budget; and
+6. convergence receipt: pass, PR-size state, limits, cumulative cost, and budget; and
 7. `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
 
 Do not approve while a mandatory receipt is missing, the before/after candidate
 identity differs, or any evidenced blocker is unresolved.
-Do not start a further correction round if its protected round or cumulative-cost
-limit is exhausted; return `BLOCKED` or request an explicit escalation with the
-attempt/cost history instead.
+Never start a fourth reviewer pass. On `STACK_REQUIRED`, stop and route through
+`$gh-stack`; otherwise return `BLOCKED` or request explicit escalation.
 
 ## Finding synthesis
 
