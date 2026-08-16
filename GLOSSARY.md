@@ -2,6 +2,6 @@
 
 ## Luna executor
 
-**Luna executor**, also called **cheap executor**, is the serial multi-agent implementation lane in which one maximum-reasoning Luna subagent owns a bounded delivery package through isolated worktree, evidence handoff, controller audit, and owner cleanup. A maximum-reasoning Terra subagent replaces Luna only for a qualifying sensitive escalation. The user releases the next package only after the audit and cleanup gates.
+**Luna executor**, also called **cheap executor**, is the serial multi-agent implementation lane in which one maximum-reasoning Luna subagent owns a bounded delivery package in the user's persistent primary checkout, where the user can inspect and test it. A worktree is used only for real parallel work and must hand accepted state back to the primary checkout before runtime or visual validation. A maximum-reasoning Terra subagent replaces Luna only for a qualifying sensitive escalation. The user releases the next package only after the audit and handoff gates.
 
 The executable contract lives in [`$luna-executor`](skills/luna-executor/SKILL.md).
