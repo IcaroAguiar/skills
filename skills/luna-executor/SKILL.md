@@ -5,7 +5,7 @@ description: "Luna executor (cheap executor) for governed serial delivery with m
 
 # Luna Executor
 
-A **Luna executor** is a serial multi-agent delivery relay: the controller scopes and audits; one native Luna subagent executes by default in the user's persistent primary checkout; the user can inspect and test the live result there; then the user releases the next package. Use Terra only for a qualifying escalation. Keep exactly one writer in flight.
+A **Luna executor** is a serial multi-agent delivery relay: the controller scopes and audits; one native Luna subagent executes by default in the user's persistent primary checkout; the user can inspect and test the live result there; then the user releases the next package. Use Terra only for a qualifying escalation. Keep exactly one writer per checkout, and require a separate authorized workspace for every parallel writer.
 
 ## Executor contract
 
