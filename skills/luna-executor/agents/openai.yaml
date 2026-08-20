@@ -1,4 +1,4 @@
 interface:
   display_name: "Luna Executor"
-  short_description: "One governed package in the primary checkout"
-  default_prompt: "Use $luna-executor to deliver one bounded package in the primary checkout with a native Luna subagent by default or Terra only when escalation is justified. Use a worktree only for real parallel work, then return runtime and user testing to the primary checkout before the human gate."
+  short_description: "Governed Multiagents v2 delivery waves"
+  default_prompt: "Use $luna-executor to deliver a governed wave of bounded packages with native Luna subagents by default or Terra only when escalation is justified. Coordinate independent writers on one primary-checkout integration branch and PR through disjoint ownership and serialized Git turns; use a worktree when real isolation or an independent branch/PR is required."
