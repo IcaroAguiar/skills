@@ -1219,6 +1219,16 @@ if (receiptJson.includes(receiptHomeProbe) || receiptJson.includes(receiptSecret
 }
 console.log("PASS toolbelt-receipt-allowlist");
 
+const antiSlopReceipt = externalToolbelt({
+  root: candidateScopeRepo,
+  entries: [{ path: "src/example.ts" }],
+  config: {},
+}, false, false, ["anti-slop"]);
+if (antiSlopReceipt.length !== 1 || antiSlopReceipt[0].id !== "anti-slop" || antiSlopReceipt[0].status !== "missing") {
+  throw new Error("anti-slop-toolbelt: an unconfigured repository must report anti-slop as missing without installing it");
+}
+console.log("PASS anti-slop-toolbelt");
+
 if (process.env.REVIEW_LOOP_SMOKE_FOCUSED !== "1") {
 const crossRepoRoot = join(root, "cross-repo");
 const producer = createRepo("cross-repo/producer", {

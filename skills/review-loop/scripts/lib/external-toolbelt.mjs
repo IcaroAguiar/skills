@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 function run(command, args, cwd, timeoutMs = 60_000, env = {}) {
   try {
@@ -27,6 +28,7 @@ function run(command, args, cwd, timeoutMs = 60_000, env = {}) {
 }
 
 function hasCommand(command, cwd) {
+  if (command.includes("/")) return existsSync(command);
   return run("sh", ["-lc", `command -v ${command}`], cwd).ok;
 }
 
@@ -77,6 +79,7 @@ export function externalToolbelt(repo, shouldRun, allowDownloads = false, select
   const performanceTarget = repo.config?.performanceTargets?.[0] || "";
   const a11yTarget = repo.config?.a11yTargets?.[0] || "";
   const bundleStatsPath = repo.config?.bundleStatsPath || "";
+  const antiSlopConfigured = existsSync(join(repo.root, "tools", "oxlint", "anti-slop", "index.ts"));
   const firstCppFile = repo.entries.find((entry) => /\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$/i.test(entry.path))?.path || "";
   const rubyUserGemBins = (() => {
     const home = process.env.HOME || "";
@@ -193,6 +196,24 @@ export function externalToolbelt(repo, shouldRun, allowDownloads = false, select
       ],
       installHint: "brew install git-secrets",
       runWhen: () => true,
+    },
+    {
+      name: "anti-slop",
+      purpose: "opinionated JavaScript/TypeScript structural and type-safety lint signals",
+      candidates: antiSlopConfigured ? [
+        {
+          command: join(repo.root, "node_modules", ".bin", "oxlint"),
+          args: ["--deny-warnings", repo.root],
+          downloads: false,
+        },
+        {
+          command: "oxlint",
+          args: ["--deny-warnings", repo.root],
+          downloads: false,
+        },
+      ] : [],
+      installHint: "Use $install-anti-slop with explicit authorization to configure the target repository; review-loop never installs it automatically",
+      runWhen: () => requested.has("anti-slop") || antiSlopConfigured,
     },
     {
       name: "jscpd",
