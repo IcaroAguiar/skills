@@ -2,15 +2,11 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const VALID_ROLES = ["reviewer", "fixer"];
 const VALID_RISKS = ["low", "medium", "high", "critical"];
-const CODEX_DEFAULT_ENGINE_POLICY = {
-  reviewer: { modelId: "gpt-5.6-sol", reasoningModes: ["high"] },
-  fixer: { modelId: "gpt-5.6-luna", reasoningModes: ["xhigh", "max"] },
-};
 const MILLISECONDS_PER_DAY = 86_400_000;
 const DEFAULT_MAX_QUALIFICATION_AGE_DAYS = 180;
 const DEFAULT_MAX_REGISTRY_AGE_HOURS = 24;
@@ -35,13 +31,6 @@ const FIXER_THRESHOLDS = {
   scopeCreepRate: 0.1,
   documentationCorrectness: 0.8,
   escalationCompliance: 1,
-};
-const REVIEWER_SCORE_WEIGHTS = {
-  knownFindingRecall: 0.36,
-  blockerPrecision: 0.2,
-  severityCalibration: 0.12,
-  acceptedFalseBlockerRate: 0.12,
-  perGateRecall: 0.2,
 };
 const SUPPORTED_EVIDENCE_CLASSES = new Set([
   "review-loop-real-diff",
@@ -117,7 +106,7 @@ if (has("--help")) {
   console.log(`review-loop engine selection
 
 Usage:
-  node select-review-engines.mjs --registry <file> --role reviewer|fixer --risk low|medium|high|critical [--harness <name>] [--premium-reason <reason>] [--json]
+  node select-review-engines.mjs --registry <file> --role reviewer|fixer --risk low|medium|high|critical [--harness <name>] [--choice <protected-file>] [--premium-reason <reason>] [--json]
     [--candidate-root <repo>] [--required-context-tokens <integer>]
     [--require-repository-access] [--required-tool <name>]
     [--sensitive [--sensitive-class <auth|tenancy|credentials|migrations|transactions|concurrency|public-contracts-ops>]]
@@ -128,7 +117,8 @@ Registry discovery order:
   configuration directory. Candidate-repository files are never discovered.
 
 The active harness must populate the registry from the engines it actually
-exposes. The selector ranks only observed and benchmark-qualified candidates.`);
+exposes. The selector validates only the exact reviewer/fixer tuple previously
+chosen by the user; it never ranks, substitutes, or falls back automatically.`);
   process.exit(0);
 }
 
@@ -171,6 +161,41 @@ if (!requestedHarness && observedHarnesses.length !== 1) {
 }
 const activeHarness = requestedHarness || observedHarnesses[0];
 if (!observedHarnesses.includes(activeHarness)) die(`active harness ${activeHarness} is absent from the protected registry`);
+
+function harnessRoot(harness) {
+  if (harness === "codex") return resolve(process.env.CODEX_HOME || join(homedir(), ".codex"));
+  if (harness === "cursor") return resolve(process.env.CURSOR_HOME || join(homedir(), ".cursor"));
+  if (harness === "claude-code") return resolve(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"));
+  return resolve(homedir(), ".config", "review-loop", "harnesses", harness);
+}
+
+const explicitChoicePath = option("--choice");
+const choiceCandidates = explicitChoicePath
+  ? [explicitChoicePath]
+  : [process.env.REVIEW_LOOP_ENGINE_CHOICE, join(harnessRoot(activeHarness), "review-loop", "engine-choice.json")].filter(Boolean);
+const choicePath = choiceCandidates.find((candidate) => existsSync(candidate));
+if (!choicePath) {
+  die(`ENGINE_CHOICE_REQUIRED for ${activeHarness}: ask the user to choose one reviewer and one fixer, then persist both with configure-review-engines.mjs`);
+}
+const choiceLexicalPath = resolve(choicePath);
+const choiceCanonicalPath = realpathSync.native(choiceLexicalPath);
+if (isInside(candidateRootLexical, choiceLexicalPath) || isInside(candidateRootCanonical, choiceCanonicalPath)) {
+  die("candidate-repository engine choices are untrusted; use the protected harness configuration");
+}
+let engineChoice;
+try {
+  engineChoice = JSON.parse(readFileSync(choiceLexicalPath, "utf8"));
+} catch (error) {
+  die(`cannot parse explicit engine choice: ${error.message}`);
+}
+if (engineChoice?.version !== 1 || engineChoice?.source !== "explicit-user-choice" || engineChoice?.harness !== activeHarness) {
+  die("engine choice must be a version 1 explicit-user-choice artifact for the active harness");
+}
+if (!Number.isFinite(Date.parse(engineChoice.configuredAt ?? ""))) die("engine choice configuredAt must be an ISO timestamp");
+const configuredChoice = engineChoice[role];
+if (!configuredChoice || ["id", "modelId", "reasoningMode"].some((field) => typeof configuredChoice[field] !== "string" || !configuredChoice[field].trim())) {
+  die(`engine choice must contain an exact ${role} id, modelId, and reasoningMode`);
+}
 const registryTrust = registry.trust;
 if (!registryTrust || typeof registryTrust !== "object" || Array.isArray(registryTrust)) {
   die("registry.trust must declare a protected source class and identifier");
@@ -242,14 +267,11 @@ function reject(candidate, reason) {
   return false;
 }
 
-function matchesHarnessPolicy(candidate) {
+function matchesExplicitChoice(candidate) {
   if (candidate.harness !== activeHarness) return reject(candidate, `belongs to inactive harness ${candidate.harness ?? "not_observable"}`);
-  if (activeHarness !== "codex") return true;
-  const required = CODEX_DEFAULT_ENGINE_POLICY[role];
-  if (candidate.modelId !== required.modelId || !required.reasoningModes.includes(candidate.reasoningMode)) {
-    return reject(candidate, `Codex ${role} default requires ${required.modelId} with reasoning ${required.reasoningModes.join("|")}`);
-  }
-  return true;
+  return candidate.id === configuredChoice.id
+    && candidate.modelId === configuredChoice.modelId
+    && (candidate.reasoningMode ?? "not_observable") === configuredChoice.reasoningMode;
 }
 
 function receiptIdentifier(value) {
@@ -501,79 +523,30 @@ function verifyFailClosed() {
 if (has("--self-test")) verifyFailClosed();
 
 const qualifiesRole = role === "reviewer" ? qualifiesReviewer : qualifiesFixer;
-const qualified = registry.candidates.filter((candidate) => matchesHarnessPolicy(candidate) && qualifiesRole(candidate));
+const explicitlyChosen = registry.candidates.filter(matchesExplicitChoice);
+if (explicitlyChosen.length === 0) {
+  die(`configured ${role} is not present in the current ${activeHarness} registry; ask the user to choose an available tuple and replace the harness choice explicitly`);
+}
+if (explicitlyChosen.length > 1) die(`configured ${role} identity is duplicated in the protected registry`);
+const qualified = explicitlyChosen.filter((candidate) => qualifiesRole(candidate));
 if (qualified.length === 0) {
   const detail = rejections.map(({ id, reason }) => `${id}: ${reason}`).join("; ");
   die(`no qualified ${role} for ${risk} risk${detail ? ` (${detail})` : ""}`);
 }
-
-function reviewerScore(candidate) {
-  const metrics = candidate.qualification.metrics;
-  const averageGateRecall = Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS)
-    .reduce((total, gate) => total + metrics.perGateRecall[gate], 0) / Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).length;
-  return (
-    metrics.knownFindingRecall * REVIEWER_SCORE_WEIGHTS.knownFindingRecall +
-    metrics.blockerPrecision * REVIEWER_SCORE_WEIGHTS.blockerPrecision +
-    metrics.severityCalibration * REVIEWER_SCORE_WEIGHTS.severityCalibration +
-    (1 - metrics.acceptedFalseBlockerRate) * REVIEWER_SCORE_WEIGHTS.acceptedFalseBlockerRate +
-    averageGateRecall * REVIEWER_SCORE_WEIGHTS.perGateRecall
-  );
-}
-
-function reviewerCapabilityVector(candidate) {
-  const metrics = candidate.qualification.metrics;
-  return [
-    metrics.knownFindingRecall,
-    metrics.blockerPrecision,
-    metrics.severityCalibration,
-    1 - metrics.acceptedFalseBlockerRate,
-    ...Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).map((gate) => metrics.perGateRecall[gate]),
-  ];
-}
-
-function dominatesReviewer(left, right) {
-  const leftMetrics = reviewerCapabilityVector(left);
-  const rightMetrics = reviewerCapabilityVector(right);
-  return leftMetrics.every((value, index) => value >= rightMetrics[index]) && leftMetrics.some((value, index) => value > rightMetrics[index]);
-}
-
-function candidateKey(candidate) {
-  return [candidate.harness, candidate.id, candidate.modelId, candidate.reasoningMode ?? "not_observable"].join("\u001f");
-}
-
-function compareCandidates(left, right) {
-  if (role === "fixer") {
-    return expectedCost(left) - expectedCost(right) ||
-      Number(right.qualification.metrics.firstPassAcceptance) - Number(left.qualification.metrics.firstPassAcceptance) ||
-      candidateKey(left).localeCompare(candidateKey(right));
-  }
-  return reviewerScore(right) - reviewerScore(left) || expectedCost(left) - expectedCost(right) || candidateKey(left).localeCompare(candidateKey(right));
-}
-
-const ranked = role === "reviewer"
-  ? qualified.filter((candidate) => {
-    const dominator = qualified
-      .filter((other) => other !== candidate && dominatesReviewer(other, candidate))
-      .sort(compareCandidates)[0];
-    if (!dominator) return true;
-    rejections.push({ id: receiptIdentifier(candidate.id), reason: `Pareto-dominated reviewer capability by ${receiptIdentifier(dominator.id)}` });
-    return false;
-  })
-  : qualified;
-ranked.sort(compareCandidates);
-
-const selected = ranked[0];
+const selected = qualified[0];
 const selectedAboveCeiling = role === "reviewer" && expectedCost(selected) > ceiling;
 const selectedExtremeTier = selected.cost?.tier === "extreme";
 const receipt = {
   status: "selected",
   role,
   risk,
-  defaultPolicy: activeHarness === "codex" ? {
+  choicePolicy: {
     enforced: true,
-    modelId: CODEX_DEFAULT_ENGINE_POLICY[role].modelId,
-    allowedReasoningModes: CODEX_DEFAULT_ENGINE_POLICY[role].reasoningModes,
-  } : { enforced: false },
+    source: "explicit-user-choice",
+    configuredAt: engineChoice.configuredAt,
+    choiceFingerprint: identifierHash(JSON.stringify({ harness: activeHarness, role, ...configuredChoice })),
+    automaticFallback: false,
+  },
   registry: {
     sourceClass: registryTrust.sourceClass,
     identifierHash: identifierHash(registryTrust.identifier || basename(registryPath)),
@@ -619,17 +592,10 @@ const receipt = {
   aboveCeiling: selectedAboveCeiling,
   premiumEscalation: selectedExtremeTier || selectedAboveCeiling ? premiumEscalation : null,
   rationale: selectedExtremeTier || selectedAboveCeiling
-    ? `selected through explicit premium escalation (${premiumEscalation})${selectedExtremeTier ? "; extreme tier" : ""}${selectedAboveCeiling ? "; above sustainable reviewer cost ceiling" : ""}`
-    : activeHarness === "codex"
-      ? `required Codex ${role} default; ranked within the protected ${CODEX_DEFAULT_ENGINE_POLICY[role].modelId} reasoning policy`
-    : role === "reviewer"
-      ? "highest qualified capability inside the sustainable cost ceiling"
-      : "lowest expected total cost among qualified capable fixers",
+    ? `explicit user choice validated through premium escalation (${premiumEscalation})${selectedExtremeTier ? "; extreme tier" : ""}${selectedAboveCeiling ? "; above sustainable reviewer cost ceiling" : ""}`
+    : "explicit user choice for this harness passed qualification and risk gates; no automatic fallback",
   rejected: rejections.sort((left, right) => left.id.localeCompare(right.id) || left.reason.localeCompare(right.reason)),
-  qualifiedAlternatives: ranked.slice(1).map((candidate) => ({
-    id: receiptIdentifier(candidate.id),
-    expectedTotalCostUsd: expectedCost(candidate),
-  })),
+  qualifiedAlternatives: [],
 };
 
 if (has("--json")) {

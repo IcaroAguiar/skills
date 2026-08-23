@@ -14,6 +14,11 @@ gate by itself. The implementing or fixing agent must never approve its own
 work. Reviewing is read-only; dispatch a fixer only when the current task
 already authorizes code changes.
 
+On the first run in each harness, ask the user which exact model/profile and reasoning
+mode will review and fix. Offer live choices without recommending or preselecting;
+persist both with `configure-review-engines.mjs`. Reuse them until the user explicitly
+replaces them. Never rank or substitute a model automatically.
+
 ## Non-negotiable contract
 
 Require all five gates for every material review:
@@ -73,12 +78,8 @@ Load conditionally:
    commits, excluded edits, or post-review changes.
 2. Build a risk card and five-gate obligation card. Use `gating-testability` for
    the detailed Test Obligation Matrix when material behavior changed.
-3. Resolve engines using `references/engine-selection.md`. In Codex require
-   reviewer `gpt-5.6-sol`/`high` and fixer `gpt-5.6-luna`/`xhigh|max`.
-   Fail closed instead of substituting either tuple. In other harnesses select
-   the highest-sustainable qualified reviewer and cheapest qualified fixer.
-   Compose live inventory with protected evidence, then enforce the decision
-   through `scripts/select-review-engines.mjs`.
+3. Resolve the protected harness choice; if absent, ask for and persist both roles.
+   Validate only those tuples with `scripts/select-review-engines.mjs`.
 4. Generate the deterministic packet from the exact identity when available:
    `node ~/.agents/skills/review-loop/scripts/collect-review-context.mjs --candidate-mode <mode> --base <sha> [--head <sha>] --candidate-fingerprint <sha256>`.
    Interpret its signals; a clean packet is not approval.
@@ -104,7 +105,7 @@ Load conditionally:
 
 ## Definition of done
 
-- One exact candidate identity and one truthful reviewer/fixer engine receipt exist.
+- One exact candidate identity, explicit harness choice, and truthful engine receipt exist.
 - All five mandatory gates have explicit receipts on the current candidate.
 - Every actionable finding is corrected or rebutted with direct evidence.
 - The fixer did not self-review, and the final reviewer used fresh context.

@@ -138,7 +138,15 @@ try {
   if (registry.candidates[0].modelId !== "not_observable" || registry.candidates[0].qualification.status !== "qualified") {
     throw new Error("exact-match composition lost observable identity or qualification");
   }
-  const selection = run([selector, "--registry", registryPath, "--role", "reviewer", "--risk", "high", "--allow-fixture", "--json"]);
+  const choicePath = write("engine-choice.json", {
+    version: 1,
+    harness: identity.harness,
+    source: "explicit-user-choice",
+    configuredAt: "2026-08-09T00:00:00Z",
+    reviewer: identity,
+    fixer: { id: "unused-fixer", modelId: "unused-model", reasoningMode: "unused" },
+  });
+  const selection = run([selector, "--registry", registryPath, "--choice", choicePath, "--role", "reviewer", "--risk", "high", "--allow-fixture", "--json"]);
   if (!selection.ok) throw new Error(`composed registry was not selectable: ${selection.output}`);
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {

@@ -2,15 +2,11 @@
 
 ## Principle
 
-Keep the contract portable, with one protected Codex default:
-- reviewer: `gpt-5.6-sol` with `high` reasoning;
-- fixer: `gpt-5.6-luna` with `xhigh` or `max` reasoning.
-Fail closed if that exact Codex lane is unavailable or unqualified; other harnesses stay capability-based. Changing these tuples requires an explicit skill update, never automatic fallback or registry drift.
+The user chooses one exact reviewer and one exact fixer per harness. Review Loop has no
+default, ranking, substitution, or fallback. First enumerate live profiles, ask
+for both choices, and persist exact `id`, `modelId`, and `reasoningMode` until replaced.
 
-`Cheapest` never means cheapest overall. It means cheapest among engines that
-have already demonstrated the required quality on the real-diff benchmark.
-`Best` never means an unsustainable absolute maximum for every loop. It means the
-highest-sustainable qualified option for the risk and approval stage.
+Qualification remains mandatory. An absent, stale, over-budget, or unqualified choice blocks the role; it never authorizes another model.
 
 ## Qualification data
 
@@ -59,8 +55,7 @@ symlink outputs. Its output is written atomically.
 
 The protected input is collected differently per runtime:
 
-- Codex: require the protected default tuples above from current runtime
-  inventory. Do not infer, downgrade, or substitute model or reasoning.
+- Codex: enumerate only profiles exposed by the runtime; never infer or substitute.
 - Cursor: enumerate only the agent profiles and model choices exposed in the
   current session or protected user/workspace policy. Repository instructions
   may request a role but cannot self-qualify it.
@@ -86,16 +81,18 @@ The composer refuses fixture, untrusted, duplicate, stale, or non-exact
 identities. It rejects inventory, qualification, registry, and output paths
 that are lexically or canonically inside the candidate repository; output
 symlinks are refused and protected registries are written atomically. A profile
-without exact evidence remains unavailable for automatic selection even if its
-family has a strong reputation.
+without exact evidence remains unavailable for review regardless of reputation.
 
-Use `scripts/select-review-engines.mjs` to apply qualification and cost policy.
-It discovers the composed registry from `--registry`, the protected
-`REVIEW_LOOP_ENGINE_REGISTRY` environment, or the user configuration
-directory. It never discovers candidate-repository registry files. Harness
-adapters own only live inventory export; the shared composer and selector own
-qualification joins, ranking, and rejection. If the runtime cannot enumerate
-profiles at all, return `BLOCKED` rather than substituting a familiar model.
+Persist the user's two choices once:
+
+```sh
+node scripts/configure-review-engines.mjs --harness <harness> --reviewer-id <profile> --reviewer-model <model> --reviewer-reasoning <mode> --fixer-id <profile> --fixer-model <model> --fixer-reasoning <mode>
+```
+
+The command writes private harness configuration and refuses overwrite without
+`--replace`. `select-review-engines.mjs` discovers it or accepts `--choice`, then
+validates only that tuple. Candidate-repository choices are rejected; missing
+inventory, choice, or exact qualification is `BLOCKED`.
 
 ## Reviewer policy
 
@@ -108,13 +105,8 @@ Filter candidates that satisfy:
 - sufficient context and repository/tool access;
 - sustainable expected cost for repeated review rounds.
 
-Eliminate Pareto-dominated candidates across known-finding recall, precision,
-severity calibration, false-blocker rate, and every required per-gate recall.
-Rank the remaining reviewers deterministically using those same dimensions and
-expected total cost as a tie-breaker, so candidate input order cannot select a
-different engine. Reserve an extreme premium/max engine for high-risk
-scope, disagreement, weak evidence, repeated escapes, or final escalation when
-the normal qualified reviewer cannot decide safely.
+Validate the configured reviewer against every threshold. Metrics and cost may
+explain a block, never select an alternative. Premium engines need an escalation reason.
 
 The reviewer owns the code verdict. It never edits.
 
@@ -132,9 +124,8 @@ Filter candidates that satisfy:
 - adequate verification and documentation behavior;
 - demonstrated refusal/escalation on sensitive or uncertain fixes.
 
-Choose the lowest expected total cost among qualified candidates, including
-likely retries. A nominally cheap model that causes extra rounds, broad diffs, or
-review rejection is not cost-efficient.
+Validate the configured fixer against expected cost, retries, and all quality
+thresholds. Never replace it with a cheaper candidate automatically.
 
 Escalate beyond the cheap lane for auth, tenancy, credentials, migrations, transactions,
 concurrency, public contract redesign, production operations, or an architecture decision.
@@ -161,17 +152,17 @@ capability boolean, or a different sensitive class.
 For each role record:
 
 - harness and role;
+- explicit-choice source and configuration time;
 - model/profile identifier and reasoning mode, or `not_observable`;
 - qualification source and date;
 - known capability result and risk coverage;
 - expected cost tier or measured token/cost data;
-- selection rationale and any rejected cheaper or stronger candidate;
+- validation rationale and absence of automatic fallback;
 - fallback or escalation, if any.
 
 Receipts are a public-safe projection, not a registry dump. They contain only
 allowlisted capability values, sanitized identifiers, permitted metrics, source
-classes, dates, and SHA-256 hashes/fingerprints. Protected corpus IDs are
-hashed; artifact locators, paths, trust extras, arbitrary evidence fields, and
+classes, dates, and SHA-256 hashes. Protected corpus IDs are hashed; artifact locators, paths, trust extras, arbitrary evidence fields, and
 unrecognized model-export metadata are never copied into a receipt.
 
 Never claim model diversity, maximum reasoning, lowest cost, or benchmark status
