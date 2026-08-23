@@ -100,6 +100,8 @@ for (const phrase of [
   "fixer `gpt-5.6-luna`/`xhigh|max`",
   "fresh, read-only reviewer",
   "fixing agent must never approve",
+  "Pinning never authorizes branch switches",
+  "at most one evidence-changing alternate",
   "In a review-only task, return the findings without",
   "verdict never survives a changed candidate identity",
 ]) {
@@ -222,6 +224,7 @@ const result = {
     mandatoryGates: 5,
     portableEnginePolicy: true,
     realDiffPolicy: true,
+    boundedRepositoryConvergence: true,
   },
   failures,
 };

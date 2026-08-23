@@ -68,9 +68,11 @@ Load conditionally:
 ## Workflow
 
 1. Pin repository, base SHA, candidate mode (`commit`, `index`, or `worktree`),
-   candidate fingerprint, changed files, request/spec source, and relevant
-   documentation. Require a head SHA for commit mode. Do not mix PRs, stale
-   commits, excluded edits, or post-review changes.
+   fingerprint, changed files, request/spec, and documentation. Pinning never authorizes branch switches,
+   checkout, worktree creation, stash, fetch, or rebase. Probe each required
+   repository fact once; after at most one evidence-changing alternate, return
+   `BLOCKED`. Require a head SHA for commit mode; do not mix PRs, stale commits,
+   exclusions, or later changes.
 2. Build a risk card and five-gate obligation card. Use `gating-testability` for
    the detailed Test Obligation Matrix when material behavior changed.
 3. Resolve engines using `references/engine-selection.md`. In Codex require

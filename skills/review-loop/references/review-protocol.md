@@ -1,27 +1,23 @@
 # Review protocol
 
 ## Immutable scope
+Review exactly one repository state: repository, candidate mode, base/head,
+changed files, request/spec, and adjacent proof. Record and exclude unrelated
+changes. Never blend linked PRs or reuse a verdict after the candidate changes.
+Pinning never authorizes `switch`, `checkout`, worktree creation, stash, fetch,
+or rebase. A review-only agent cannot mutate workspace or refs to recover a
+missing fact. Probe each required fact once with a bounded read-only method; if
+it fails or times out, allow at most one evidence-changing alternate. Then
+return `BLOCKED`; never repeat an equivalent command or broadly hydrate files.
 
-Review exactly one repository state: repository, candidate mode, merge base or
-base SHA, head SHA when a commit exists, changed files, request/spec source, and the adjacent
-code needed to prove a claim. Record unrelated worktree changes and exclude
-them. Never blend linked PRs or reuse a verdict after the candidate changes.
-
-Before review, choose one candidate mode and create a read-only identity with
-`scripts/fingerprint-review-state.mjs`: `commit` for a pinned `base..head`, `index` for
-staged changes, or `worktree` for the full staged + unstaged + untracked state.
-Record its sanitized repository identifier, mode, base/head where applicable, SHA-256, exact
-changed-file/status set, and (for `index`) its explicit excluded unstaged and
-untracked paths. The SHA-256 is a framed deterministic byte stream containing
-the candidate evidence plus the relevant binary Git diffs. In index mode, it
-also contains a deterministic binary diff of excluded unstaged changes and raw
-snapshots of excluded untracked files; their relative-path fingerprints are
-reported separately as `excludedFileSnapshots`, never as candidate files.
-Worktree mode contains the current bytes of every changed or untracked file,
-with deletion and rename status records preserved. It never creates a commit or
-writes Git state.
-Pass a stable protected `--repository-id owner/repository` when the receipt must
-be compared across machines; the fallback checkout basename is local-only.
+Create a read-only identity with
+`scripts/fingerprint-review-state.mjs`: `commit` for pinned `base..head`, `index`
+for staged changes, or `worktree` for staged + unstaged + untracked state. Record
+sanitized repository ID, mode, base/head, SHA-256, exact file/status set, and
+index exclusions. The framed fingerprint includes binary diffs and excluded
+snapshots without machine paths. Worktree mode includes changed/untracked bytes,
+deletions, and renames without writing Git. Pass protected `--repository-id
+owner/repository` for portability; the fallback basename is local-only.
 
 ## Collector binding
 
