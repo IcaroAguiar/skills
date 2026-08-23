@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Runner Ops"
+  short_description: "Operate trusted multi-project GitHub runners"
+  default_prompt: "Use $github-runner-ops to onboard this project onto my shared Linux self-hosted runner safely."
