@@ -69,6 +69,18 @@ Before dispatch, record:
 Classify risk from changed invariants, not line count. Small auth or migration
 diffs can be high risk; large generated diffs can be low judgment.
 
+## Pull-request size gate
+
+Before every pass, run `scripts/assess-pr-scope.mjs` on the pinned base/head. More
+than 20 files or 600 changed lines is `STACK_REQUIRED`. The third and final pass
+requires at most 10 files and 300 lines. These are decomposition limits, not risk scores.
+
+On `STACK_REQUIRED`, stop and load `$gh-stack`. Design one concern per layer,
+submit a GitHub PR stack with `gh stack submit --auto --open`, then review and
+approve each PR bottom-to-top. Each needs its own identity and five-gate receipts;
+higher layers wait for lower ones. Merge with `gh stack merge <target> --yes`,
+never `gh pr merge` or a manual Git branch chain.
+
 ## Role separation
 
 Use one qualified read-only reviewer as the default independent authority. Use
@@ -88,18 +100,15 @@ after the independent pass.
 4. Run focused verification and update documentation/evidence.
 5. Resolve and fingerprint the new candidate.
 6. Review the complete new state from fresh context.
-7. Repeat only while a correction round and the cumulative expected-cost budget
-   remain; otherwise stop as `BLOCKED` or escalate with the recorded history.
+7. Repeat only while the three-pass limit and cumulative expected-cost budget
+   remain; otherwise stop as `BLOCKED` or apply the size gate above.
 
-The default convergence limit is three correction rounds. A protected policy or
-user-approved review packet may set a lower round limit and a cumulative
-expected-cost budget; untrusted content cannot change either. Before dispatching
-each fixer/reviewer round, calculate the next expected total from the selected
-engine receipts and compare it with the remaining budget. If either limit is
-exhausted, do not start another round: return `BLOCKED` or request escalation
-with every attempt, selected engine, expected/observed cost, outcome, and
-remaining budget. Never turn a missing budget into permission for an unbounded
-loop.
+The hard limit is three reviewer passes total: initial plus two re-reviews. A
+protected policy may lower it, never raise it. Before dispatch, compare expected
+cost with remaining budget. After a third `REQUEST_CHANGES`, never dispatch a
+fourth reviewer. Require a GitHub PR stack when its gate fires; otherwise return
+`BLOCKED` with attempt, cost, outcome, and uncertainty. Missing budget never
+permits an unbounded loop.
 
 Limit cheap correction to changes the engine has demonstrated it can perform.
 Escalate when the fix crosses auth, tenancy, credentials, migrations,

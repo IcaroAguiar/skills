@@ -72,34 +72,37 @@ Load conditionally:
 
 ## Workflow
 
-1. Pin repository, base SHA, candidate mode (`commit`, `index`, or `worktree`),
+1. Resolve the protected harness choice; if absent, ask for and persist both roles.
+   Validate only those tuples with `scripts/select-review-engines.mjs`.
+2. Pin repository, base SHA, candidate mode (`commit`, `index`, or `worktree`),
    candidate fingerprint, changed files, request/spec source, and relevant
    documentation. Require a head SHA for commit mode. Do not mix PRs, stale
    commits, excluded edits, or post-review changes.
-2. Build a risk card and five-gate obligation card. Use `gating-testability` for
+3. For a PR, run `assess-pr-scope.mjs --base <sha> --head <sha> --review-pass <n>`.
+   On `STACK_REQUIRED`, use `$gh-stack` for a real GitHub PR stack reviewed bottom-to-top;
+   never use a manual Git stack.
+4. Build a risk card and five-gate obligation card. Use `gating-testability` for
    the detailed Test Obligation Matrix when material behavior changed.
-3. Resolve the protected harness choice; if absent, ask for and persist both roles.
-   Validate only those tuples with `scripts/select-review-engines.mjs`.
-4. Generate the deterministic packet from the exact identity when available:
-   `node ~/.agents/skills/review-loop/scripts/collect-review-context.mjs --candidate-mode <mode> --base <sha> [--head <sha>] --candidate-fingerprint <sha256>`.
-   Interpret its signals; a clean packet is not approval.
-5. Dispatch a fresh, read-only reviewer with the complete diff, obligation card,
+5. Generate the deterministic packet from the exact identity when available with
+   `collect-review-context.mjs`; interpret its signals, never as approval.
+6. Dispatch a fresh, read-only reviewer with the complete diff, obligation card,
    relevant context, checks, and exact engine receipt. Do not expose previous
    review output before its independent pass finishes.
-6. Require findings to identify category, severity, location, impact or failure
+7. Require findings to identify category, severity, location, impact or failure
    mode, current-candidate evidence, smallest justified correction, and validation
    path. Structural, semantic, and documentation evidence need not pretend to be
    a runtime bug reproduction.
-7. If findings exist and correction is authorized, dispatch the qualified fixer
+8. If findings exist and correction is authorized, dispatch the configured,
+   qualified fixer
    with bounded ownership. The fixer may implement only accepted findings, add
    proportional regression coverage, update affected documentation, and run
    required checks. Escalate sensitive or structurally uncertain fixes instead
    of forcing the cheap lane. In a review-only task, return the findings without
    editing.
-8. Resolve and fingerprint the new candidate, regenerate affected evidence, and
-   run a fresh reviewer instance. Any actionable finding reopens the correction
-   loop. A verdict never survives a changed candidate identity.
-9. Report `REVIEW LOOP COVERAGE`, `CHECKS GREEN`, `FORMAL REVIEW`, and
+9. Fingerprint the new candidate, refresh evidence, and use a fresh reviewer for
+   at most three passes total. A verdict never survives a changed candidate identity. Never
+   dispatch a fourth pass; require `$gh-stack` when its gate fires, else `BLOCKED`.
+10. Report `REVIEW LOOP COVERAGE`, `CHECKS GREEN`, `FORMAL REVIEW`, and
    `MERGE READY` separately. Do not merge, deploy, or change formal review state
    without separate authority.
 
@@ -107,6 +110,7 @@ Load conditionally:
 
 - One exact candidate identity, explicit harness choice, and truthful engine receipt exist.
 - All five mandatory gates have explicit receipts on the current candidate.
+- PR-size state is explicit; every GitHub stack layer has its own approval.
 - Every actionable finding is corrected or rebutted with direct evidence.
 - The fixer did not self-review, and the final reviewer used fresh context.
 - Focused tests plus applicable lint, typecheck/build, and `git diff --check`
@@ -121,14 +125,10 @@ Load conditionally:
 
 Run:
 
-1. `node skills/review-loop/scripts/validate-skill-package.mjs skills/review-loop`
-2. `node skills/review-loop/scripts/test-engine-selection.mjs && node skills/review-loop/scripts/test-harness-adapters.mjs`
-3. `node skills/review-loop/scripts/test-review-state-fingerprint.mjs`
-4. `node skills/review-loop/scripts/test-real-diff-corpus.mjs`
-5. `node skills/review-loop/scripts/test-quality-gate-ratchet.mjs`
-6. `node skills/review-loop/scripts/test-smoke-cleanup.mjs`
-7. `node skills/review-loop/scripts/validate-real-diff-corpus.mjs skills/review-loop/templates/real-diff-corpus.example.json`
-8. `node scripts/validate-skills.mjs`
+1. Package: `node skills/review-loop/scripts/validate-skill-package.mjs skills/review-loop`.
+2. Engines/scope: run `test-engine-choice.mjs`, `test-engine-selection.mjs`, `test-harness-adapters.mjs`, and `test-pr-scope.mjs`.
+3. Review integrity: run `test-review-state-fingerprint.mjs`, `test-real-diff-corpus.mjs`, `test-quality-gate-ratchet.mjs`, and `test-smoke-cleanup.mjs`.
+4. Corpus/catalog: run `validate-real-diff-corpus.mjs` on the example and `node scripts/validate-skills.mjs`.
 
 Then forward-test with raw real-PR artifacts and fresh agents as required by
 `references/real-diff-benchmark.md`. Do not promote an engine or claim a quality
