@@ -102,6 +102,11 @@ for (const phrase of [
   "fixing agent must never approve",
   "Pinning never authorizes branch switches",
   "at most one evidence-changing alternate",
+  "Always load only these two references",
+  "reviewer starts from",
+  "Reuse the exact engine receipt",
+  "two reviewer passes total",
+  "do not dispatch a third reviewer automatically",
   "In a review-only task, return the findings without",
   "verdict never survives a changed candidate identity",
 ]) {
@@ -225,6 +230,8 @@ const result = {
     portableEnginePolicy: true,
     realDiffPolicy: true,
     boundedRepositoryConvergence: true,
+    optimizedReviewHotPath: true,
+    defaultReviewerPasses: 2,
   },
   failures,
 };

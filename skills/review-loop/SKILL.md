@@ -34,26 +34,20 @@ one of these gates.
 
 ## Reference router
 
-Read only the references required for the current stage, but always load the
-first seven before reviewer dispatch:
+Always load only these two references before reviewer dispatch:
 
-- `references/review-protocol.md`: immutable scope, lifecycle, convergence, and
-  verdict states.
-- `references/correctness-and-risk.md`: behavioral, contract, security, scale,
-  compatibility, and regression review.
-- `references/quality-simplification.md`: deletion-first code quality and
-  structural approval bar.
-- `references/semantic-integrity.md`: naming, responsibility, temporal labels,
-  magic values, and semantic blockers.
-- `references/documentation-impact.md`: documentation discovery, impact
-  classification, and same-change correction.
-- `references/engine-selection.md`: portable capability-and-cost selection for
-  reviewer and fixer engines.
-- `references/reviewer-contract.md`: reviewer packet, findings, receipts, and
-  approval output.
+- `references/review-protocol.md`: immutable scope, lifecycle, convergence, and controller verdict states.
+- `references/reviewer-contract.md`: reviewer packet, findings, receipts, and approval output.
 
-Load conditionally:
+The five gates remain mandatory. Load detailed references only when the diff,
+risk card, or a concrete review question triggers them:
 
+- `references/correctness-and-risk.md` for behavior, contracts, security, data, lifecycle, compatibility, scale, or failure paths.
+- `references/quality-simplification.md` for material structure, dependencies, branching, duplication, or ownership changes.
+- `references/semantic-integrity.md` for names, responsibilities, domain terms, states, roles, units, or logic-bearing literals.
+- `references/documentation-impact.md` when a change may make documentation stale.
+- `references/engine-selection.md` in the controller only when the receipt is
+  absent or stale, or runtime configuration changed. Give only the receipt to the reviewer.
 - `references/runtime-proof-and-qa.md` for executable behavior, browser, UI,
   authentication, visual, or runtime proof.
 - `references/systemic-risks.md` for concurrency, async work, events, retries,
@@ -74,19 +68,22 @@ Load conditionally:
    `BLOCKED`. Require a head SHA for commit mode; do not mix PRs, stale commits,
    exclusions, or later changes.
 2. Build a risk card and five-gate obligation card. Use `gating-testability` for
-   the detailed Test Obligation Matrix when material behavior changed.
+   the detailed Test Obligation Matrix when material behavior changed. Use the
+   card to load only triggered references.
 3. Resolve engines using `references/engine-selection.md`. In Codex require
    reviewer `gpt-5.6-sol`/`high` and fixer `gpt-5.6-luna`/`xhigh|max`.
    Fail closed instead of substituting either tuple. In other harnesses select
    the highest-sustainable qualified reviewer and cheapest qualified fixer.
    Compose live inventory with protected evidence, then enforce the decision
-   through `scripts/select-review-engines.mjs`.
+   through `scripts/select-review-engines.mjs`. Reuse the exact engine receipt while
+   runtime configuration and qualification remain unchanged.
 4. Generate the deterministic packet from the exact identity when available:
    `node ~/.agents/skills/review-loop/scripts/collect-review-context.mjs --candidate-mode <mode> --base <sha> [--head <sha>] --candidate-fingerprint <sha256>`.
    Interpret its signals; a clean packet is not approval.
 5. Dispatch a fresh, read-only reviewer with the complete diff, obligation card,
-   relevant context, checks, and exact engine receipt. Do not expose previous
-   review output before its independent pass finishes.
+   triggered context, checks, and exact engine receipt. The reviewer starts from
+   the diff, batches specific path and symbol searches, then reads only the
+   smallest ranges needed for evidence. Hide previous review output until it finishes.
 6. Require findings to identify category, severity, location, impact or failure
    mode, current-candidate evidence, smallest justified correction, and validation
    path. Structural, semantic, and documentation evidence need not pretend to be
@@ -97,9 +94,11 @@ Load conditionally:
    required checks. Escalate sensitive or structurally uncertain fixes instead
    of forcing the cheap lane. In a review-only task, return the findings without
    editing.
-8. Resolve and fingerprint the new candidate, regenerate affected evidence, and
-   run a fresh reviewer instance. Any actionable finding reopens the correction
-   loop. A verdict never survives a changed candidate identity.
+8. Apply accepted findings in one correction batch. Resolve and fingerprint the
+   new candidate, regenerate affected evidence, and run one fresh final reviewer.
+   The normal loop permits two reviewer passes total. If the final reviewer finds
+   an actionable issue, return `BLOCKED` or request escalation; do not dispatch a third reviewer automatically.
+   The verdict never survives a changed candidate identity.
 9. Report `REVIEW LOOP COVERAGE`, `CHECKS GREEN`, `FORMAL REVIEW`, and
    `MERGE READY` separately. Do not merge, deploy, or change formal review state
    without separate authority.
