@@ -5,19 +5,19 @@
 Give the independent reviewer:
 
 - repository, candidate mode, base/head where applicable, complete diff, and
-  current identity receipt, including index exclusions and untracked fingerprints;
+  initial and pre-verdict identity receipts, including index exclusions and untracked fingerprints;
 - request/spec, acceptance criteria, risk and five-gate obligation cards;
 - only context that governs changed files or a triggered review question;
 - deterministic packet as evidence, not a verdict;
-- protected round and cumulative-cost controls;
+- protected round and cost controls, plus compact attempt/cost history on a final pass;
 - tests and real runtime paths exercised by behavior;
 - skipped checks, baseline failures, residual risk, and engine receipt.
 
 Give the reviewer the engine receipt, never its selection reference, inventory,
 or qualification registry.
 
-Do not include the expected findings, accepted patch, previous reviewer output,
-or desired verdict before the independent pass finishes.
+On a final pass, include only compact attempt/cost history from earlier rounds.
+Do not include their findings, patch, expected verdict, or desired verdict.
 
 Require the packet's sanitized SHA-256 identity; missing mode, required commit
 base/head, or a mismatch is `BLOCKED`; never infer a merge base or add

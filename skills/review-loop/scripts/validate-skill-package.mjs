@@ -148,6 +148,8 @@ for (const [label, phrase] of [
   ["benchmark", "accepted-state false blocker rate"],
   ["reviewer contract", "The fixer must not approve"],
   ["reviewer contract", "When the user requested review only"],
+  ["reviewer contract", "initial and pre-verdict identity receipts"],
+  ["reviewer contract", "compact attempt/cost history"],
 ]) {
   expectIncludes(label, publicCorpus, phrase);
 }
