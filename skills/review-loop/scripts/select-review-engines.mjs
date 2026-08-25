@@ -431,7 +431,7 @@ const receipt = {
     freshContext: validated.capabilities.freshContext === true,
     workspaceWrite: validated.capabilities.workspaceWrite === true,
     monitoring: validated.capabilities.monitoring === true,
-    verdictAuthority: role === "watcher" ? false : true,
+    verdictAuthority: role === "fast-reviewer" || role === "deep-reviewer",
     contextTokens: validated.capabilities.contextTokens,
     repositoryAccess: validated.capabilities.repositoryAccess,
     toolAccess: validated.capabilities.toolAccess.map(receiptId),

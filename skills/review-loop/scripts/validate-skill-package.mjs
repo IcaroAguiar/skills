@@ -43,7 +43,9 @@ const REQUIRED_SUPPORT = [
   "templates/role-map.example.json",
   "agents/openai.yaml",
 ];
-const HARDCODED_MODEL_LITERAL = /\bmodelId\s*:\s*["'](?!not_observable["'])[^"']+["']/i;
+const HARDCODED_MODEL_LITERAL = /["']?modelId["']?\s*:\s*["'](?!not_observable["'])[^"']+["']/i;
+const jsonModelIdProbe = `${JSON.stringify("modelId")}: ${JSON.stringify(["opaque", "id"].join("-"))}`;
+if (!HARDCODED_MODEL_LITERAL.test(jsonModelIdProbe)) failures.push("model ID guard must detect quoted JSON keys");
 
 function fail(message) {
   failures.push(message);

@@ -150,7 +150,7 @@ function fail(label, result, phrase) {
 
 try {
   const fast = pass("fast-default-role", run(registryFor("codex"), roleMapFor("codex"), "fast-reviewer"));
-  if (fast.role !== "fast-reviewer" || fast.profileId !== "codex-fast-reviewer" || fast.fallback !== false || fast.roleReceipt.fallback !== false || fast.roleReceipt.exact !== true) {
+  if (fast.role !== "fast-reviewer" || fast.profileId !== "codex-fast-reviewer" || fast.fallback !== false || fast.roleReceipt.fallback !== false || fast.roleReceipt.exact !== true || fast.capabilities.verdictAuthority !== true) {
     throw new Error("fast-default-role: did not consume the exact protected role receipt");
   }
   if (!fast.rationale.includes("one fresh independent review")) throw new Error("fast-default-role: fast rationale is not explicit");
@@ -162,8 +162,11 @@ try {
     if (receipt.harness !== harness) throw new Error(`opaque-harness-${harness}: harness identity was changed`);
   }
 
+  const deep = pass("deep-reviewer-authority", run(registryFor("codex"), roleMapFor("codex"), "deep-reviewer"));
+  if (deep.role !== "deep-reviewer" || deep.capabilities.verdictAuthority !== true) throw new Error("deep-reviewer-authority: reviewer lost verdict authority");
+
   const fixer = pass("fixed-role", run(registryFor("codex"), roleMapFor("codex"), "fixer"));
-  if (fixer.role !== "fixer" || fixer.capabilities.workspaceWrite !== true || fixer.capabilities.verdictAuthority !== true) throw new Error("fixed-role: fixer capability receipt is wrong");
+  if (fixer.role !== "fixer" || fixer.capabilities.workspaceWrite !== true || fixer.capabilities.verdictAuthority !== false) throw new Error("fixed-role: fixer capability receipt is wrong");
 
   const watcher = pass("watcher-no-authority", run(registryFor("codex"), roleMapFor("codex"), "watcher"));
   if (watcher.role !== "watcher" || watcher.capabilities.readOnly !== true || watcher.capabilities.verdictAuthority !== false || watcher.rationale.includes("approve")) throw new Error("watcher-no-authority: watcher gained verdict authority");
