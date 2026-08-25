@@ -58,7 +58,7 @@ function candidateFor(harness, role, overrides = {}) {
       freshContext: role !== "watcher",
       workspaceWrite: role === "fixer",
       monitoring: role === "watcher",
-      verdictAuthority: role === "watcher" ? false : true,
+      verdictAuthority: reviewer,
       contextTokens: 128000,
       repositoryAccess: true,
       toolAccess: ["git", "rg", "monitoring"],
@@ -165,8 +165,17 @@ try {
   const deep = pass("deep-reviewer-authority", run(registryFor("codex"), roleMapFor("codex"), "deep-reviewer"));
   if (deep.role !== "deep-reviewer" || deep.capabilities.verdictAuthority !== true) throw new Error("deep-reviewer-authority: reviewer lost verdict authority");
 
+  for (const reviewerRole of ["fast-reviewer", "deep-reviewer"]) {
+    const invalidReviewer = registryFor("codex");
+    invalidReviewer.candidates.find((candidate) => candidate.id === `codex-${reviewerRole}`).capabilities.verdictAuthority = false;
+    fail(`${reviewerRole}-authority-required`, run(invalidReviewer, roleMapFor("codex"), reviewerRole), "reviewer verdict authority must be true");
+  }
+
   const fixer = pass("fixed-role", run(registryFor("codex"), roleMapFor("codex"), "fixer"));
   if (fixer.role !== "fixer" || fixer.capabilities.workspaceWrite !== true || fixer.capabilities.verdictAuthority !== false) throw new Error("fixed-role: fixer capability receipt is wrong");
+  const invalidFixer = registryFor("codex");
+  invalidFixer.candidates.find((candidate) => candidate.id === "codex-fixer").capabilities.verdictAuthority = true;
+  fail("fixer-authority-denied", run(invalidFixer, roleMapFor("codex"), "fixer"), "fixer verdict authority must be false");
 
   const watcher = pass("watcher-no-authority", run(registryFor("codex"), roleMapFor("codex"), "watcher"));
   if (watcher.role !== "watcher" || watcher.capabilities.readOnly !== true || watcher.capabilities.verdictAuthority !== false || watcher.rationale.includes("approve")) throw new Error("watcher-no-authority: watcher gained verdict authority");

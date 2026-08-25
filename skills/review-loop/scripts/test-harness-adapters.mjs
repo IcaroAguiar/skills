@@ -43,7 +43,7 @@ const inventory = {
   engines: [{
     ...identity,
     roles: ["fast-reviewer"],
-    capabilities: { readOnly: true, freshContext: true, workspaceWrite: false, contextTokens: 128000, repositoryAccess: true, toolAccess: ["git", "rg"], risks: ["low", "medium", "high"] },
+    capabilities: { readOnly: true, freshContext: true, workspaceWrite: false, verdictAuthority: true, contextTokens: 128000, repositoryAccess: true, toolAccess: ["git", "rg"], risks: ["low", "medium", "high"] },
     cost: { tier: "high", expectedRunUsd: 2, retryMultiplier: 1 },
   }],
 };
@@ -159,6 +159,49 @@ try {
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {
     throw new Error("selection receipt lost the exact harness profile or model identity");
+  }
+
+  const templateRoot = join(scriptDir, "..", "templates");
+  const publicInventory = JSON.parse(readFileSync(join(templateRoot, "harness-inventory.example.json"), "utf8"));
+  const publicLedger = JSON.parse(readFileSync(join(templateRoot, "qualification-ledger.example.json"), "utf8"));
+  const publicRoleMap = JSON.parse(readFileSync(join(templateRoot, "role-map.example.json"), "utf8"));
+  const publicNativeExport = {
+    version: publicInventory.version,
+    fixture: publicInventory.fixture,
+    harness: "codex",
+    observedAt: publicInventory.observedAt,
+    trust: publicInventory.trust,
+    profiles: publicInventory.engines.map((engine) => ({
+      id: engine.id,
+      modelId: engine.modelId,
+      reasoningMode: engine.reasoningMode,
+      roles: engine.roles,
+      capabilities: engine.capabilities,
+      cost: engine.cost,
+    })),
+  };
+  const publicExportPath = write("public-template-native-export.json", publicNativeExport);
+  const publicInventoryPath = join(protectedDirectory, "public-template-inventory.json");
+  const publicExport = run([exporter, "--harness", "codex", "--input", publicExportPath, "--output", publicInventoryPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
+  if (!publicExport.ok) throw new Error(`public template export failed: ${publicExport.output}`);
+  const publicLedgerPath = write("public-template-qualification-ledger.json", publicLedger);
+  const publicRoleMapPath = write("public-template-role-map.json", publicRoleMap);
+  const publicRegistryPath = join(protectedDirectory, "public-template-registry.json");
+  const publicComposition = run([composer, "--inventory", publicInventoryPath, "--qualifications", publicLedgerPath, "--reviewer-cost-ceiling-usd", "4", "--output", publicRegistryPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
+  if (!publicComposition.ok) throw new Error(`public template composition failed: ${publicComposition.output}`);
+  const publicRegistry = JSON.parse(readFileSync(publicRegistryPath, "utf8"));
+  for (const role of ["fast-reviewer", "deep-reviewer", "fixer", "watcher"]) {
+    const candidate = publicRegistry.candidates.find((value) => value.roles.includes(role));
+    const mapping = publicRoleMap.mappings.codex[role];
+    if (!candidate || candidate.harness !== "codex" || candidate.id !== mapping.profileId || candidate.modelId !== mapping.modelId || candidate.reasoningMode !== mapping.reasoningMode) {
+      throw new Error(`public template identity mismatch for ${role}`);
+    }
+  }
+  const publicSelection = run([selector, "--registry", publicRegistryPath, "--role-map", publicRoleMapPath, "--harness", "codex", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
+  if (!publicSelection.ok) throw new Error(`public template selection failed: ${publicSelection.output}`);
+  const publicReceipt = JSON.parse(publicSelection.output);
+  if (publicReceipt.role !== "fast-reviewer" || publicReceipt.profileId !== "fast-profile" || publicReceipt.capabilities.verdictAuthority !== true) {
+    throw new Error("public template selection did not produce the fast-reviewer receipt");
   }
 
   const mismatch = structuredClone(ledger);

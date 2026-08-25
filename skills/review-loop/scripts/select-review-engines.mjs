@@ -205,8 +205,12 @@ function capabilities(candidate, role, risk, requiredContext, requireRepository,
   if (role !== "watcher" && value.freshContext !== true) die(`candidate ${candidate.id} lacks fresh-context capability`);
   if (role === "fast-reviewer" || role === "deep-reviewer") {
     if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not isolated for review`);
+    if (value.verdictAuthority !== true) die(`candidate ${candidate.id} reviewer verdict authority must be true`);
   }
-  if (role === "fixer" && value.workspaceWrite !== true) die(`candidate ${candidate.id} lacks workspace-write capability`);
+  if (role === "fixer") {
+    if (value.workspaceWrite !== true) die(`candidate ${candidate.id} lacks workspace-write capability`);
+    if (value.verdictAuthority !== false) die(`candidate ${candidate.id} fixer verdict authority must be false`);
+  }
   if (role === "watcher") {
     if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not read-only for monitoring`);
     if (value.monitoring !== true && !value.toolAccess.some((tool) => /^(monitor|monitoring)$/i.test(tool))) die(`candidate ${candidate.id} lacks monitoring capability`);
@@ -431,7 +435,7 @@ const receipt = {
     freshContext: validated.capabilities.freshContext === true,
     workspaceWrite: validated.capabilities.workspaceWrite === true,
     monitoring: validated.capabilities.monitoring === true,
-    verdictAuthority: role === "fast-reviewer" || role === "deep-reviewer",
+    verdictAuthority: validated.capabilities.verdictAuthority === true,
     contextTokens: validated.capabilities.contextTokens,
     repositoryAccess: validated.capabilities.repositoryAccess,
     toolAccess: validated.capabilities.toolAccess.map(receiptId),
