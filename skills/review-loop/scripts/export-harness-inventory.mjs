@@ -119,7 +119,7 @@ if (has("--help")) {
 Usage:
   node export-harness-inventory.mjs --harness codex|cursor|claude-code|opencode
     --input <protected-harness-export.json> --output <protected-inventory.json>
-    [--candidate-root <repository>] [--allow-fixture]
+    --candidate-root <repository> [--allow-fixture]
 
 This adapter does not discover models or profiles. Its protected input must be
 an export from the active harness integration, containing the exact observed
@@ -134,7 +134,9 @@ const outputPath = option("--output");
 if (!SUPPORTED_HARNESSES.has(harness)) die("--harness must be codex, cursor, claude-code, or opencode");
 if (!inputPath) die("--input is required");
 if (!outputPath) die("--output is required");
-const candidateRootLexical = lexicalPath(option("--candidate-root", process.cwd()));
+const candidateRootArg = option("--candidate-root");
+if (!candidateRootArg) die("--candidate-root is required");
+const candidateRootLexical = lexicalPath(candidateRootArg);
 if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
 const candidateRootCanonical = realpathSync.native(candidateRootLexical);
 const protectedInputPath = rejectCandidateRepositoryPath("input", inputPath, { mustExist: true });

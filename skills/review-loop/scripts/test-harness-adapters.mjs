@@ -128,6 +128,7 @@ try {
   expectFailure("adapter-fail-closed", run([exporter, "--harness", "codex", "--input", write("incomplete-native-export.json", incompleteExport), "--output", join(protectedDirectory, "incomplete-inventory.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "profiles[0].modelId must be a non-empty observed value or not_observable");
 
   const protectedCodexExport = write("protected-codex-native-export.json", nativeExport("codex"));
+  expectFailure("adapter-candidate-root-required", run([exporter, "--harness", "codex", "--input", protectedCodexExport, "--output", join(protectedDirectory, "missing-root-inventory.json"), "--allow-fixture"]), "--candidate-root is required");
   const candidateToOutsideInput = join(candidateDirectory, "input-link.json");
   symlinkSync(protectedCodexExport, candidateToOutsideInput);
   expectFailure("adapter-lexical-candidate-input", run([exporter, "--harness", "codex", "--input", candidateToOutsideInput, "--output", join(protectedDirectory, "lexical-inventory.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "input must stay outside the candidate repository");
@@ -206,11 +207,11 @@ try {
 
   const mismatch = structuredClone(ledger);
   mismatch.records[0].modelId = "different-model";
-  expectFailure("identity-mismatch", run([composer, "--inventory", inventoryPath, "--qualifications", write("mismatch.json", mismatch), "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "no exact protected qualification");
+  expectFailure("identity-mismatch", run([composer, "--inventory", inventoryPath, "--qualifications", write("mismatch.json", mismatch), "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory, "--allow-fixture"]), "no exact protected qualification");
 
   const untrusted = structuredClone(inventory);
   untrusted.trust.sourceClass = "candidate-head";
-  expectFailure("untrusted-inventory", run([composer, "--inventory", write("untrusted.json", untrusted), "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "inventory.trust must use");
+  expectFailure("untrusted-inventory", run([composer, "--inventory", write("untrusted.json", untrusted), "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory, "--allow-fixture"]), "inventory.trust must use");
 
   expectFailure("candidate-local-inventory", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", root, "--allow-fixture"]), "inventory must stay outside the candidate repository");
   const candidateToOutsideInventory = join(candidateDirectory, "inventory-link.json");
@@ -229,8 +230,9 @@ try {
   if (readFileSync(outputTarget, "utf8") !== "do-not-overwrite") throw new Error("composer-output-symlink: composer followed the output symlink");
   expectFailure("composer-lexical-candidate-output", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--output", join(candidateDirectory, "registry.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "output must stay outside the candidate repository");
 
-  expectFailure("fixture-refusal", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4"]), "fixture inputs require --allow-fixture");
-  expectFailure("invalid-cost-ceiling", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "NaN", "--allow-fixture"]), "finite positive number");
+  expectFailure("composer-candidate-root-required", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "--candidate-root is required");
+  expectFailure("fixture-refusal", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory]), "fixture inputs require --allow-fixture");
+  expectFailure("invalid-cost-ceiling", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "NaN", "--candidate-root", candidateDirectory, "--allow-fixture"]), "finite positive number");
   console.log("PASS harness-adapters");
 } finally {
   for (const directory of [candidateDirectory, protectedDirectory]) {

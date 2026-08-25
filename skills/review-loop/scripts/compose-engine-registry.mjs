@@ -114,7 +114,7 @@ if (has("--help")) {
 
 Usage:
   node compose-engine-registry.mjs --inventory <protected-json> --qualifications <protected-json>
-    --reviewer-cost-ceiling-usd <positive-number> [--candidate-root <repo>]
+    --reviewer-cost-ceiling-usd <positive-number> --candidate-root <repo>
     [--output <protected-json>] [--allow-fixture]
 
 The active harness exports only profiles it currently exposes. This command
@@ -127,7 +127,9 @@ sources.`);
 const inventoryPath = option("--inventory");
 const qualificationPath = option("--qualifications");
 const outputPath = option("--output");
-const candidateRootLexical = lexicalBoundaryPath(option("--candidate-root", process.cwd()));
+const candidateRootArg = option("--candidate-root");
+if (!candidateRootArg) die("--candidate-root is required");
+const candidateRootLexical = lexicalBoundaryPath(candidateRootArg);
 if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
 const candidateRootCanonical = realpathSync.native(candidateRootLexical);
 const ceiling = Number(option("--reviewer-cost-ceiling-usd"));
