@@ -26,7 +26,8 @@ node scripts/select-review-engines.mjs \
   --role-map <protected-role-map.json> \
   --harness <opaque-harness-id> \
   --role fast-reviewer|deep-reviewer|fixer|watcher \
-  --risk low|medium|high|critical --json
+  --risk low|medium|high|critical \
+  --candidate-root <candidate-repository> --json
 ```
 
 The selector joins the exact map entry to exactly one live candidate by the
@@ -39,6 +40,8 @@ The map and registry must have protected trust metadata and current observation
 times. Paths must resolve outside the candidate repository. Lexical paths,
 canonical paths reached through links, and symbolic-link inputs are rejected.
 Candidate files never supply the map, registry, qualification, or fallback.
+The candidate root is mandatory; never infer it from the selector's current
+working directory.
 
 ## Qualification floor
 

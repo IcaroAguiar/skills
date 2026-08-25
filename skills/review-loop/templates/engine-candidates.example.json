@@ -41,7 +41,7 @@
           "artifactLocator": "https://example.invalid/review-loop/example-real-diff-v1",
           "artifactFingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "observedAt": "2026-08-09",
-          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation"]
+          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"]
         },
         "metrics": {
           "knownFindingRecall": 0.94,
@@ -54,7 +54,8 @@
             "criticalHighCorrectness": 0.94,
             "simplification": 0.9,
             "semantics": 0.91,
-            "documentation": 0.93
+            "documentation": 0.93,
+            "verification": 0.93
           }
         }
       }

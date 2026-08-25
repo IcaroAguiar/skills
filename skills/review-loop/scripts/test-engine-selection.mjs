@@ -33,6 +33,7 @@ function evidence(role) {
     "perGateRecall.simplification",
     "perGateRecall.semantics",
     "perGateRecall.documentation",
+    "perGateRecall.verification",
   ];
   const fixerMetrics = ["firstPassAcceptance", "criticalRegressions", "scopeCreepRate", "documentationCorrectness", "escalationCompliance"];
   return {
@@ -76,7 +77,7 @@ function candidateFor(harness, role, overrides = {}) {
         fiveGateReceiptRate: 1,
         acceptedFalseBlockerRate: 0.05,
         severityCalibration: 0.95,
-        perGateRecall: { criticalHighCorrectness: 0.95, simplification: 0.95, semantics: 0.95, documentation: 0.95 },
+        perGateRecall: { criticalHighCorrectness: 0.95, simplification: 0.95, semantics: 0.95, documentation: 0.95, verification: 0.95 },
       } : role === "fixer" ? {
         firstPassAcceptance: 0.9,
         criticalRegressions: 0,
@@ -123,10 +124,11 @@ function write(name, value, directory = protectedDir) {
   return path;
 }
 
-function run(registryValue, mapValue, role, extra = [], { fixture = true, harness = "codex" } = {}) {
+function run(registryValue, mapValue, role, extra = [], { fixture = true, harness = "codex", candidateRoot = candidate } = {}) {
   const registryPath = typeof registryValue === "string" ? registryValue : write(`registry-${Math.random()}.json`, registryValue);
   const mapPath = mapValue === null ? null : typeof mapValue === "string" ? mapValue : write(`roles-${Math.random()}.json`, mapValue);
-  const args = [selector, "--registry", registryPath, "--role", role, "--risk", "high", "--harness", harness, "--candidate-root", candidate, "--json"];
+  const args = [selector, "--registry", registryPath, "--role", role, "--risk", "high", "--harness", harness, "--json"];
+  if (candidateRoot) args.push("--candidate-root", candidateRoot);
   if (mapPath) args.push("--role-map", mapPath);
   if (fixture) args.push("--allow-fixture");
   args.push(...extra);
@@ -152,6 +154,7 @@ try {
     throw new Error("fast-default-role: did not consume the exact protected role receipt");
   }
   if (!fast.rationale.includes("one fresh independent review")) throw new Error("fast-default-role: fast rationale is not explicit");
+  fail("candidate-root-required", run(registryFor("codex"), roleMapFor("codex"), "fast-reviewer", [], { candidateRoot: null }), "--candidate-root is required");
   fail("legacy-role-rejected", run(registryFor("codex"), roleMapFor("codex"), "reviewer"), "--role must be fast-reviewer, deep-reviewer, fixer, or watcher");
 
   for (const harness of harnesses) {
@@ -188,6 +191,18 @@ try {
   const incomplete = registryFor("codex");
   delete incomplete.candidates[0].qualification.metrics.severityCalibration;
   fail("five-gate-qualification", run(incomplete, roleMapFor("codex"), "fast-reviewer"), "severityCalibration metric");
+
+  for (const reviewerRole of ["fast-reviewer", "deep-reviewer"]) {
+    const missingVerification = registryFor("codex");
+    const missingCandidate = missingVerification.candidates.find((candidate) => candidate.id === `codex-${reviewerRole}`);
+    missingCandidate.qualification.evidence.metricNames = missingCandidate.qualification.evidence.metricNames.filter((name) => name !== "perGateRecall.verification");
+    fail(`${reviewerRole}-missing-verification`, run(missingVerification, roleMapFor("codex"), reviewerRole), "evidence does not cover");
+
+    const weakVerification = registryFor("codex");
+    const weakCandidate = weakVerification.candidates.find((candidate) => candidate.id === `codex-${reviewerRole}`);
+    weakCandidate.qualification.metrics.perGateRecall.verification = 0;
+    fail(`${reviewerRole}-weak-verification`, run(weakVerification, roleMapFor("codex"), reviewerRole), "weak verification gate recall");
+  }
 
   const noMap = write("no-map-registry.json", registryFor("codex", { fixture: false, observedAt: new Date().toISOString() }));
   fail("missing-role-map", run(noMap, null, "fast-reviewer", [], { fixture: false }), "no protected role map found");

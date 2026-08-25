@@ -57,7 +57,7 @@ const qualification = {
     artifactLocator: "test://adapter-test",
     artifactFingerprint: fingerprint,
     observedAt: "2026-08-09",
-    metricNames: ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation"],
+    metricNames: ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"],
   },
   metrics: {
     knownFindingRecall: 0.9,
@@ -66,7 +66,7 @@ const qualification = {
     fiveGateReceiptRate: 1,
     acceptedFalseBlockerRate: 0.1,
     severityCalibration: 0.9,
-    perGateRecall: { criticalHighCorrectness: 0.9, simplification: 0.9, semantics: 0.9, documentation: 0.9 },
+    perGateRecall: { criticalHighCorrectness: 0.9, simplification: 0.9, semantics: 0.9, documentation: 0.9, verification: 0.9 },
   },
 };
 const ledger = {
@@ -154,7 +154,7 @@ try {
     throw new Error("exact-match composition lost observable identity or qualification");
   }
   const roleMapPath = write("role-map.json", roleMap);
-  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--allow-fixture", "--json"]);
+  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
   if (!selection.ok) throw new Error(`composed registry was not selectable: ${selection.output}`);
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {

@@ -8,6 +8,7 @@ const args = process.argv.slice(2);
 const ROLES = ["fast-reviewer", "deep-reviewer", "fixer", "watcher"];
 const RISKS = ["low", "medium", "high", "critical"];
 const OPAQUE_HARNESSES = new Set(["codex", "claude-code", "cursor", "opencode"]);
+const REVIEWER_GATE_RECALL_THRESHOLD = 0.85;
 const TRUSTED_SOURCES = new Set(["protected-harness-config", "trusted-base-artifact"]);
 const REVIEWER_EVIDENCE = [
   "knownFindingRecall",
@@ -20,6 +21,7 @@ const REVIEWER_EVIDENCE = [
   "perGateRecall.simplification",
   "perGateRecall.semantics",
   "perGateRecall.documentation",
+  "perGateRecall.verification",
 ];
 const FIXER_EVIDENCE = [
   "firstPassAcceptance",
@@ -232,8 +234,8 @@ function validateCandidate(candidate, role, risk, fixture, maxAgeDays, requiredC
     if (metric(candidate, metrics, "fiveGateReceiptRate") < 1) die(`candidate ${candidate.id} does not cover all five gates`);
     if (metric(candidate, metrics, "acceptedFalseBlockerRate") > 0.2) die(`candidate ${candidate.id} has too many accepted false blockers`);
     if (metric(candidate, metrics, "severityCalibration") < 0.8) die(`candidate ${candidate.id} has weak severity calibration`);
-    for (const gate of ["criticalHighCorrectness", "simplification", "semantics", "documentation"]) {
-      if (metric(candidate, metrics.perGateRecall, gate) < 0.85) die(`candidate ${candidate.id} has weak ${gate} gate recall`);
+    for (const gate of ["criticalHighCorrectness", "simplification", "semantics", "documentation", "verification"]) {
+      if (metric(candidate, metrics.perGateRecall, gate) < REVIEWER_GATE_RECALL_THRESHOLD) die(`candidate ${candidate.id} has weak ${gate} gate recall`);
     }
   }
   if (role === "fixer") {
@@ -281,7 +283,7 @@ function usage() {
 Usage:
   node select-review-engines.mjs --registry <protected-registry.json> --role-map <protected-role-map.json>
     --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer|watcher
-    --risk low|medium|high|critical [--candidate-root <repo>] [--json]
+    --risk low|medium|high|critical --candidate-root <repo> [--json]
     [--required-context-tokens <integer>] [--required-tool <name>]
     [--require-repository-access] [--sensitive --sensitive-class <class>]
 
@@ -298,7 +300,9 @@ const role = option("--role");
 if (!ROLES.includes(role)) die("--role must be fast-reviewer, deep-reviewer, fixer, or watcher");
 const risk = option("--risk", "medium");
 if (!RISKS.includes(risk)) die("--risk must be low, medium, high, or critical");
-const candidateRootLexical = resolve(option("--candidate-root", process.cwd()));
+const candidateRootOption = option("--candidate-root");
+if (!candidateRootOption) die("--candidate-root is required");
+const candidateRootLexical = resolve(candidateRootOption);
 if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
 if (lstatSync(candidateRootLexical).isSymbolicLink()) die("--candidate-root must not be a symbolic link");
 const candidateRootCanonical = realpathSync.native(candidateRootLexical);

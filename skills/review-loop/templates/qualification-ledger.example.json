@@ -21,7 +21,7 @@
           "artifactLocator": "protected://review-loop/example-reviewer-corpus-v1",
           "artifactFingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "observedAt": "2026-08-09T00:00:00Z",
-          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation"]
+          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"]
         },
         "metrics": {
           "knownFindingRecall": 0.9,
@@ -30,7 +30,7 @@
           "fiveGateReceiptRate": 1,
           "acceptedFalseBlockerRate": 0.1,
           "severityCalibration": 0.9,
-          "perGateRecall": { "criticalHighCorrectness": 0.9, "simplification": 0.9, "semantics": 0.9, "documentation": 0.9 }
+          "perGateRecall": { "criticalHighCorrectness": 0.9, "simplification": 0.9, "semantics": 0.9, "documentation": 0.9, "verification": 0.9 }
         }
       }
     }
