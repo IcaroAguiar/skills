@@ -5,23 +5,27 @@
 Give the independent reviewer:
 
 - repository, candidate mode, base/head where applicable, complete diff, and
-  the before/after candidate identity receipts (including index exclusions,
-  excluded unstaged-diff coverage, and separate untracked fingerprints);
+  initial and pre-verdict identity receipts, including index exclusions and untracked fingerprints;
 - request/spec, acceptance criteria, risk and five-gate obligation cards;
-- relevant instructions, contracts, documentation, and conditional references;
+- only context that governs changed files or a triggered review question;
 - deterministic packet as evidence, not a verdict;
-- protected round and cumulative-cost controls, plus prior attempt/cost history
-  when a correction loop already ran;
+- protected round and cost controls, plus compact attempt/cost history on a final pass;
 - tests and real runtime paths exercised by behavior;
 - skipped checks, baseline failures, residual risk, and engine receipt.
 
-Do not include the expected findings, accepted patch, previous reviewer output,
-or desired verdict before the independent pass finishes.
+Give the reviewer the engine receipt, never its selection reference, inventory,
+or qualification registry.
+
+On a final pass, include only compact attempt/cost history from earlier rounds.
+Do not include their findings, patch, expected verdict, or desired verdict.
 
 Require the packet's sanitized SHA-256 identity; missing mode, required commit
 base/head, or a mismatch is `BLOCKED`; never infer a merge base or add
 unstaged/untracked files to an index candidate. Tool receipts exclude commands,
 arguments, roots, configuration paths, and raw output.
+
+Start from the complete diff. Batch searches for concrete questions, then read
+the smallest relevant ranges. Do not map the repository without a question.
 
 ## Reviewer output
 
@@ -69,7 +73,7 @@ structure, stale statement, misleading name/value, or clearer bounded model.
 
 ## Fixer input and limits
 
-Give the fixer only accepted findings, exact ownership, preserved contracts,
+Give one fixer all accepted findings, exact ownership, preserved contracts,
 required checks, documentation impact, and engine receipt. The fixer must:
 
 - make the smallest cohesive correction;
@@ -86,7 +90,7 @@ the findings as the deliverable.
 
 ## Fresh approval
 
-After correction, resolve the new SHA and rebuild the complete reviewer packet.
-Launch a fresh qualified reviewer. A previous reviewer may be reused as a role
-profile, but not as a continuing contaminated context. Any new finding reopens
-the loop.
+After the correction batch, resolve the new SHA and rebuild the complete reviewer
+packet. Launch one fresh qualified final reviewer. Reuse a prior role profile,
+not its context. If the final reviewer finds an actionable issue, return
+`BLOCKED` or request escalation. Do not start a third reviewer automatically.

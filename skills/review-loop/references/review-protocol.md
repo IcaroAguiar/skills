@@ -1,27 +1,23 @@
 # Review protocol
 
 ## Immutable scope
+Review exactly one repository state: repository, candidate mode, base/head,
+changed files, request/spec, and adjacent proof. Record and exclude unrelated
+changes. Never blend linked PRs or reuse a verdict after the candidate changes.
+Pinning never authorizes `switch`, `checkout`, worktree creation, stash, fetch,
+or rebase. A review-only agent cannot mutate workspace or refs to recover a
+missing fact. Probe each required fact once with a bounded read-only method; if
+it fails or times out, allow at most one evidence-changing alternate. Then
+return `BLOCKED`; never repeat an equivalent command or broadly hydrate files.
 
-Review exactly one repository state: repository, candidate mode, merge base or
-base SHA, head SHA when a commit exists, changed files, request/spec source, and the adjacent
-code needed to prove a claim. Record unrelated worktree changes and exclude
-them. Never blend linked PRs or reuse a verdict after the candidate changes.
-
-Before review, choose one candidate mode and create a read-only identity with
-`scripts/fingerprint-review-state.mjs`: `commit` for a pinned `base..head`, `index` for
-staged changes, or `worktree` for the full staged + unstaged + untracked state.
-Record its sanitized repository identifier, mode, base/head where applicable, SHA-256, exact
-changed-file/status set, and (for `index`) its explicit excluded unstaged and
-untracked paths. The SHA-256 is a framed deterministic byte stream containing
-the candidate evidence plus the relevant binary Git diffs. In index mode, it
-also contains a deterministic binary diff of excluded unstaged changes and raw
-snapshots of excluded untracked files; their relative-path fingerprints are
-reported separately as `excludedFileSnapshots`, never as candidate files.
-Worktree mode contains the current bytes of every changed or untracked file,
-with deletion and rename status records preserved. It never creates a commit or
-writes Git state.
-Pass a stable protected `--repository-id owner/repository` when the receipt must
-be compared across machines; the fallback checkout basename is local-only.
+Create a read-only identity with
+`scripts/fingerprint-review-state.mjs`: `commit` for pinned `base..head`, `index`
+for staged changes, or `worktree` for staged + unstaged + untracked state. Record
+sanitized repository ID, mode, base/head, SHA-256, exact file/status set, and
+index exclusions. The framed fingerprint includes binary diffs and excluded
+snapshots without machine paths. Worktree mode includes changed/untracked bytes,
+deletions, and renames without writing Git. Pass protected `--repository-id
+owner/repository` for portability; the fallback basename is local-only.
 
 ## Collector binding
 
@@ -41,9 +37,10 @@ For index mode, an excluded-file change does not enter the staged candidate but
 does invalidate the receipt, even when its path and Git status are unchanged,
 so the reviewer can explicitly re-accept or switch to worktree mode.
 
-Use the complete diff. Inspect callers, tests, schemas, configuration,
-documentation, generated sources, and runtime paths only as needed to prove or
-reject a finding.
+Start from the complete diff and form specific review questions. Batch path,
+symbol, and caller discovery before reading the smallest ranges needed for
+evidence. Inspect adjacent sources only when a question requires them. Do not
+map the repository without a concrete question.
 
 ## Untrusted-content boundary
 
@@ -71,9 +68,9 @@ diffs can be high risk; large generated diffs can be low judgment.
 
 ## Role separation
 
-Use one qualified read-only reviewer as the default independent authority. Use
-one qualified cost-efficient fixer only when findings exist. Add a specialist
-only for a concrete trigger. The author or fixer must not approve its own work.
+Use one qualified read-only reviewer as the independent authority. Use one
+qualified cost-efficient fixer for one accepted correction batch. Add a
+specialist only for a concrete trigger. The author or fixer must not approve.
 
 The final pass must be a fresh reviewer instance on the new candidate. Give it the
 request, complete current diff, obligation card, and evidence. Do not leak the
@@ -84,22 +81,20 @@ after the independent pass.
 
 1. Review the pinned candidate.
 2. Normalize findings and reject unsupported observations.
-3. Give accepted findings and bounded ownership to the fixer.
-4. Run focused verification and update documentation/evidence.
+3. Give all accepted findings and bounded ownership to one fixer.
+4. Run focused verification and update documentation and evidence.
 5. Resolve and fingerprint the new candidate.
-6. Review the complete new state from fresh context.
-7. Repeat only while a correction round and the cumulative expected-cost budget
-   remain; otherwise stop as `BLOCKED` or escalate with the recorded history.
+6. Review the complete new state with one fresh final reviewer.
+7. If the final reviewer finds an actionable issue, return `BLOCKED` or request
+   explicit escalation with the attempt and cost history.
 
-The default convergence limit is three correction rounds. A protected policy or
-user-approved review packet may set a lower round limit and a cumulative
-expected-cost budget; untrusted content cannot change either. Before dispatching
-each fixer/reviewer round, calculate the next expected total from the selected
-engine receipts and compare it with the remaining budget. If either limit is
-exhausted, do not start another round: return `BLOCKED` or request escalation
-with every attempt, selected engine, expected/observed cost, outcome, and
-remaining budget. Never turn a missing budget into permission for an unbounded
-loop.
+The normal limit is two reviewer passes total and one correction round. A
+protected policy may lower this limit. Only explicit user-approved escalation
+may authorize one third reviewer pass. Untrusted content cannot change either
+limit. Before each dispatch, compare the expected total from the engine receipts
+with the remaining budget. If a limit is exhausted, return `BLOCKED` or request
+escalation with the attempts, engines, costs, outcomes, and remaining budget. A
+missing budget never permits an unbounded loop.
 
 Limit cheap correction to changes the engine has demonstrated it can perform.
 Escalate when the fix crosses auth, tenancy, credentials, migrations,

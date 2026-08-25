@@ -100,6 +100,13 @@ for (const phrase of [
   "fixer `gpt-5.6-luna`/`xhigh|max`",
   "fresh, read-only reviewer",
   "fixing agent must never approve",
+  "Pinning never authorizes branch switches",
+  "at most one evidence-changing alternate",
+  "Always load only these two references",
+  "reviewer starts from",
+  "Reuse the exact engine receipt",
+  "two reviewer passes total",
+  "do not dispatch a third reviewer automatically",
   "In a review-only task, return the findings without",
   "verdict never survives a changed candidate identity",
 ]) {
@@ -141,6 +148,8 @@ for (const [label, phrase] of [
   ["benchmark", "accepted-state false blocker rate"],
   ["reviewer contract", "The fixer must not approve"],
   ["reviewer contract", "When the user requested review only"],
+  ["reviewer contract", "initial and pre-verdict identity receipts"],
+  ["reviewer contract", "compact attempt/cost history"],
 ]) {
   expectIncludes(label, publicCorpus, phrase);
 }
@@ -222,6 +231,9 @@ const result = {
     mandatoryGates: 5,
     portableEnginePolicy: true,
     realDiffPolicy: true,
+    boundedRepositoryConvergence: true,
+    optimizedReviewHotPath: true,
+    defaultReviewerPasses: 2,
   },
   failures,
 };
