@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 const args = process.argv.slice(2);
-const SUPPORTED_HARNESSES = new Set(["codex", "cursor", "claude-code"]);
+const SUPPORTED_HARNESSES = new Set(["codex", "cursor", "claude-code", "opencode"]);
 const TRUSTED_SOURCES = new Set(["protected-harness-config", "trusted-base-artifact"]);
 
 function option(name, fallback = "") {
@@ -117,7 +117,7 @@ if (has("--help")) {
   console.log(`review-loop harness inventory export
 
 Usage:
-  node export-harness-inventory.mjs --harness codex|cursor|claude-code
+  node export-harness-inventory.mjs --harness codex|cursor|claude-code|opencode
     --input <protected-harness-export.json> --output <protected-inventory.json>
     [--candidate-root <repository>] [--allow-fixture]
 
@@ -131,7 +131,7 @@ not_observable only when the active harness did not expose that field.`);
 const harness = option("--harness");
 const inputPath = option("--input");
 const outputPath = option("--output");
-if (!SUPPORTED_HARNESSES.has(harness)) die("--harness must be codex, cursor, or claude-code");
+if (!SUPPORTED_HARNESSES.has(harness)) die("--harness must be codex, cursor, claude-code, or opencode");
 if (!inputPath) die("--input is required");
 if (!outputPath) die("--output is required");
 const candidateRootLexical = lexicalPath(option("--candidate-root", process.cwd()));

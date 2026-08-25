@@ -42,7 +42,7 @@ const inventory = {
   trust: { sourceClass: "protected-harness-config", identifier: "runtime-inventory" },
   engines: [{
     ...identity,
-    roles: ["reviewer"],
+    roles: ["fast-reviewer"],
     capabilities: { readOnly: true, freshContext: true, workspaceWrite: false, contextTokens: 128000, repositoryAccess: true, toolAccess: ["git", "rg"], risks: ["low", "medium", "high"] },
     cost: { tier: "high", expectedRunUsd: 2, retryMultiplier: 1 },
   }],
@@ -76,6 +76,21 @@ const ledger = {
   records: [{ ...identity, qualification }],
 };
 
+const roleMap = {
+  version: 1,
+  fixture: true,
+  observedAt: "2026-08-09T00:00:00Z",
+  trust: { sourceClass: "protected-harness-config", identifier: "fixture-role-map" },
+  mappings: {
+    "example-harness": {
+      "fast-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      "deep-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      fixer: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      watcher: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+    },
+  },
+};
+
 function nativeExport(harness, profile = identity) {
   return {
     version: 1,
@@ -87,7 +102,7 @@ function nativeExport(harness, profile = identity) {
       id: profile.id,
       modelId: profile.modelId,
       reasoningMode: profile.reasoningMode,
-      roles: ["reviewer"],
+      roles: ["fast-reviewer"],
       capabilities: inventory.engines[0].capabilities,
       cost: inventory.engines[0].cost,
     }],
@@ -95,7 +110,7 @@ function nativeExport(harness, profile = identity) {
 }
 
 try {
-  for (const harness of ["codex", "cursor", "claude-code"]) {
+  for (const harness of ["codex", "cursor", "claude-code", "opencode"]) {
     const exportPath = write(`${harness}-native-export.json`, nativeExport(harness));
     const normalizedPath = join(protectedDirectory, `${harness}-inventory.json`);
     const exportResult = run([exporter, "--harness", harness, "--input", exportPath, "--output", normalizedPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
@@ -138,7 +153,8 @@ try {
   if (registry.candidates[0].modelId !== "not_observable" || registry.candidates[0].qualification.status !== "qualified") {
     throw new Error("exact-match composition lost observable identity or qualification");
   }
-  const selection = run([selector, "--registry", registryPath, "--role", "reviewer", "--risk", "high", "--allow-fixture", "--json"]);
+  const roleMapPath = write("role-map.json", roleMap);
+  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--allow-fixture", "--json"]);
   if (!selection.ok) throw new Error(`composed registry was not selectable: ${selection.output}`);
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {

@@ -1,135 +1,89 @@
 ---
 name: review-loop
-description: Review, correct, and re-review material code changes or pull requests until they reach an evidence-backed merge decision; use for code review, PR review, completion gates, review-feedback fixes, merge-readiness checks, or any material agent-made code that must satisfy correctness, simplification, semantic integrity, documentation, and verification standards.
+description: Review, correct, and re-review material changes until the current candidate has evidence-backed code readiness; keep checks, formal review, merge, deployment, and external monitoring separate.
 ---
 
 # Review Loop
 
-Drive one immutable code state through independent review, bounded correction,
-verification, and a fresh approval decision. Keep code-review evidence separate
-from CI state, formal hosting approval, merge, deploy, and tracker state.
+Drive one immutable candidate through a speed-first review loop. The authoring
+agent self-audits and stabilizes the change, then focused checks run concurrently.
+Once stable, dispatch exactly one fresh independent
+`fast-reviewer`. Do not start a duplicate reviewer wave.
 
-The deterministic collector is tool support for the reviewer. It is not the
-gate by itself. The implementing or fixing agent must never approve its own
-work. Reviewing is read-only; dispatch a fixer only when the current task
-already authorizes code changes.
+## Five mandatory gates
 
-## Non-negotiable contract
+Every material candidate receives all five gates:
 
-Require all five gates for every material review:
+1. `CORRECTNESS`: behavior, contracts, security, data, lifecycle, and failure paths.
+2. `SIMPLIFICATION`: deletion, ownership, duplication, branching, and structure.
+3. `SEMANTICS`: names, states, roles, units, and logic-bearing values.
+4. `DOCUMENTATION`: changed docs are current, or `NOT_APPLICABLE` is justified.
+5. `VERIFICATION`: focused checks and the affected path are proven, or uncertainty is recorded.
 
-1. `CORRECTNESS`: behavior, contracts, regressions, security, data, lifecycle,
-   compatibility, and failure paths.
-2. `SIMPLIFICATION`: dead or unnecessary code, avoidable concepts, branching,
-   duplication, indirection, misplaced ownership, and structural debt.
-3. `SEMANTICS`: truthful names, cohesive responsibilities, domain vocabulary,
-   and logic-bearing strings or numbers.
-4. `DOCUMENTATION`: changed documentation is current, or `NOT_APPLICABLE` is
-   justified by the inspected sources.
-5. `VERIFICATION`: focused checks and the real affected path are proven, or the
-   blocker and residual uncertainty are explicit.
+Risk changes depth and checks, never the gate set. The author may self-audit
+and stabilize locally, but only a fresh independent reviewer may approve.
 
-Risk changes depth, specialists, verification, and escalation. It never removes
-one of these gates.
+## FAST workflow
 
-## Reference router
+1. Pin repository, base/head or worktree identity, request, scope, and risk.
+2. Self-audit the full diff against the five gates; fix and stabilize locally.
+3. Run focused checks concurrently. Record failures, baseline failures, and skipped proof.
+4. Resolve the protected role receipt for `fast-reviewer`, then dispatch one
+   fresh read-only reviewer with the complete diff and current evidence.
+5. For critical/high actionable local findings, reuse the same `fixer`, correct
+   automatically, run focused checks again, and ask a fresh reviewer for a
+   delta-first independent recheck. Continue while blocker count or severity
+   decreases. There is no fixed review-pass cap, and another local round does not need permission.
+6. Escalate automatically once to `deep-reviewer` only for high-risk ambiguity
+   or disagreement. Ask the user only for product, architecture, production,
+   credential, permission, or destructive authority, or genuine non-convergence.
+7. Keep medium/low simplification, semantics, and documentation observations
+   as visible residuals after final review unless they prove correctness or
+   verification failure.
 
-Always load only these two references before reviewer dispatch:
+Always rebuild evidence and require fresh independent approval after a changed
+candidate. The fixer never reviews or approves its own work.
 
-- `references/review-protocol.md`: immutable scope, lifecycle, convergence, and controller verdict states.
-- `references/reviewer-contract.md`: reviewer packet, findings, receipts, and approval output.
+## Separate states
 
-The five gates remain mandatory. Load detailed references only when the diff,
-risk card, or a concrete review question triggers them:
+Report these independently on the unchanged candidate:
 
-- `references/correctness-and-risk.md` for behavior, contracts, security, data, lifecycle, compatibility, scale, or failure paths.
-- `references/quality-simplification.md` for material structure, dependencies, branching, duplication, or ownership changes.
-- `references/semantic-integrity.md` for names, responsibilities, domain terms, states, roles, units, or logic-bearing literals.
-- `references/documentation-impact.md` when a change may make documentation stale.
-- `references/engine-selection.md` in the controller only when the receipt is
-  absent or stale, or runtime configuration changed. Give only the receipt to the reviewer.
-- `references/runtime-proof-and-qa.md` for executable behavior, browser, UI,
-  authentication, visual, or runtime proof.
-- `references/systemic-risks.md` for concurrency, async work, events, retries,
-  transactions, caches, cancellation, authz/tenancy, migrations, rollout, or
-  feature flags.
-- `references/go-review.md` for Go code, modules, generated Go, or Go tooling.
-- `references/quality-gate-ratchet.md` when creating or changing CI quality
-  gates.
-- `references/real-diff-benchmark.md` only when evaluating or changing this
-  skill, its engine policy, or its reviewer/fixer prompts.
+- `CODE READY`: local authoring, self-audit, and required focused proof are complete.
+- `CHECKS GREEN`: promised local/remote checks passed; this does not imply review.
+- `FORMAL REVIEW`: hosting approvals, change requests, and threads.
+- `MERGE READY`: all required states hold on the same candidate identity.
 
-## Workflow
+External PR reviewers and providers are outside this skill and are never waited
+on. The `watcher` role may monitor external state with read-only capability but
+has no verdict or approval authority.
 
-1. Pin repository, base SHA, candidate mode (`commit`, `index`, or `worktree`),
-   fingerprint, changed files, request/spec, and documentation. Pinning never authorizes branch switches,
-   checkout, worktree creation, stash, fetch, or rebase. Probe each required
-   repository fact once; after at most one evidence-changing alternate, return
-   `BLOCKED`. Require a head SHA for commit mode; do not mix PRs, stale commits,
-   exclusions, or later changes.
-2. Build a risk card and five-gate obligation card. Use `gating-testability` for
-   the detailed Test Obligation Matrix when material behavior changed. Use the
-   card to load only triggered references.
-3. Resolve engines using `references/engine-selection.md`. In Codex require
-   reviewer `gpt-5.6-sol`/`high` and fixer `gpt-5.6-luna`/`xhigh|max`.
-   Fail closed instead of substituting either tuple. In other harnesses select
-   the highest-sustainable qualified reviewer and cheapest qualified fixer.
-   Compose live inventory with protected evidence, then enforce the decision
-   through `scripts/select-review-engines.mjs`. Reuse the exact engine receipt while
-   runtime configuration and qualification remain unchanged.
-4. Generate the deterministic packet from the exact identity when available:
-   `node ~/.agents/skills/review-loop/scripts/collect-review-context.mjs --candidate-mode <mode> --base <sha> [--head <sha>] --candidate-fingerprint <sha256>`.
-   Interpret its signals; a clean packet is not approval.
-5. Dispatch a fresh, read-only reviewer with the complete diff, obligation card,
-   triggered context, checks, and exact engine receipt. The reviewer starts from
-   the diff, batches specific path and symbol searches, then reads only the
-   smallest ranges needed for evidence. Hide previous review output until it finishes.
-6. Require findings to identify category, severity, location, impact or failure
-   mode, current-candidate evidence, smallest justified correction, and validation
-   path. Structural, semantic, and documentation evidence need not pretend to be
-   a runtime bug reproduction.
-7. If findings exist and correction is authorized, dispatch the qualified fixer
-   with bounded ownership. The fixer may implement only accepted findings, add
-   proportional regression coverage, update affected documentation, and run
-   required checks. Escalate sensitive or structurally uncertain fixes instead
-   of forcing the cheap lane. In a review-only task, return the findings without
-   editing.
-8. Apply accepted findings in one correction batch. Resolve and fingerprint the
-   new candidate, regenerate affected evidence, and run one fresh final reviewer.
-   The normal loop permits two reviewer passes total. If the final reviewer finds
-   an actionable issue, return `BLOCKED` or request escalation; do not dispatch a third reviewer automatically.
-   The verdict never survives a changed candidate identity.
-9. Report `REVIEW LOOP COVERAGE`, `CHECKS GREEN`, `FORMAL REVIEW`, and
-   `MERGE READY` separately. Do not merge, deploy, or change formal review state
-   without separate authority.
+## Portable roles
+
+Use only protected role receipts: `fast-reviewer`, `deep-reviewer`, `fixer`, and
+`watcher`. Exact harness/profile/model/reasoning mappings live outside the
+candidate and are resolved once per harness. The selector fails closed on a
+missing, stale, mismatched, candidate-local, or symlinked protected artifact;
+it never silently chooses or falls back to another profile.
+
+Before reviewer dispatch load only:
+
+- `references/review-protocol.md` for identity, lifecycle, convergence, and states;
+- `references/reviewer-contract.md` for packets, findings, receipts, and approval.
+
+Triggered references:
+
+- `references/correctness-and-risk.md`, `references/quality-simplification.md`, and `references/semantic-integrity.md` for concrete code questions;
+- `references/documentation-impact.md` and `references/runtime-proof-and-qa.md` for docs or executable-path proof;
+- `references/systemic-risks.md`, `references/go-review.md`, and `references/quality-gate-ratchet.md` for their named boundaries;
+- `references/engine-selection.md` for protected role receipts and `references/real-diff-benchmark.md` only when evaluating this skill.
+
+Load other references only when their concrete trigger applies. A clean review
+is scoped evidence, not formal approval, merge, deploy, or tracker completion.
 
 ## Definition of done
 
-- One exact candidate identity and one truthful reviewer/fixer engine receipt exist.
-- All five mandatory gates have explicit receipts on the current candidate.
-- Every actionable finding is corrected or rebutted with direct evidence.
-- The fixer did not self-review, and the final reviewer used fresh context.
-- Focused tests plus applicable lint, typecheck/build, and `git diff --check`
-  passed or are explicitly blocked.
-- Changed documentation and names reflect durable domain semantics rather than
-  roadmap phases, temporary labels, or implementation accidents.
-- Skipped checks, baseline failures, residual debt, and uncertainty are visible.
-- A clean review is not presented as formal approval, merge, deploy, or tracker
-  completion.
-
-## After editing this skill
-
-Run:
-
-1. `node skills/review-loop/scripts/validate-skill-package.mjs skills/review-loop`
-2. `node skills/review-loop/scripts/test-engine-selection.mjs && node skills/review-loop/scripts/test-harness-adapters.mjs`
-3. `node skills/review-loop/scripts/test-review-state-fingerprint.mjs`
-4. `node skills/review-loop/scripts/test-real-diff-corpus.mjs`
-5. `node skills/review-loop/scripts/test-quality-gate-ratchet.mjs`
-6. `node skills/review-loop/scripts/test-smoke-cleanup.mjs`
-7. `node skills/review-loop/scripts/validate-real-diff-corpus.mjs skills/review-loop/templates/real-diff-corpus.example.json`
-8. `node scripts/validate-skills.mjs`
-
-Then forward-test with raw real-PR artifacts and fresh agents as required by
-`references/real-diff-benchmark.md`. Do not promote an engine or claim a quality
-gain from prose inspection or synthetic findings alone.
+- The current candidate has one identity and truthful protected role receipts.
+- All five gates have receipts; every critical/high blocker is fixed or directly rebutted.
+- Final approval is fresh, independent, and bound to the current fingerprint.
+- Focused checks, applicable lint/typecheck/build, and `git diff --check` passed or are explicit blockers.
+- Residual debt, skipped proof, baseline failures, and uncertainty are visible.
