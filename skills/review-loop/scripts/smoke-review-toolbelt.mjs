@@ -8,7 +8,7 @@ import { externalToolbelt, redactExternalReceiptArgs, redactExternalReceiptValue
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const collector = join(scriptDir, "collect-review-context.mjs");
-const SELF_SCAN_REVIEW_SIGNAL_BUDGET = 925;
+const SELF_SCAN_REVIEW_SIGNAL_BUDGET = 930;
 const configuredRoot = process.env.REVIEW_LOOP_SMOKE_ROOT;
 const root = configuredRoot ? resolve(configuredRoot) : mkdtempSync(join(tmpdir(), "review-loop-smoke-"));
 if (configuredRoot) {
@@ -1560,7 +1560,7 @@ const referenceTexts = referenceFiles.map((file) => readFileSync(join(scriptDir,
 const skillCorpus = [skillText, ...referenceTexts].join("\n");
 expectIncludes("fast-default", skillText, "focused checks run concurrently");
 expectIncludes("independent-review", skillText, "fresh independent");
-expectIncludes("portable-role-receipts", skillText, "protected role receipts");
+expectIncludes("portable-role-receipts", skillText, "native or protected role receipts");
 expectIncludes("autonomous-critical-high", skillText, "There is no fixed review-pass cap");
 expectIncludes("separate-code-state", skillText, "CODE READY");
 expectIncludes("watcher-no-authority", skillText, "watcher");
@@ -1576,8 +1576,9 @@ expectIncludes("fresh-candidate-review", skillText, "Always rebuild evidence and
 expectIncludes("simplification-gate", skillCorpus, "Prefer deleting incidental complexity");
 expectIncludes("semantic-gate", skillCorpus, "roadmap phases");
 expectIncludes("documentation-gate", skillCorpus, "NOT_APPLICABLE");
-expectIncludes("engine-capability-floor", skillCorpus, "exact protected mapping");
-expectIncludes("engine-no-fallback", skillCorpus, "never ranks, substitutes, silently");
+expectIncludes("engine-native-default", skillCorpus, "Missing protected configuration is not a blocker");
+expectIncludes("engine-fingerprint-binding", skillCorpus, "candidate fingerprint");
+expectIncludes("engine-protected-no-substitution", skillCorpus, "never substitutes another protected profile");
 expectIncludes("fixer-boundary", skillCorpus, "It must not approve");
 expectNotIncludes("no-local-user-paths", skillCorpus, "/Users/");
 console.log("PASS public-skill-contract");

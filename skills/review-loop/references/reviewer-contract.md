@@ -6,7 +6,7 @@ Give the independent reviewer the repository, candidate mode, base/head,
 complete current diff, initial and pre-verdict identity receipts, request,
 acceptance criteria, risk card, five-gate card, deterministic packet, focused
 checks, real affected path, skipped proof, baseline failures, residual risk,
-and the protected role receipt. On a recheck, include only compact attempt
+and the native or protected role receipt. On a recheck, include only compact attempt
 history and the current delta; do not disclose prior findings or the expected
 verdict.
 
@@ -31,7 +31,7 @@ semantics, and documentation findings are visible residuals after final review
 unless they demonstrate a correctness or verification failure.
 
 Return the five gate receipts, reviewed/excluded scope, rejected leads, checks,
-residual uncertainty, protected role receipt, convergence evidence, and one of
+residual uncertainty, native or protected role receipt, convergence evidence, and one of
 `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
 Never approve while a gate receipt, identity, fresh context, or blocker
 correction is missing.
@@ -55,7 +55,9 @@ current candidate. The fixer and author never approve their own work.
 
 ## Role boundary
 
-Use protected receipts for `fast-reviewer`, `deep-reviewer`, `fixer`, and
-`watcher`. A watcher can monitor external state read-only but has no verdict or
-approval authority. External PR review/provider state is reported separately
-and is never awaited by this skill.
+Use native or protected receipts for `fast-reviewer`, `deep-reviewer`, `fixer`,
+and `watcher`. A native receipt records the harness role contract and candidate
+fingerprint; the controller verifies a fresh context and an unchanged candidate
+before accepting the verdict. A watcher can monitor external state read-only
+but has no verdict or approval authority. External PR review/provider state is
+reported separately and is never awaited by this skill.

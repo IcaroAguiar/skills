@@ -118,7 +118,9 @@ for (const phrase of [
   "External PR reviewers and providers are outside this skill and are never waited",
   "watcher",
   "no verdict or approval authority",
-  "never silently chooses or falls back",
+  "harness-native",
+  "Missing role maps",
+  "never a prerequisite",
 ]) expectIncludes("FAST contract", skill, phrase);
 
 const actualReferences = existsSync(safePath("references"))
@@ -163,6 +165,8 @@ for (const phrase of [
   "no exact live candidate",
   "must not be a symbolic link",
   "fallback",
+  "harness-native",
+  "candidateFingerprint",
   "verdictAuthority",
   "codex",
   "claude-code",
@@ -173,7 +177,7 @@ if (HARDCODED_MODEL_LITERAL.test(selector)) fail("selector contains a hardcoded 
 for (const forbidden of ["CODEX_DEFAULT_ENGINE_POLICY", "reviewerCostCeilingUsd"]) expectNotIncludes("selector", selector, forbidden);
 
 const selectorTests = readRequired("scripts/test-engine-selection.mjs");
-for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "watcher", "codex", "claude-code", "cursor", "opencode", "no-ranking-fallback", "watcher-no-authority", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
+for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "watcher", "codex", "claude-code", "cursor", "opencode", "runNative", "harness-native", "no-ranking-fallback", "watcher-no-authority", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
 if (HARDCODED_MODEL_LITERAL.test(selectorTests)) fail("selector tests contain a hardcoded model ID");
 
 const roleMap = parseJson("templates/role-map.example.json");
@@ -193,7 +197,8 @@ const result = {
     mandatoryGates: 5,
     fastDefault: true,
     autonomousCriticalHighCorrection: true,
-    portableProtectedRoles: true,
+    portableNativeRoles: true,
+    protectedOverrides: true,
     noHardcodedModelIds: true,
     externalWatcherHasNoVerdictAuthority: true,
     freshIndependentApproval: true,

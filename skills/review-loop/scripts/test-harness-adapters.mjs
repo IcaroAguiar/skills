@@ -111,6 +111,15 @@ function nativeExport(harness, profile = identity) {
 
 try {
   for (const harness of ["codex", "cursor", "claude-code", "opencode"]) {
+    const nativeSelection = run([selector, "--harness", harness, "--role", "fast-reviewer", "--risk", "high", "--native-role-id", `${harness}-reviewer`, "--candidate-fingerprint", fingerprint, "--candidate-root", candidateDirectory, "--json"]);
+    if (!nativeSelection.ok) throw new Error(`${harness} native selection failed: ${nativeSelection.output}`);
+    const nativeReceipt = JSON.parse(nativeSelection.output);
+    if (nativeReceipt.selectionMode !== "harness-native" || nativeReceipt.harness !== harness || nativeReceipt.candidateFingerprint !== fingerprint || nativeReceipt.capabilities.verdictAuthority !== true) {
+      throw new Error(`${harness} native receipt lost its portable role contract`);
+    }
+  }
+
+  for (const harness of ["codex", "cursor", "claude-code", "opencode"]) {
     const exportPath = write(`${harness}-native-export.json`, nativeExport(harness));
     const normalizedPath = join(protectedDirectory, `${harness}-inventory.json`);
     const exportResult = run([exporter, "--harness", harness, "--input", exportPath, "--output", normalizedPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
@@ -155,7 +164,7 @@ try {
     throw new Error("exact-match composition lost observable identity or qualification");
   }
   const roleMapPath = write("role-map.json", roleMap);
-  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
+  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--candidate-fingerprint", fingerprint, "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
   if (!selection.ok) throw new Error(`composed registry was not selectable: ${selection.output}`);
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {
@@ -198,7 +207,7 @@ try {
       throw new Error(`public template identity mismatch for ${role}`);
     }
   }
-  const publicSelection = run([selector, "--registry", publicRegistryPath, "--role-map", publicRoleMapPath, "--harness", "codex", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
+  const publicSelection = run([selector, "--registry", publicRegistryPath, "--role-map", publicRoleMapPath, "--harness", "codex", "--role", "fast-reviewer", "--risk", "high", "--candidate-fingerprint", fingerprint, "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
   if (!publicSelection.ok) throw new Error(`public template selection failed: ${publicSelection.output}`);
   const publicReceipt = JSON.parse(publicSelection.output);
   if (publicReceipt.role !== "fast-reviewer" || publicReceipt.profileId !== "fast-profile" || publicReceipt.capabilities.verdictAuthority !== true) {
