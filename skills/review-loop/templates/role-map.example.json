@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "fixture": true,
+  "observedAt": "2026-08-09T00:00:00Z",
+  "trust": {
+    "sourceClass": "protected-harness-config",
+    "identifier": "example-codex-role-map-v1"
+  },
+  "mappings": {
+    "codex": {
+      "fast-reviewer": { "profileId": "fast-profile", "modelId": "not_observable", "reasoningMode": "opaque-fast" },
+      "deep-reviewer": { "profileId": "deep-profile", "modelId": "not_observable", "reasoningMode": "opaque-deep" },
+      "fixer": { "profileId": "fixer-profile", "modelId": "not_observable", "reasoningMode": "opaque-fixer" },
+      "watcher": { "profileId": "watcher-profile", "modelId": "not_observable", "reasoningMode": "opaque-watcher" }
+    }
+  }
+}

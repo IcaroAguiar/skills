@@ -3,35 +3,103 @@
   "fixture": true,
   "trust": {
     "sourceClass": "trusted-base-artifact",
-    "identifier": "example-qualification-ledger"
+    "identifier": "example-codex-qualification-ledger"
   },
   "records": [
     {
-      "harness": "example-harness",
-      "id": "review-profile",
+      "harness": "codex",
+      "id": "fast-profile",
       "modelId": "not_observable",
-      "reasoningMode": "not_observable",
+      "reasoningMode": "opaque-fast",
       "qualification": {
         "status": "qualified",
         "source": "review-loop-real-diff",
         "evaluatedAt": "2026-08-09",
         "evidence": {
           "sourceClass": "review-loop-real-diff",
-          "corpusId": "example-reviewer-corpus-v1",
-          "artifactLocator": "protected://review-loop/example-reviewer-corpus-v1",
+          "corpusId": "example-fast-reviewer-corpus-v1",
+          "artifactLocator": "protected://review-loop/example-fast-reviewer-corpus-v1",
           "artifactFingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
           "observedAt": "2026-08-09T00:00:00Z",
-          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation"]
+          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"]
         },
         "metrics": {
-          "knownFindingRecall": 0.9,
-          "blockerPrecision": 0.8,
+          "knownFindingRecall": 0.94,
+          "blockerPrecision": 0.81,
           "criticalHighEscapes": 0,
           "fiveGateReceiptRate": 1,
-          "acceptedFalseBlockerRate": 0.1,
+          "acceptedFalseBlockerRate": 0.08,
           "severityCalibration": 0.9,
-          "perGateRecall": { "criticalHighCorrectness": 0.9, "simplification": 0.9, "semantics": 0.9, "documentation": 0.9 }
+          "perGateRecall": { "criticalHighCorrectness": 0.94, "simplification": 0.9, "semantics": 0.91, "documentation": 0.93, "verification": 0.93 }
         }
+      }
+    },
+    {
+      "harness": "codex",
+      "id": "deep-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-deep",
+      "qualification": {
+        "status": "qualified",
+        "source": "review-loop-real-diff",
+        "evaluatedAt": "2026-08-09",
+        "evidence": {
+          "sourceClass": "review-loop-real-diff",
+          "corpusId": "example-deep-reviewer-corpus-v1",
+          "artifactLocator": "protected://review-loop/example-deep-reviewer-corpus-v1",
+          "artifactFingerprint": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+          "observedAt": "2026-08-09T00:00:00Z",
+          "metricNames": ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"]
+        },
+        "metrics": {
+          "knownFindingRecall": 0.96,
+          "blockerPrecision": 0.86,
+          "criticalHighEscapes": 0,
+          "fiveGateReceiptRate": 1,
+          "acceptedFalseBlockerRate": 0.05,
+          "severityCalibration": 0.94,
+          "perGateRecall": { "criticalHighCorrectness": 0.96, "simplification": 0.94, "semantics": 0.95, "documentation": 0.95, "verification": 0.94 }
+        }
+      }
+    },
+    {
+      "harness": "codex",
+      "id": "fixer-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-fixer",
+      "qualification": {
+        "status": "qualified",
+        "source": "recognized-harness-review-benchmark",
+        "evaluatedAt": "2026-08-09",
+        "evidence": {
+          "sourceClass": "recognized-harness-review-benchmark",
+          "corpusId": "example-fixer-corpus-v1",
+          "artifactLocator": "protected://review-loop/example-fixer-corpus-v1",
+          "artifactFingerprint": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+          "observedAt": "2026-08-09T00:00:00Z",
+          "metricNames": ["firstPassAcceptance", "criticalRegressions", "scopeCreepRate", "documentationCorrectness", "escalationCompliance"]
+        },
+        "metrics": { "firstPassAcceptance": 0.88, "criticalRegressions": 0, "scopeCreepRate": 0.04, "documentationCorrectness": 0.92, "escalationCompliance": 1 }
+      }
+    },
+    {
+      "harness": "codex",
+      "id": "watcher-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-watcher",
+      "qualification": {
+        "status": "qualified",
+        "source": "review-loop-real-diff",
+        "evaluatedAt": "2026-08-09",
+        "evidence": {
+          "sourceClass": "review-loop-real-diff",
+          "corpusId": "example-watcher-corpus-v1",
+          "artifactLocator": "protected://review-loop/example-watcher-corpus-v1",
+          "artifactFingerprint": "sha256:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+          "observedAt": "2026-08-09T00:00:00Z",
+          "metricNames": []
+        },
+        "metrics": {}
       }
     }
   ]

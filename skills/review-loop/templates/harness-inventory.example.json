@@ -4,29 +4,81 @@
   "observedAt": "2026-08-09T00:00:00Z",
   "trust": {
     "sourceClass": "protected-harness-config",
-    "identifier": "example-live-harness-inventory"
+    "identifier": "example-codex-live-inventory"
   },
   "engines": [
     {
-      "harness": "example-harness",
-      "id": "review-profile",
+      "harness": "codex",
+      "id": "fast-profile",
       "modelId": "not_observable",
-      "reasoningMode": "not_observable",
-      "roles": ["reviewer"],
+      "reasoningMode": "opaque-fast",
+      "roles": ["fast-reviewer"],
       "capabilities": {
         "readOnly": true,
         "freshContext": true,
         "workspaceWrite": false,
+        "verdictAuthority": true,
         "contextTokens": 128000,
         "repositoryAccess": true,
         "toolAccess": ["git", "rg"],
-        "risks": ["low", "medium", "high"]
+        "risks": ["low", "medium", "high", "critical"]
       },
-      "cost": {
-        "tier": "high",
-        "expectedRunUsd": 2.4,
-        "retryMultiplier": 1
-      }
+      "cost": { "tier": "high", "expectedRunUsd": 2.4, "retryMultiplier": 1 }
+    },
+    {
+      "harness": "codex",
+      "id": "deep-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-deep",
+      "roles": ["deep-reviewer"],
+      "capabilities": {
+        "readOnly": true,
+        "freshContext": true,
+        "workspaceWrite": false,
+        "verdictAuthority": true,
+        "contextTokens": 128000,
+        "repositoryAccess": true,
+        "toolAccess": ["git", "rg"],
+        "risks": ["low", "medium", "high", "critical"]
+      },
+      "cost": { "tier": "high", "expectedRunUsd": 3.2, "retryMultiplier": 1 }
+    },
+    {
+      "harness": "codex",
+      "id": "fixer-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-fixer",
+      "roles": ["fixer"],
+      "capabilities": {
+        "readOnly": false,
+        "freshContext": true,
+        "workspaceWrite": true,
+        "verdictAuthority": false,
+        "contextTokens": 64000,
+        "repositoryAccess": true,
+        "toolAccess": ["git", "rg"],
+        "risks": ["low", "medium", "high", "critical"]
+      },
+      "cost": { "tier": "medium", "expectedRunUsd": 0.7, "retryMultiplier": 1.1 }
+    },
+    {
+      "harness": "codex",
+      "id": "watcher-profile",
+      "modelId": "not_observable",
+      "reasoningMode": "opaque-watcher",
+      "roles": ["watcher"],
+      "capabilities": {
+        "readOnly": true,
+        "freshContext": true,
+        "workspaceWrite": false,
+        "monitoring": true,
+        "verdictAuthority": false,
+        "contextTokens": 64000,
+        "repositoryAccess": true,
+        "toolAccess": ["git", "rg", "monitoring"],
+        "risks": ["low", "medium", "high", "critical"]
+      },
+      "cost": { "tier": "low", "expectedRunUsd": 0.2, "retryMultiplier": 1 }
     }
   ]
 }

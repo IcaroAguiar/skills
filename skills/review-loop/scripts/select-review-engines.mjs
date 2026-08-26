@@ -1,98 +1,44 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 const args = process.argv.slice(2);
-const VALID_ROLES = ["reviewer", "fixer"];
-const VALID_RISKS = ["low", "medium", "high", "critical"];
-const CODEX_DEFAULT_ENGINE_POLICY = {
-  reviewer: { modelId: "gpt-5.6-sol", reasoningModes: ["high"] },
-  fixer: { modelId: "gpt-5.6-luna", reasoningModes: ["xhigh", "max"] },
-};
-const MILLISECONDS_PER_DAY = 86_400_000;
-const DEFAULT_MAX_QUALIFICATION_AGE_DAYS = 180;
-const DEFAULT_MAX_REGISTRY_AGE_HOURS = 24;
-const MAX_CLOCK_SKEW_HOURS = 1;
-const REVIEWER_THRESHOLDS = {
-  knownFindingRecall: 0.85,
-  blockerPrecision: 0.6,
-  criticalHighEscapes: 0,
-  fiveGateReceiptRate: 1,
-  acceptedFalseBlockerRate: 0.2,
-  severityCalibration: 0.8,
-};
-const REVIEWER_GATE_RECALL_THRESHOLDS = {
-  criticalHighCorrectness: 0.85,
-  simplification: 0.85,
-  semantics: 0.85,
-  documentation: 0.85,
-};
-const FIXER_THRESHOLDS = {
-  firstPassAcceptance: 0.75,
-  criticalRegressions: 0,
-  scopeCreepRate: 0.1,
-  documentationCorrectness: 0.8,
-  escalationCompliance: 1,
-};
-const REVIEWER_SCORE_WEIGHTS = {
-  knownFindingRecall: 0.36,
-  blockerPrecision: 0.2,
-  severityCalibration: 0.12,
-  acceptedFalseBlockerRate: 0.12,
-  perGateRecall: 0.2,
-};
-const SUPPORTED_EVIDENCE_CLASSES = new Set([
-  "review-loop-real-diff",
-  "recognized-harness-review-benchmark",
-]);
-const TRUSTED_REGISTRY_SOURCE_CLASSES = new Set([
-  "protected-harness-config",
-  "trusted-base-artifact",
-]);
-const REVIEWER_EVIDENCE_METRICS = [
+const ROLES = ["fast-reviewer", "deep-reviewer", "fixer", "watcher"];
+const RISKS = ["low", "medium", "high", "critical"];
+const OPAQUE_HARNESSES = new Set(["codex", "claude-code", "cursor", "opencode"]);
+const REVIEWER_GATE_RECALL_THRESHOLD = 0.85;
+const TRUSTED_SOURCES = new Set(["protected-harness-config", "trusted-base-artifact"]);
+const REVIEWER_EVIDENCE = [
   "knownFindingRecall",
   "blockerPrecision",
   "criticalHighEscapes",
   "fiveGateReceiptRate",
   "acceptedFalseBlockerRate",
   "severityCalibration",
-  ...Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).map((gate) => `perGateRecall.${gate}`),
+  "perGateRecall.criticalHighCorrectness",
+  "perGateRecall.simplification",
+  "perGateRecall.semantics",
+  "perGateRecall.documentation",
+  "perGateRecall.verification",
 ];
-const FIXER_EVIDENCE_METRICS = [
+const FIXER_EVIDENCE = [
   "firstPassAcceptance",
   "criticalRegressions",
   "scopeCreepRate",
   "documentationCorrectness",
   "escalationCompliance",
 ];
-const SENSITIVE_FIX_CLASSES = [
-  "auth",
-  "tenancy",
-  "credentials",
-  "migrations",
-  "transactions",
-  "concurrency",
-  "public-contracts-ops",
-];
-const SENSITIVE_FIX_EVIDENCE_METRICS = [
-  "firstPassAcceptance",
-  "criticalRegressions",
-  "scopeCreepRate",
-  "escalationCompliance",
-];
-const SENSITIVE_FIXER_THRESHOLDS = {
-  firstPassAcceptance: FIXER_THRESHOLDS.firstPassAcceptance,
-  criticalRegressions: FIXER_THRESHOLDS.criticalRegressions,
-  scopeCreepRate: FIXER_THRESHOLDS.scopeCreepRate,
-  escalationCompliance: FIXER_THRESHOLDS.escalationCompliance,
-};
-const SUPPORTED_SENSITIVE_EVIDENCE_CLASSES = new Set([
-  "protected-sensitive-fix-corpus",
-]);
-const SHA256_FINGERPRINT_PATTERN = /^sha256:[a-f0-9]{64}$/i;
-const RECEIPT_ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/i;
+const SENSITIVE_CLASSES = ["auth", "tenancy", "credentials", "migrations", "transactions", "concurrency", "public-contracts-ops"];
+const SENSITIVE_EVIDENCE = ["firstPassAcceptance", "criticalRegressions", "scopeCreepRate", "escalationCompliance"];
+const SHA256 = /^sha256:[a-f0-9]{64}$/i;
+const ID = /^[a-z0-9][a-z0-9._:-]{0,127}$/i;
+const DAY = 86_400_000;
+const MAX_CLOCK_SKEW_HOURS = 1;
+const DEFAULT_REGISTRY_AGE_HOURS = 24;
+const DEFAULT_ROLE_MAP_AGE_HOURS = 24;
+const DEFAULT_QUALIFICATION_AGE_DAYS = 180;
 
 function option(name, fallback = "") {
   const index = args.indexOf(name);
@@ -104,128 +50,93 @@ function has(name) {
 }
 
 function die(message) {
-  console.error(`review-loop engine selection failed: ${message}`);
+  console.error(`review-loop role selection failed: ${message}`);
   process.exit(1);
 }
 
-function isInside(root, path) {
-  const local = relative(root, path);
-  return !local || (!local.startsWith("..") && !isAbsolute(local));
-}
-
-if (has("--help")) {
-  console.log(`review-loop engine selection
-
-Usage:
-  node select-review-engines.mjs --registry <file> --role reviewer|fixer --risk low|medium|high|critical [--harness <name>] [--premium-reason <reason>] [--json]
-    [--candidate-root <repo>] [--required-context-tokens <integer>]
-    [--require-repository-access] [--required-tool <name>]
-    [--sensitive [--sensitive-class <auth|tenancy|credentials|migrations|transactions|concurrency|public-contracts-ops>]]
-  node select-review-engines.mjs --registry <fixture> --role reviewer --allow-fixture --self-test
-
-Registry discovery order:
-  --registry, REVIEW_LOOP_ENGINE_REGISTRY, then the protected user
-  configuration directory. Candidate-repository files are never discovered.
-
-The active harness must populate the registry from the engines it actually
-exposes. The selector ranks only observed and benchmark-qualified candidates.`);
-  process.exit(0);
-}
-
-const role = option("--role");
-const risk = option("--risk", "medium");
-if (!VALID_ROLES.includes(role)) die("--role must be reviewer or fixer");
-if (!VALID_RISKS.includes(risk)) die("--risk must be low, medium, high, or critical");
-
-const explicitRegistryPath = option("--registry");
-const registryCandidates = explicitRegistryPath
-  ? [explicitRegistryPath]
-  : [process.env.REVIEW_LOOP_ENGINE_REGISTRY, resolve(homedir(), ".config", "review-loop", "engines.json")].filter(Boolean);
-const registryPath = registryCandidates.find((candidate) => existsSync(candidate));
-if (!registryPath) {
-  die("no trusted engine registry found; provide --registry for a trusted base artifact or export protected harness inventory");
-}
-const candidateRootLexical = resolve(option("--candidate-root", process.cwd()));
-if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
-const candidateRootCanonical = realpathSync.native(candidateRootLexical);
-const registryLexicalPath = resolve(registryPath);
-const registryCanonicalPath = realpathSync.native(registryLexicalPath);
-if (isInside(candidateRootLexical, registryLexicalPath) || isInside(candidateRootCanonical, registryCanonicalPath)) {
-  die("candidate-repository registry files are untrusted; use protected harness/user config or an extracted trusted-base artifact");
-}
-
-let registry;
-try {
-  registry = JSON.parse(readFileSync(registryPath, "utf8"));
-} catch (error) {
-  die(`cannot parse ${registryPath}: ${error.message}`);
-}
-
-if (!Array.isArray(registry.candidates) || registry.candidates.length === 0) {
-  die("registry.candidates must be a non-empty array");
-}
-const observedHarnesses = [...new Set(registry.candidates.map((candidate) => candidate.harness).filter(Boolean))];
-const requestedHarness = option("--harness").trim();
-if (!requestedHarness && observedHarnesses.length !== 1) {
-  die("registry contains multiple or unobservable harnesses; provide --harness from protected runtime state");
-}
-const activeHarness = requestedHarness || observedHarnesses[0];
-if (!observedHarnesses.includes(activeHarness)) die(`active harness ${activeHarness} is absent from the protected registry`);
-const registryTrust = registry.trust;
-if (!registryTrust || typeof registryTrust !== "object" || Array.isArray(registryTrust)) {
-  die("registry.trust must declare a protected source class and identifier");
-}
-if (!TRUSTED_REGISTRY_SOURCE_CLASSES.has(registryTrust.sourceClass)) {
-  die("registry.trust.sourceClass must be protected-harness-config or trusted-base-artifact");
-}
-if (typeof registryTrust.identifier !== "string" || !registryTrust.identifier.trim()) {
-  die("registry.trust.identifier must be non-empty");
-}
-if (registry.fixture === true && !has("--allow-fixture")) {
-  die("fixture registry cannot select production engines; --allow-fixture is test-only");
-}
-const registryObservedAt = Date.parse(registry.observedAt ?? "");
-const maxRegistryAgeHours = positiveFiniteOption("--max-registry-age-hours", DEFAULT_MAX_REGISTRY_AGE_HOURS);
-const registryAgeHours = (Date.now() - registryObservedAt) / (MILLISECONDS_PER_DAY / 24);
-if (registry.fixture !== true && (!Number.isFinite(registryObservedAt) || registryAgeHours > maxRegistryAgeHours || registryAgeHours < -MAX_CLOCK_SKEW_HOURS)) {
-  die("registry inventory is missing, stale, or dated in the future; refresh it from the active harness");
-}
-const ceiling = Number(registry.policy?.reviewerCostCeilingUsd);
-if (role === "reviewer" && (!Number.isFinite(ceiling) || ceiling <= 0)) {
-  die("policy.reviewerCostCeilingUsd must be a positive number");
-}
-
-const maxAgeDays = positiveFiniteOption("--max-age-days", DEFAULT_MAX_QUALIFICATION_AGE_DAYS);
-const requiredContextTokens = nonNegativeSafeIntegerOption("--required-context-tokens", 0);
-const requiredRepositoryAccess = has("--require-repository-access");
-const requiredTools = repeatedNonEmptyOptions("--required-tool");
-const sensitiveFixesRequested = has("--sensitive");
-const requestedSensitiveClasses = repeatedNonEmptyOptions("--sensitive-class");
-if (sensitiveFixesRequested && role !== "fixer") die("--sensitive is only valid for fixer selection");
-if (requestedSensitiveClasses.length > 0 && !sensitiveFixesRequested) die("--sensitive-class requires --sensitive");
-if (requestedSensitiveClasses.some((sensitiveClass) => !SENSITIVE_FIX_CLASSES.includes(sensitiveClass))) {
-  die(`--sensitive-class must be one of ${SENSITIVE_FIX_CLASSES.join(", ")}`);
-}
-const requiredSensitiveClasses = sensitiveFixesRequested
-  ? [...new Set(requestedSensitiveClasses.length > 0 ? requestedSensitiveClasses : SENSITIVE_FIX_CLASSES)]
-  : [];
-const now = Date.now();
-const rejections = [];
-const premiumEscalation = option("--premium-reason").trim();
-
-function positiveFiniteOption(name, fallback) {
+function requirePositive(name, fallback) {
   const value = Number(option(name, String(fallback)));
   if (!Number.isFinite(value) || value <= 0) die(`${name} must be a finite positive number`);
   return value;
 }
 
-function nonNegativeSafeIntegerOption(name, fallback) {
-  const value = Number(option(name, String(fallback)));
-  if (!Number.isSafeInteger(value) || value < 0) die(`${name} must be a non-negative safe integer`);
-  return value;
+function requireString(label, value) {
+  if (typeof value !== "string" || !value.trim()) die(`${label} must be a non-empty string`);
+  return value.trim();
 }
 
-function repeatedNonEmptyOptions(name) {
+function inside(root, path) {
+  const local = relative(root, path);
+  return !local || (!local.startsWith("..") && !isAbsolute(local));
+}
+
+function pathOutsideCandidate(label, rawPath, candidateRootLexical, candidateRootCanonical) {
+  if (!rawPath) die(`${label} path is required`);
+  const lexical = resolve(rawPath);
+  let stat;
+  try {
+    stat = lstatSync(lexical);
+  } catch (error) {
+    if (error.code === "ENOENT") die(`${label} file is missing`);
+    die(`cannot inspect ${label}: ${error.message}`);
+  }
+  if (stat.isSymbolicLink()) die(`${label} must not be a symbolic link`);
+  if (inside(candidateRootLexical, lexical)) die(`${label} must stay outside the candidate repository`);
+  const canonical = realpathSync.native(lexical);
+  if (inside(candidateRootCanonical, canonical)) die(`${label} must stay outside the candidate repository`);
+  return lexical;
+}
+
+function readJson(label, path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    die(`${label} is invalid JSON: ${error.message}`);
+  }
+}
+
+function trust(label, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !TRUSTED_SOURCES.has(value.sourceClass)) {
+    die(`${label}.trust.sourceClass must be protected-harness-config or trusted-base-artifact`);
+  }
+  requireString(`${label}.trust.identifier`, value.identifier);
+}
+
+function hash(value) {
+  return `sha256:${createHash("sha256").update(String(value ?? "not_observable")).digest("hex")}`;
+}
+
+function receiptId(value) {
+  if (typeof value === "string" && ID.test(value) && !/(credential|jwt|key|password|private|secret|token)/i.test(value)) return value;
+  return hash(value);
+}
+
+function dateMs(label, value) {
+  const parsed = Date.parse(value ?? "");
+  if (!Number.isFinite(parsed)) die(`${label} must be an ISO timestamp`);
+  return parsed;
+}
+
+function fresh(label, value, maxAge, fixture) {
+  const observed = dateMs(label, value);
+  if (fixture) return;
+  const age = Date.now() - observed;
+  if (age < -(MAX_CLOCK_SKEW_HOURS * 60 * 60 * 1000) || age > maxAge) die(`${label} is stale or dated in the future`);
+}
+
+function exactIdentity(candidate) {
+  return [candidate.harness, candidate.id, candidate.modelId, candidate.reasoningMode].join("\u001f");
+}
+
+function expectedCost(candidate) {
+  const run = candidate.cost?.expectedRunUsd;
+  const retry = candidate.cost?.retryMultiplier;
+  if (typeof run !== "number" || !Number.isFinite(run) || run <= 0) return Number.POSITIVE_INFINITY;
+  if (typeof retry !== "number" || !Number.isFinite(retry) || retry <= 0) return Number.POSITIVE_INFINITY;
+  return run * retry;
+}
+
+function repeated(name) {
   const values = [];
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] !== name) continue;
@@ -237,406 +148,327 @@ function repeatedNonEmptyOptions(name) {
   return values;
 }
 
-function reject(candidate, reason) {
-  rejections.push({ id: receiptIdentifier(candidate.id), reason });
-  return false;
+function evidenceFor(candidate, role, fixture, maxAgeDays) {
+  const qualification = candidate.qualification;
+  if (!qualification || typeof qualification !== "object" || Array.isArray(qualification)) die(`candidate ${candidate.id} has no qualification`);
+  if (qualification.status !== "qualified") die(`candidate ${candidate.id} is not qualified for ${role}`);
+  requireString(`candidate ${candidate.id} qualification.source`, qualification.source);
+  fresh(`candidate ${candidate.id} qualification.evaluatedAt`, qualification.evaluatedAt, maxAgeDays * DAY, fixture);
+  const evidence = qualification.evidence;
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) die(`candidate ${candidate.id} has no qualification evidence`);
+  if (!["review-loop-real-diff", "recognized-harness-review-benchmark"].includes(evidence.sourceClass)) die(`candidate ${candidate.id} has unsupported qualification evidence`);
+  if (qualification.source !== evidence.sourceClass) die(`candidate ${candidate.id} qualification source does not match its evidence`);
+  requireString(`candidate ${candidate.id} evidence.corpusId`, evidence.corpusId);
+  if (!SHA256.test(requireString(`candidate ${candidate.id} evidence.artifactFingerprint`, evidence.artifactFingerprint))) die(`candidate ${candidate.id} evidence fingerprint is invalid`);
+  fresh(`candidate ${candidate.id} evidence.observedAt`, evidence.observedAt, maxAgeDays * DAY, fixture);
+  const required = role === "fixer" ? FIXER_EVIDENCE : role === "watcher" ? [] : REVIEWER_EVIDENCE;
+  if (!Array.isArray(evidence.metricNames) || required.some((metric) => !evidence.metricNames.includes(metric))) die(`candidate ${candidate.id} evidence does not cover ${role}`);
+  return evidence;
 }
 
-function matchesHarnessPolicy(candidate) {
-  if (candidate.harness !== activeHarness) return reject(candidate, `belongs to inactive harness ${candidate.harness ?? "not_observable"}`);
-  if (activeHarness !== "codex") return true;
-  const required = CODEX_DEFAULT_ENGINE_POLICY[role];
-  if (candidate.modelId !== required.modelId || !required.reasoningModes.includes(candidate.reasoningMode)) {
-    return reject(candidate, `Codex ${role} default requires ${required.modelId} with reasoning ${required.reasoningModes.join("|")}`);
-  }
-  return true;
+function metric(candidate, metrics, name, { min = 0, max = 1, integer = false } = {}) {
+  const value = metrics?.[name];
+  if (typeof value !== "number" || !Number.isFinite(value)) die(`candidate ${candidate.id} is missing finite ${name} metric`);
+  if (value < min || value > max || (integer && !Number.isInteger(value))) die(`candidate ${candidate.id} has invalid ${name} metric`);
+  return value;
 }
 
-function receiptIdentifier(value) {
-  if (
-    typeof value === "string" &&
-    RECEIPT_ID_PATTERN.test(value) &&
-    !/^eyJ[a-z0-9_-]*\.[a-z0-9_-]+\.[a-z0-9_-]+$/i.test(value) &&
-    !/(credential|jwt|key|password|private|secret|token)/i.test(value)
-  ) return value;
-  return `sha256:${createHash("sha256").update(String(value ?? "not_observable")).digest("hex")}`;
-}
-
-function identifierHash(value) {
-  return `sha256:${createHash("sha256").update(String(value ?? "")).digest("hex")}`;
-}
-
-function expectedCost(candidate) {
-  const run = candidate.cost?.expectedRunUsd;
-  const retry = candidate.cost?.retryMultiplier;
-  return typeof run === "number" && Number.isFinite(run) && run > 0 && typeof retry === "number" && Number.isFinite(retry) && retry > 0
-    ? run * retry
-    : Number.POSITIVE_INFINITY;
-}
-
-function requiresPremiumEscalation(candidate) {
-  return candidate.cost?.tier === "extreme" || (role === "reviewer" && expectedCost(candidate) > ceiling);
-}
-
-function isFresh(candidate) {
-  if (registry.fixture === true) return true;
-  const timestamp = Date.parse(candidate.qualification?.evaluatedAt ?? "");
-  if (!Number.isFinite(timestamp)) return false;
-  const ageDays = (now - timestamp) / MILLISECONDS_PER_DAY;
-  return ageDays >= -(MAX_CLOCK_SKEW_HOURS / 24) && ageDays <= maxAgeDays;
-}
-
-function isEvidenceFresh(evidence) {
-  const observedAt = Date.parse(evidence?.observedAt ?? "");
-  if (!Number.isFinite(observedAt)) return false;
-  if (registry.fixture === true) return true;
-  const ageDays = (now - observedAt) / MILLISECONDS_PER_DAY;
-  return ageDays >= -(MAX_CLOCK_SKEW_HOURS / 24) && ageDays <= maxAgeDays;
-}
-
-function evidenceSupportsRequiredMetrics(candidate, targetRole) {
-  const evidence = candidate.qualification?.evidence;
-  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return reject(candidate, "missing normalized qualification evidence");
-  if (!SUPPORTED_EVIDENCE_CLASSES.has(evidence.sourceClass)) return reject(candidate, "qualification evidence class is unsupported");
-  if (candidate.qualification?.source !== evidence.sourceClass) return reject(candidate, "qualification source must match the normalized evidence class");
-  if (typeof evidence.corpusId !== "string" || !evidence.corpusId.trim()) return reject(candidate, "qualification evidence is missing corpus identity");
-  if (typeof evidence.artifactLocator !== "string" || !evidence.artifactLocator.trim()) return reject(candidate, "qualification evidence is missing artifact locator");
-  if (typeof evidence.artifactFingerprint !== "string" || !SHA256_FINGERPRINT_PATTERN.test(evidence.artifactFingerprint)) return reject(candidate, "qualification evidence is missing a SHA-256 artifact fingerprint");
-  if (!isEvidenceFresh(evidence)) return reject(candidate, "qualification evidence is missing or stale");
-  const requiredMetrics = targetRole === "reviewer" ? REVIEWER_EVIDENCE_METRICS : FIXER_EVIDENCE_METRICS;
-  if (!Array.isArray(evidence.metricNames) || requiredMetrics.some((metric) => !evidence.metricNames.includes(metric))) {
-    return reject(candidate, "qualification evidence does not substantiate every required metric");
-  }
-  return true;
-}
-
-function sensitiveEvidenceSupportsRequiredClasses(candidate) {
-  if (!sensitiveFixesRequested) return true;
+function sensitiveEvidence(candidate, classes, fixture, maxAgeDays) {
   const evidence = candidate.qualification?.evidence?.sensitive;
-  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return reject(candidate, "sensitive fixes require protected per-class benchmark evidence");
-  if (!SUPPORTED_SENSITIVE_EVIDENCE_CLASSES.has(evidence.sourceClass)) return reject(candidate, "sensitive fix evidence class is unsupported");
-  if (typeof evidence.corpusId !== "string" || !evidence.corpusId.trim()) return reject(candidate, "sensitive fix evidence is missing corpus identity");
-  if (typeof evidence.artifactFingerprint !== "string" || !SHA256_FINGERPRINT_PATTERN.test(evidence.artifactFingerprint)) return reject(candidate, "sensitive fix evidence is missing a SHA-256 artifact fingerprint");
-  if (!isEvidenceFresh(evidence)) return reject(candidate, "sensitive fix evidence is missing or stale");
-  const classMetrics = evidence.classMetrics;
-  if (!classMetrics || typeof classMetrics !== "object" || Array.isArray(classMetrics)) return reject(candidate, "sensitive fix evidence is missing per-class metrics");
-  for (const sensitiveClass of requiredSensitiveClasses) {
-    const metrics = classMetrics[sensitiveClass];
-    if (!metrics || typeof metrics !== "object" || Array.isArray(metrics)) return reject(candidate, `sensitive fix evidence is missing ${sensitiveClass} class metrics`);
-    const values = Object.fromEntries(SENSITIVE_FIX_EVIDENCE_METRICS.map((metric) => [
-      metric,
-      requiredMetric(candidate, metrics, metric, {
-        min: 0,
-        max: metric === "criticalRegressions" ? Number.MAX_SAFE_INTEGER : 1,
-        integer: metric === "criticalRegressions",
-        label: `${sensitiveClass}.${metric}`,
-      }),
-    ]));
-    if (Object.values(values).some((value) => value === undefined)) return false;
-    if (values.firstPassAcceptance < SENSITIVE_FIXER_THRESHOLDS.firstPassAcceptance) return reject(candidate, `${sensitiveClass} first-pass acceptance below threshold`);
-    if (values.criticalRegressions !== SENSITIVE_FIXER_THRESHOLDS.criticalRegressions) return reject(candidate, `${sensitiveClass} known critical regression`);
-    if (values.scopeCreepRate > SENSITIVE_FIXER_THRESHOLDS.scopeCreepRate) return reject(candidate, `${sensitiveClass} scope-creep rate above threshold`);
-    if (values.escalationCompliance < SENSITIVE_FIXER_THRESHOLDS.escalationCompliance) return reject(candidate, `${sensitiveClass} unsafe escalation behavior`);
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) die(`candidate ${candidate.id} lacks protected sensitive-fix evidence`);
+  if (evidence.sourceClass !== "protected-sensitive-fix-corpus") die(`candidate ${candidate.id} has unsupported sensitive-fix evidence`);
+  requireString(`candidate ${candidate.id} sensitive.corpusId`, evidence.corpusId);
+  if (!SHA256.test(requireString(`candidate ${candidate.id} sensitive.artifactFingerprint`, evidence.artifactFingerprint))) die(`candidate ${candidate.id} sensitive evidence fingerprint is invalid`);
+  fresh(`candidate ${candidate.id} sensitive.observedAt`, evidence.observedAt, maxAgeDays * DAY, fixture);
+  for (const sensitiveClass of classes) {
+    const values = evidence.classMetrics?.[sensitiveClass];
+    if (!values || typeof values !== "object") die(`candidate ${candidate.id} lacks ${sensitiveClass} sensitive-fix metrics`);
+    const firstPass = metric(candidate, values, "firstPassAcceptance");
+    const regressions = metric(candidate, values, "criticalRegressions", { max: Number.MAX_SAFE_INTEGER, integer: true });
+    const creep = metric(candidate, values, "scopeCreepRate");
+    const escalation = metric(candidate, values, "escalationCompliance");
+    if (firstPass < 0.75 || regressions !== 0 || creep > 0.1 || escalation < 1) die(`candidate ${candidate.id} fails ${sensitiveClass} sensitive-fix qualification`);
   }
-  return true;
+  return evidence;
 }
 
-function hasCommonQualification(candidate, targetRole = role) {
-  if (!candidate.id || !candidate.harness) return reject(candidate, "missing identity or harness");
-  if (typeof candidate.modelId !== "string" || !candidate.modelId.trim()) return reject(candidate, "missing observed model identity or not_observable");
-  if (!candidate.roles?.includes(targetRole)) return reject(candidate, `does not expose ${targetRole}`);
-  if (candidate.qualification?.status !== "qualified") return reject(candidate, "not benchmark-qualified");
-  if (!candidate.qualification?.source || !candidate.qualification?.evaluatedAt) return reject(candidate, "missing qualification source/date");
-  if (!isFresh(candidate)) return reject(candidate, "qualification is missing or stale");
-  if (!evidenceSupportsRequiredMetrics(candidate, targetRole)) return false;
-  if (!candidate.capabilities?.risks?.includes(risk)) return reject(candidate, `does not cover ${risk} risk`);
-  const contextTokens = candidate.capabilities?.contextTokens;
-  if (!Number.isSafeInteger(contextTokens) || contextTokens <= 0) return reject(candidate, "missing normalized context capacity");
-  if (typeof candidate.capabilities?.repositoryAccess !== "boolean") return reject(candidate, "missing normalized repository access capability");
-  if (!Array.isArray(candidate.capabilities?.toolAccess) || candidate.capabilities.toolAccess.some((tool) => typeof tool !== "string" || !tool)) return reject(candidate, "missing normalized tool access capability");
-  if (contextTokens < requiredContextTokens) return reject(candidate, `context capacity below required ${requiredContextTokens} tokens`);
-  if (requiredRepositoryAccess && !candidate.capabilities.repositoryAccess) return reject(candidate, "required repository access unavailable");
-  const missingTools = requiredTools.filter((tool) => !candidate.capabilities.toolAccess.includes(tool));
-  if (missingTools.length > 0) return reject(candidate, `required tool access unavailable: ${missingTools.join(", ")}`);
-  if (!Number.isFinite(expectedCost(candidate))) return reject(candidate, "missing expected total cost");
-  return true;
-}
-
-function requiredMetric(candidate, metrics, name, { min = 0, max = 1, integer = false, label = name } = {}) {
-  const value = metrics[name];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    reject(candidate, `missing finite ${label} metric`);
-    return undefined;
+function capabilities(candidate, role, risk, requiredContext, requireRepository, requiredTools) {
+  const value = candidate.capabilities;
+  if (!value || typeof value !== "object" || Array.isArray(value)) die(`candidate ${candidate.id} has no normalized capabilities`);
+  if (!Array.isArray(value.risks) || !value.risks.includes(risk)) die(`candidate ${candidate.id} does not cover ${risk} risk`);
+  if (!Number.isSafeInteger(value.contextTokens) || value.contextTokens <= 0 || value.contextTokens < requiredContext) die(`candidate ${candidate.id} has insufficient context capacity`);
+  if (typeof value.repositoryAccess !== "boolean") die(`candidate ${candidate.id} has no repository access receipt`);
+  if (requireRepository && !value.repositoryAccess) die(`candidate ${candidate.id} lacks required repository access`);
+  if (!Array.isArray(value.toolAccess) || value.toolAccess.some((tool) => typeof tool !== "string" || !tool)) die(`candidate ${candidate.id} has no normalized tool access`);
+  const missing = requiredTools.filter((tool) => !value.toolAccess.includes(tool));
+  if (missing.length) die(`candidate ${candidate.id} lacks required tools: ${missing.join(", ")}`);
+  if (role !== "watcher" && value.freshContext !== true) die(`candidate ${candidate.id} lacks fresh-context capability`);
+  if (role === "fast-reviewer" || role === "deep-reviewer") {
+    if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not isolated for review`);
+    if (value.verdictAuthority !== true) die(`candidate ${candidate.id} reviewer verdict authority must be true`);
   }
-  if (value < min || value > max || (integer && !Number.isInteger(value))) {
-    reject(candidate, `${label} metric is outside its valid range`);
-    return undefined;
+  if (role === "fixer") {
+    if (value.workspaceWrite !== true) die(`candidate ${candidate.id} lacks workspace-write capability`);
+    if (value.verdictAuthority !== false) die(`candidate ${candidate.id} fixer verdict authority must be false`);
+  }
+  if (role === "watcher") {
+    if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not read-only for monitoring`);
+    if (value.monitoring !== true && !value.toolAccess.some((tool) => /^(monitor|monitoring)$/i.test(tool))) die(`candidate ${candidate.id} lacks monitoring capability`);
+    if ((value.verdictAuthority ?? candidate.verdictAuthority) !== false) die(`candidate ${candidate.id} watcher authority must be false`);
   }
   return value;
 }
 
-function qualifiesReviewer(candidate) {
-  if (!hasCommonQualification(candidate, "reviewer")) return false;
+function validateCandidate(candidate, role, risk, fixture, maxAgeDays, requiredContext, requireRepository, requiredTools, sensitiveClasses) {
+  requireString("candidate.harness", candidate.harness);
+  requireString("candidate.id", candidate.id);
+  requireString(`candidate ${candidate.id}.modelId`, candidate.modelId);
+  requireString(`candidate ${candidate.id}.reasoningMode`, candidate.reasoningMode);
+  if (!Array.isArray(candidate.roles) || candidate.roles.length === 0) die(`candidate ${candidate.id} has no roles`);
+  if (!candidate.roles.includes(role)) die(`candidate ${candidate.id} does not expose ${role}`);
+  const evidence = evidenceFor(candidate, role, fixture, maxAgeDays);
+  const caps = capabilities(candidate, role, risk, requiredContext, requireRepository, requiredTools);
+  const cost = expectedCost(candidate);
+  if (!Number.isFinite(cost)) die(`candidate ${candidate.id} has no expected total cost`);
   const metrics = candidate.qualification.metrics ?? {};
-  const knownFindingRecall = requiredMetric(candidate, metrics, "knownFindingRecall");
-  const blockerPrecision = requiredMetric(candidate, metrics, "blockerPrecision");
-  const criticalHighEscapes = requiredMetric(candidate, metrics, "criticalHighEscapes", { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true });
-  const fiveGateReceiptRate = requiredMetric(candidate, metrics, "fiveGateReceiptRate");
-  const acceptedFalseBlockerRate = requiredMetric(candidate, metrics, "acceptedFalseBlockerRate");
-  const severityCalibration = requiredMetric(candidate, metrics, "severityCalibration");
-  const perGateRecall = metrics.perGateRecall;
-  if (!perGateRecall || typeof perGateRecall !== "object" || Array.isArray(perGateRecall)) return reject(candidate, "missing perGateRecall metrics");
-  const gateRecallValues = Object.fromEntries(Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).map((gate) => [
-    gate,
-    requiredMetric(candidate, perGateRecall, gate, { label: `perGateRecall.${gate}` }),
-  ]));
-  if ([knownFindingRecall, blockerPrecision, criticalHighEscapes, fiveGateReceiptRate, acceptedFalseBlockerRate, severityCalibration, ...Object.values(gateRecallValues)].some((value) => value === undefined)) return false;
-  if (!candidate.capabilities?.readOnly || !candidate.capabilities?.freshContext) return reject(candidate, "reviewer isolation unavailable");
-  if (criticalHighEscapes !== REVIEWER_THRESHOLDS.criticalHighEscapes) return reject(candidate, "known critical/high escape");
-  if (knownFindingRecall < REVIEWER_THRESHOLDS.knownFindingRecall) return reject(candidate, "known-finding recall below threshold");
-  if (blockerPrecision < REVIEWER_THRESHOLDS.blockerPrecision) return reject(candidate, "blocker precision below threshold");
-  if (fiveGateReceiptRate < REVIEWER_THRESHOLDS.fiveGateReceiptRate) return reject(candidate, "five-gate receipt incomplete");
-  if (acceptedFalseBlockerRate > REVIEWER_THRESHOLDS.acceptedFalseBlockerRate) return reject(candidate, "accepted-state false blockers above threshold");
-  if (severityCalibration < REVIEWER_THRESHOLDS.severityCalibration) return reject(candidate, "severity calibration below threshold");
-  for (const [gate, threshold] of Object.entries(REVIEWER_GATE_RECALL_THRESHOLDS)) {
-    if (gateRecallValues[gate] < threshold) return reject(candidate, `${gate} gate recall below threshold`);
+  if (role === "fast-reviewer" || role === "deep-reviewer") {
+    if (metric(candidate, metrics, "knownFindingRecall") < 0.85) die(`candidate ${candidate.id} has weak known-finding recall`);
+    if (metric(candidate, metrics, "blockerPrecision") < 0.6) die(`candidate ${candidate.id} has weak blocker precision`);
+    if (metric(candidate, metrics, "criticalHighEscapes", { max: Number.MAX_SAFE_INTEGER, integer: true }) !== 0) die(`candidate ${candidate.id} has known critical/high escapes`);
+    if (metric(candidate, metrics, "fiveGateReceiptRate") < 1) die(`candidate ${candidate.id} does not cover all five gates`);
+    if (metric(candidate, metrics, "acceptedFalseBlockerRate") > 0.2) die(`candidate ${candidate.id} has too many accepted false blockers`);
+    if (metric(candidate, metrics, "severityCalibration") < 0.8) die(`candidate ${candidate.id} has weak severity calibration`);
+    for (const gate of ["criticalHighCorrectness", "simplification", "semantics", "documentation", "verification"]) {
+      if (metric(candidate, metrics.perGateRecall, gate) < REVIEWER_GATE_RECALL_THRESHOLD) die(`candidate ${candidate.id} has weak ${gate} gate recall`);
+    }
   }
-  if (requiresPremiumEscalation(candidate) && !premiumEscalation) return reject(candidate, "premium candidate requires a non-empty --premium-reason");
-  return true;
+  if (role === "fixer") {
+    if (metric(candidate, metrics, "firstPassAcceptance") < 0.75) die(`candidate ${candidate.id} has weak first-pass acceptance`);
+    if (metric(candidate, metrics, "criticalRegressions", { max: Number.MAX_SAFE_INTEGER, integer: true }) !== 0) die(`candidate ${candidate.id} has known critical regressions`);
+    if (metric(candidate, metrics, "scopeCreepRate") > 0.1) die(`candidate ${candidate.id} has excessive scope creep`);
+    if (metric(candidate, metrics, "documentationCorrectness") < 0.8) die(`candidate ${candidate.id} has weak documentation correctness`);
+    if (metric(candidate, metrics, "escalationCompliance") < 1) die(`candidate ${candidate.id} has unsafe escalation behavior`);
+    if (sensitiveClasses.length) sensitiveEvidence(candidate, sensitiveClasses, fixture, maxAgeDays);
+  }
+  return { evidence, capabilities: caps, cost };
 }
 
-function qualifiesFixer(candidate) {
-  if (!hasCommonQualification(candidate, "fixer")) return false;
-  const metrics = candidate.qualification.metrics ?? {};
-  const firstPassAcceptance = requiredMetric(candidate, metrics, "firstPassAcceptance");
-  const criticalRegressions = requiredMetric(candidate, metrics, "criticalRegressions", { min: 0, max: Number.MAX_SAFE_INTEGER, integer: true });
-  const scopeCreepRate = requiredMetric(candidate, metrics, "scopeCreepRate");
-  const documentationCorrectness = requiredMetric(candidate, metrics, "documentationCorrectness");
-  const escalationCompliance = requiredMetric(candidate, metrics, "escalationCompliance");
-  if ([firstPassAcceptance, criticalRegressions, scopeCreepRate, documentationCorrectness, escalationCompliance].some((value) => value === undefined)) return false;
-  if (!candidate.capabilities?.workspaceWrite) return reject(candidate, "workspace-write unavailable");
-  if (criticalRegressions !== FIXER_THRESHOLDS.criticalRegressions) return reject(candidate, "known critical regression");
-  if (firstPassAcceptance < FIXER_THRESHOLDS.firstPassAcceptance) return reject(candidate, "first-pass acceptance below threshold");
-  if (scopeCreepRate > FIXER_THRESHOLDS.scopeCreepRate) return reject(candidate, "scope-creep rate above threshold");
-  if (documentationCorrectness < FIXER_THRESHOLDS.documentationCorrectness) return reject(candidate, "documentation correctness below threshold");
-  if (escalationCompliance < FIXER_THRESHOLDS.escalationCompliance) return reject(candidate, "unsafe escalation behavior");
-  if (!sensitiveEvidenceSupportsRequiredClasses(candidate)) return false;
-  if (requiresPremiumEscalation(candidate) && !premiumEscalation) return reject(candidate, "premium candidate requires a non-empty --premium-reason");
-  return true;
+function mappingRoot(roleMap, harness) {
+  const roots = [roleMap.mappings, roleMap.roleMappings, roleMap.harnesses].filter((value) => value && typeof value === "object" && !Array.isArray(value));
+  for (const root of roots) if (root[harness] && typeof root[harness] === "object" && !Array.isArray(root[harness])) return root[harness];
+  if (roleMap.harness === harness && roleMap.roles && typeof roleMap.roles === "object" && !Array.isArray(roleMap.roles)) return roleMap.roles;
+  if (roleMap[harness] && typeof roleMap[harness] === "object" && !Array.isArray(roleMap[harness])) return roleMap[harness];
+  return null;
 }
 
-function selfTestCandidate(overrides = {}) {
+function mapHarnesses(roleMap) {
+  const root = roleMap.mappings ?? roleMap.roleMappings ?? roleMap.harnesses;
+  return root && typeof root === "object" && !Array.isArray(root) ? Object.keys(root) : [];
+}
+
+function mappingIdentity(role, mapping) {
+  if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) die(`protected role map entry for ${role} is invalid`);
+  if (mapping.fallback !== undefined || mapping.fallbacks !== undefined || mapping.alternates !== undefined) die(`protected role map entry for ${role} declares fallback; silent fallback is forbidden`);
+  const profile = mapping.profile && typeof mapping.profile === "object" ? mapping.profile : mapping;
+  const profileId = profile.profileId ?? profile.id ?? mapping.profileId ?? mapping.id;
+  const modelId = profile.modelId ?? mapping.modelId;
+  const reasoningMode = profile.reasoningMode ?? mapping.reasoningMode;
   return {
-    id: "self-test-engine",
-    harness: "self-test",
-    modelId: "not_observable",
-    roles: ["reviewer", "fixer"],
-    capabilities: {
-      readOnly: true,
-      freshContext: true,
-      workspaceWrite: true,
-      contextTokens: 128000,
-      repositoryAccess: true,
-      toolAccess: ["git", "rg"],
-      risks: VALID_RISKS,
-    },
-    cost: { tier: "medium", expectedRunUsd: 1, retryMultiplier: 1 },
-    qualification: {
-      status: "qualified",
-      source: "review-loop-real-diff",
-      evaluatedAt: "2026-08-09",
-      evidence: {
-        sourceClass: "review-loop-real-diff",
-        corpusId: "selector-self-test-v1",
-        artifactLocator: "self-test://selector",
-        artifactFingerprint: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        observedAt: "2026-08-09",
-        metricNames: [...REVIEWER_EVIDENCE_METRICS, ...FIXER_EVIDENCE_METRICS],
-      },
-      metrics: {
-        knownFindingRecall: 0.9,
-        blockerPrecision: 0.8,
-        criticalHighEscapes: 0,
-        fiveGateReceiptRate: 1,
-        acceptedFalseBlockerRate: 0.1,
-        severityCalibration: 0.9,
-        perGateRecall: {
-          criticalHighCorrectness: 0.9,
-          simplification: 0.9,
-          semantics: 0.9,
-          documentation: 0.9,
-        },
-        firstPassAcceptance: 0.8,
-        criticalRegressions: 0,
-        scopeCreepRate: 0.05,
-        documentationCorrectness: 0.9,
-        escalationCompliance: 1,
-      },
-    },
-    ...overrides,
+    harness: mapping.harness,
+    profileId: requireString(`${role}.profileId`, profileId),
+    modelId: requireString(`${role}.modelId`, modelId),
+    reasoningMode: requireString(`${role}.reasoningMode`, reasoningMode),
   };
 }
 
-function verifyFailClosed() {
-  const reviewer = selfTestCandidate();
-  delete reviewer.qualification.metrics.severityCalibration;
-  const fixer = selfTestCandidate();
-  delete fixer.qualification.metrics.documentationCorrectness;
-  const reviewerStart = rejections.length;
-  if (qualifiesReviewer(reviewer)) die("self-test expected incomplete reviewer registry to fail closed");
-  const reviewerRejections = rejections.slice(reviewerStart);
-  if (!reviewerRejections.some(({ reason }) => reason.includes("severityCalibration"))) {
-    die("self-test did not identify the incomplete reviewer metric");
-  }
-  const fixerStart = rejections.length;
-  if (qualifiesFixer(fixer)) die("self-test expected incomplete fixer registry to fail closed");
-  const fixerRejections = rejections.slice(fixerStart);
-  if (!fixerRejections.some(({ reason }) => reason.includes("documentationCorrectness"))) {
-    die("self-test did not identify the incomplete fixer metric");
-  }
-  console.log("review-loop selector self-test passed: incomplete reviewer and fixer registries fail closed");
+function usage() {
+  console.log(`review-loop protected role selection
+
+Usage:
+  node select-review-engines.mjs --registry <protected-registry.json> --role-map <protected-role-map.json>
+    --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer|watcher
+    --risk low|medium|high|critical --candidate-root <repo> [--json]
+    [--required-context-tokens <integer>] [--required-tool <name>]
+    [--require-repository-access] [--sensitive --sensitive-class <class>]
+
+The role map is protected harness configuration. The selector performs one
+exact map-to-registry-to-qualification join and never chooses a fallback.`);
+}
+
+if (has("--help")) {
+  usage();
   process.exit(0);
 }
 
-if (has("--self-test")) verifyFailClosed();
+const role = option("--role");
+if (!ROLES.includes(role)) die("--role must be fast-reviewer, deep-reviewer, fixer, or watcher");
+const risk = option("--risk", "medium");
+if (!RISKS.includes(risk)) die("--risk must be low, medium, high, or critical");
+const candidateRootOption = option("--candidate-root");
+if (!candidateRootOption) die("--candidate-root is required");
+const candidateRootLexical = resolve(candidateRootOption);
+if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
+if (lstatSync(candidateRootLexical).isSymbolicLink()) die("--candidate-root must not be a symbolic link");
+const candidateRootCanonical = realpathSync.native(candidateRootLexical);
 
-const qualifiesRole = role === "reviewer" ? qualifiesReviewer : qualifiesFixer;
-const qualified = registry.candidates.filter((candidate) => matchesHarnessPolicy(candidate) && qualifiesRole(candidate));
-if (qualified.length === 0) {
-  const detail = rejections.map(({ id, reason }) => `${id}: ${reason}`).join("; ");
-  die(`no qualified ${role} for ${risk} risk${detail ? ` (${detail})` : ""}`);
+function protectedPath(name, explicit, envName, fallback) {
+  if (explicit) return explicit;
+  if (envName && process.env[envName]) return process.env[envName];
+  if (fallback && existsSync(fallback)) return fallback;
+  die(`no protected ${name} found`);
 }
 
-function reviewerScore(candidate) {
-  const metrics = candidate.qualification.metrics;
-  const averageGateRecall = Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS)
-    .reduce((total, gate) => total + metrics.perGateRecall[gate], 0) / Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).length;
-  return (
-    metrics.knownFindingRecall * REVIEWER_SCORE_WEIGHTS.knownFindingRecall +
-    metrics.blockerPrecision * REVIEWER_SCORE_WEIGHTS.blockerPrecision +
-    metrics.severityCalibration * REVIEWER_SCORE_WEIGHTS.severityCalibration +
-    (1 - metrics.acceptedFalseBlockerRate) * REVIEWER_SCORE_WEIGHTS.acceptedFalseBlockerRate +
-    averageGateRecall * REVIEWER_SCORE_WEIGHTS.perGateRecall
-  );
+const registryPath = protectedPath(
+  "live registry",
+  option("--registry"),
+  "REVIEW_LOOP_ENGINE_REGISTRY",
+  resolve(homedir(), ".config", "review-loop", "engines.json"),
+);
+const registryFile = pathOutsideCandidate("registry", registryPath, candidateRootLexical, candidateRootCanonical);
+const registry = readJson("registry", registryFile);
+trust("registry", registry.trust);
+const fixture = registry.fixture === true;
+if (fixture && !has("--allow-fixture")) die("fixture registry cannot select production roles");
+const maxRegistryAge = requirePositive("--max-registry-age-hours", DEFAULT_REGISTRY_AGE_HOURS) * 60 * 60 * 1000;
+fresh("registry.observedAt", registry.observedAt, maxRegistryAge, fixture);
+if (!Array.isArray(registry.candidates) || registry.candidates.length === 0) die("registry.candidates must be a non-empty array");
+const candidateKeys = new Set();
+for (const candidate of registry.candidates) {
+  const key = exactIdentity(candidate);
+  if (candidateKeys.has(key)) die("registry has duplicate exact live identity");
+  candidateKeys.add(key);
 }
 
-function reviewerCapabilityVector(candidate) {
-  const metrics = candidate.qualification.metrics;
-  return [
-    metrics.knownFindingRecall,
-    metrics.blockerPrecision,
-    metrics.severityCalibration,
-    1 - metrics.acceptedFalseBlockerRate,
-    ...Object.keys(REVIEWER_GATE_RECALL_THRESHOLDS).map((gate) => metrics.perGateRecall[gate]),
-  ];
-}
+const roleMapFile = pathOutsideCandidate(
+  "role map",
+  protectedPath("role map", option("--role-map"), "REVIEW_LOOP_ROLE_MAP", resolve(homedir(), ".config", "review-loop", "roles.json")),
+  candidateRootLexical,
+  candidateRootCanonical,
+);
+const roleMap = readJson("role map", roleMapFile);
+trust("role map", roleMap.trust);
+const mapFixture = roleMap.fixture === true;
+if (mapFixture && !has("--allow-fixture")) die("fixture role map cannot select production roles");
+fresh("roleMap.observedAt", roleMap.observedAt, requirePositive("--max-role-map-age-hours", DEFAULT_ROLE_MAP_AGE_HOURS) * 60 * 60 * 1000, fixture || mapFixture);
 
-function dominatesReviewer(left, right) {
-  const leftMetrics = reviewerCapabilityVector(left);
-  const rightMetrics = reviewerCapabilityVector(right);
-  return leftMetrics.every((value, index) => value >= rightMetrics[index]) && leftMetrics.some((value, index) => value > rightMetrics[index]);
-}
+const observedHarnesses = [...new Set(registry.candidates.map((candidate) => candidate.harness).filter((value) => typeof value === "string" && value))];
+const mappedHarnesses = roleMap ? mapHarnesses(roleMap) : [];
+const requestedHarness = option("--harness").trim();
+if (!requestedHarness && new Set([...observedHarnesses, ...mappedHarnesses]).size !== 1) die("--harness is required when protected state contains multiple harnesses");
+const activeHarness = requestedHarness || observedHarnesses[0] || mappedHarnesses[0];
+requireString("harness", activeHarness);
+if (!OPAQUE_HARNESSES.has(activeHarness) && !fixture && !mappedHarnesses.includes(activeHarness)) die("harness is not present in protected role state");
+if (!observedHarnesses.includes(activeHarness)) die(`harness ${activeHarness} is absent from the live registry`);
 
-function candidateKey(candidate) {
-  return [candidate.harness, candidate.id, candidate.modelId, candidate.reasoningMode ?? "not_observable"].join("\u001f");
-}
+const mapping = mappingRoot(roleMap, activeHarness);
+if (!mapping) die(`protected role map has no mapping for harness ${activeHarness}`);
+const requiredRoles = ROLES;
+for (const requiredRole of requiredRoles) if (!mapping[requiredRole]) die(`protected role map is missing ${activeHarness}/${requiredRole}`);
+const selectedMapping = mappingIdentity(role, mapping[role]);
+if (selectedMapping.harness && selectedMapping.harness !== activeHarness) die(`protected ${role} mapping names a different harness`);
 
-function compareCandidates(left, right) {
-  if (role === "fixer") {
-    return expectedCost(left) - expectedCost(right) ||
-      Number(right.qualification.metrics.firstPassAcceptance) - Number(left.qualification.metrics.firstPassAcceptance) ||
-      candidateKey(left).localeCompare(candidateKey(right));
-  }
-  return reviewerScore(right) - reviewerScore(left) || expectedCost(left) - expectedCost(right) || candidateKey(left).localeCompare(candidateKey(right));
-}
+const requiredContext = Number(option("--required-context-tokens", "0"));
+if (!Number.isSafeInteger(requiredContext) || requiredContext < 0) die("--required-context-tokens must be a non-negative safe integer");
+const requiredRepository = has("--require-repository-access");
+const requiredTools = repeated("--required-tool");
+const sensitiveRequested = has("--sensitive");
+if (sensitiveRequested && role !== "fixer") die("--sensitive is only valid for fixer selection");
+const sensitiveClasses = [...new Set(repeated("--sensitive-class"))];
+if (sensitiveClasses.length && !sensitiveRequested) die("--sensitive-class requires --sensitive");
+if (sensitiveClasses.some((value) => !SENSITIVE_CLASSES.includes(value))) die(`--sensitive-class must be one of ${SENSITIVE_CLASSES.join(", ")}`);
+const effectiveSensitiveClasses = sensitiveRequested && sensitiveClasses.length ? sensitiveClasses : sensitiveRequested ? SENSITIVE_CLASSES : [];
+const maxAgeDays = requirePositive("--max-age-days", DEFAULT_QUALIFICATION_AGE_DAYS);
+const matching = registry.candidates.filter((candidate) => (
+  candidate.harness === activeHarness &&
+  candidate.id === selectedMapping.profileId &&
+  candidate.modelId === selectedMapping.modelId &&
+  candidate.reasoningMode === selectedMapping.reasoningMode
+));
+if (matching.length === 0) die(`no exact live candidate for protected ${activeHarness}/${role} mapping`);
+if (matching.length > 1) die(`multiple live candidates match protected ${activeHarness}/${role} mapping`);
+const selected = matching[0];
+const validated = validateCandidate(selected, role, risk, fixture, maxAgeDays, requiredContext, requiredRepository, requiredTools, effectiveSensitiveClasses);
+const selectedEvidence = validated.evidence;
 
-const ranked = role === "reviewer"
-  ? qualified.filter((candidate) => {
-    const dominator = qualified
-      .filter((other) => other !== candidate && dominatesReviewer(other, candidate))
-      .sort(compareCandidates)[0];
-    if (!dominator) return true;
-    rejections.push({ id: receiptIdentifier(candidate.id), reason: `Pareto-dominated reviewer capability by ${receiptIdentifier(dominator.id)}` });
-    return false;
-  })
-  : qualified;
-ranked.sort(compareCandidates);
-
-const selected = ranked[0];
-const selectedAboveCeiling = role === "reviewer" && expectedCost(selected) > ceiling;
-const selectedExtremeTier = selected.cost?.tier === "extreme";
+const registryTrust = registry.trust;
+const roleMapTrust = roleMap?.trust ?? registryTrust;
 const receipt = {
   status: "selected",
   role,
-  risk,
-  defaultPolicy: activeHarness === "codex" ? {
-    enforced: true,
-    modelId: CODEX_DEFAULT_ENGINE_POLICY[role].modelId,
-    allowedReasoningModes: CODEX_DEFAULT_ENGINE_POLICY[role].reasoningModes,
-  } : { enforced: false },
+  harness: receiptId(activeHarness),
+  profileId: receiptId(selected.id),
+  engine: receiptId(selected.id),
+  modelId: receiptId(selected.modelId),
+  reasoningMode: receiptId(selected.reasoningMode),
+  roleReceipt: {
+    exact: true,
+    role,
+    harness: receiptId(activeHarness),
+    profileId: receiptId(selectedMapping.profileId),
+    modelId: receiptId(selectedMapping.modelId),
+    reasoningMode: receiptId(selectedMapping.reasoningMode),
+    fallback: false,
+  },
   registry: {
     sourceClass: registryTrust.sourceClass,
-    identifierHash: identifierHash(registryTrust.identifier || basename(registryPath)),
+    identifierHash: hash(registryTrust.identifier),
+    observedAt: registry.observedAt,
   },
-  harness: receiptIdentifier(selected.harness),
-  engine: receiptIdentifier(selected.id),
-  modelId: receiptIdentifier(selected.modelId),
-  reasoningMode: receiptIdentifier(selected.reasoningMode ?? "not_observable"),
+  roleMap: {
+    sourceClass: roleMapTrust.sourceClass,
+    identifierHash: hash(roleMapTrust.identifier),
+    observedAt: roleMap?.observedAt ?? registry.observedAt,
+    exact: true,
+  },
   qualification: {
     source: selected.qualification.source,
     evaluatedAt: selected.qualification.evaluatedAt,
-    perGateRecall: role === "reviewer" ? selected.qualification.metrics.perGateRecall : null,
     evidence: {
-      sourceClass: selected.qualification.evidence.sourceClass,
-      corpusIdHash: identifierHash(selected.qualification.evidence.corpusId),
-      artifactFingerprint: selected.qualification.evidence.artifactFingerprint,
-      observedAt: selected.qualification.evidence.observedAt,
+      sourceClass: selectedEvidence.sourceClass,
+      corpusIdHash: hash(selectedEvidence.corpusId),
+      artifactFingerprint: selectedEvidence.artifactFingerprint,
+      observedAt: selectedEvidence.observedAt,
     },
-    ...(sensitiveFixesRequested ? {
-      sensitive: {
-        requiredClasses: requiredSensitiveClasses,
-        sourceClass: selected.qualification.evidence.sensitive.sourceClass,
-        corpusIdHash: identifierHash(selected.qualification.evidence.sensitive.corpusId),
-        artifactFingerprint: selected.qualification.evidence.sensitive.artifactFingerprint,
-        observedAt: selected.qualification.evidence.sensitive.observedAt,
-        classMetrics: Object.fromEntries(requiredSensitiveClasses.map((sensitiveClass) => [
-          sensitiveClass,
-          Object.fromEntries(SENSITIVE_FIX_EVIDENCE_METRICS.map((metric) => [
-            metric,
-            selected.qualification.evidence.sensitive.classMetrics[sensitiveClass][metric],
-          ])),
-        ])),
-      },
-    } : {}),
   },
-  observedCapabilities: {
-    contextTokens: selected.capabilities.contextTokens,
-    repositoryAccess: selected.capabilities.repositoryAccess,
-    toolAccess: selected.capabilities.toolAccess.map(receiptIdentifier),
+  capabilities: {
+    readOnly: validated.capabilities.readOnly === true,
+    freshContext: validated.capabilities.freshContext === true,
+    workspaceWrite: validated.capabilities.workspaceWrite === true,
+    monitoring: validated.capabilities.monitoring === true,
+    verdictAuthority: validated.capabilities.verdictAuthority === true,
+    contextTokens: validated.capabilities.contextTokens,
+    repositoryAccess: validated.capabilities.repositoryAccess,
+    toolAccess: validated.capabilities.toolAccess.map(receiptId),
   },
-  expectedTotalCostUsd: expectedCost(selected),
-  costCeilingUsd: role === "reviewer" ? ceiling : null,
-  aboveCeiling: selectedAboveCeiling,
-  premiumEscalation: selectedExtremeTier || selectedAboveCeiling ? premiumEscalation : null,
-  rationale: selectedExtremeTier || selectedAboveCeiling
-    ? `selected through explicit premium escalation (${premiumEscalation})${selectedExtremeTier ? "; extreme tier" : ""}${selectedAboveCeiling ? "; above sustainable reviewer cost ceiling" : ""}`
-    : activeHarness === "codex"
-      ? `required Codex ${role} default; ranked within the protected ${CODEX_DEFAULT_ENGINE_POLICY[role].modelId} reasoning policy`
-    : role === "reviewer"
-      ? "highest qualified capability inside the sustainable cost ceiling"
-      : "lowest expected total cost among qualified capable fixers",
-  rejected: rejections.sort((left, right) => left.id.localeCompare(right.id) || left.reason.localeCompare(right.reason)),
-  qualifiedAlternatives: ranked.slice(1).map((candidate) => ({
-    id: receiptIdentifier(candidate.id),
-    expectedTotalCostUsd: expectedCost(candidate),
-  })),
+  fallback: false,
+  expectedTotalCostUsd: validated.cost,
+  rationale: role === "fast-reviewer"
+    ? "explicit protected fast-reviewer mapping; one fresh independent review"
+    : role === "deep-reviewer"
+      ? "explicit protected deep-reviewer mapping for one authorized escalation"
+      : role === "fixer"
+        ? "explicit protected fixer mapping reused for local blocker corrections"
+        : "explicit protected watcher mapping; read-only monitoring without verdict authority",
 };
-
+if (sensitiveRequested) {
+  const sensitive = selected.qualification.evidence.sensitive;
+  receipt.qualification.sensitive = {
+    requiredClasses: effectiveSensitiveClasses,
+    sourceClass: sensitive.sourceClass,
+    corpusIdHash: hash(sensitive.corpusId),
+    artifactFingerprint: sensitive.artifactFingerprint,
+    observedAt: sensitive.observedAt,
+    classMetrics: Object.fromEntries(effectiveSensitiveClasses.map((sensitiveClass) => [
+      sensitiveClass,
+      Object.fromEntries(SENSITIVE_EVIDENCE.map((metricName) => [metricName, sensitive.classMetrics[sensitiveClass][metricName]])),
+    ])),
+  };
+}
 if (has("--json")) {
   console.log(JSON.stringify(receipt, null, 2));
 } else {
-  console.log(`${receipt.role}: ${receipt.engine} (${receipt.harness}, ${receipt.reasoningMode})`);
+  console.log(`${receipt.role}: ${receipt.profileId} (${receipt.harness})`);
   console.log(`qualification: ${receipt.qualification.source} @ ${receipt.qualification.evaluatedAt}`);
-  console.log(`expected total cost: USD ${receipt.expectedTotalCostUsd.toFixed(4)}`);
+  console.log(`fallback: ${receipt.fallback}`);
   console.log(`rationale: ${receipt.rationale}`);
 }

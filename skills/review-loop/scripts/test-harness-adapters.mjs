@@ -42,8 +42,8 @@ const inventory = {
   trust: { sourceClass: "protected-harness-config", identifier: "runtime-inventory" },
   engines: [{
     ...identity,
-    roles: ["reviewer"],
-    capabilities: { readOnly: true, freshContext: true, workspaceWrite: false, contextTokens: 128000, repositoryAccess: true, toolAccess: ["git", "rg"], risks: ["low", "medium", "high"] },
+    roles: ["fast-reviewer"],
+    capabilities: { readOnly: true, freshContext: true, workspaceWrite: false, verdictAuthority: true, contextTokens: 128000, repositoryAccess: true, toolAccess: ["git", "rg"], risks: ["low", "medium", "high"] },
     cost: { tier: "high", expectedRunUsd: 2, retryMultiplier: 1 },
   }],
 };
@@ -57,7 +57,7 @@ const qualification = {
     artifactLocator: "test://adapter-test",
     artifactFingerprint: fingerprint,
     observedAt: "2026-08-09",
-    metricNames: ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation"],
+    metricNames: ["knownFindingRecall", "blockerPrecision", "criticalHighEscapes", "fiveGateReceiptRate", "acceptedFalseBlockerRate", "severityCalibration", "perGateRecall.criticalHighCorrectness", "perGateRecall.simplification", "perGateRecall.semantics", "perGateRecall.documentation", "perGateRecall.verification"],
   },
   metrics: {
     knownFindingRecall: 0.9,
@@ -66,7 +66,7 @@ const qualification = {
     fiveGateReceiptRate: 1,
     acceptedFalseBlockerRate: 0.1,
     severityCalibration: 0.9,
-    perGateRecall: { criticalHighCorrectness: 0.9, simplification: 0.9, semantics: 0.9, documentation: 0.9 },
+    perGateRecall: { criticalHighCorrectness: 0.9, simplification: 0.9, semantics: 0.9, documentation: 0.9, verification: 0.9 },
   },
 };
 const ledger = {
@@ -74,6 +74,21 @@ const ledger = {
   fixture: true,
   trust: { sourceClass: "trusted-base-artifact", identifier: "qualification-ledger" },
   records: [{ ...identity, qualification }],
+};
+
+const roleMap = {
+  version: 1,
+  fixture: true,
+  observedAt: "2026-08-09T00:00:00Z",
+  trust: { sourceClass: "protected-harness-config", identifier: "fixture-role-map" },
+  mappings: {
+    "example-harness": {
+      "fast-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      "deep-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      fixer: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+      watcher: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
+    },
+  },
 };
 
 function nativeExport(harness, profile = identity) {
@@ -87,7 +102,7 @@ function nativeExport(harness, profile = identity) {
       id: profile.id,
       modelId: profile.modelId,
       reasoningMode: profile.reasoningMode,
-      roles: ["reviewer"],
+      roles: ["fast-reviewer"],
       capabilities: inventory.engines[0].capabilities,
       cost: inventory.engines[0].cost,
     }],
@@ -95,7 +110,7 @@ function nativeExport(harness, profile = identity) {
 }
 
 try {
-  for (const harness of ["codex", "cursor", "claude-code"]) {
+  for (const harness of ["codex", "cursor", "claude-code", "opencode"]) {
     const exportPath = write(`${harness}-native-export.json`, nativeExport(harness));
     const normalizedPath = join(protectedDirectory, `${harness}-inventory.json`);
     const exportResult = run([exporter, "--harness", harness, "--input", exportPath, "--output", normalizedPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
@@ -113,6 +128,7 @@ try {
   expectFailure("adapter-fail-closed", run([exporter, "--harness", "codex", "--input", write("incomplete-native-export.json", incompleteExport), "--output", join(protectedDirectory, "incomplete-inventory.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "profiles[0].modelId must be a non-empty observed value or not_observable");
 
   const protectedCodexExport = write("protected-codex-native-export.json", nativeExport("codex"));
+  expectFailure("adapter-candidate-root-required", run([exporter, "--harness", "codex", "--input", protectedCodexExport, "--output", join(protectedDirectory, "missing-root-inventory.json"), "--allow-fixture"]), "--candidate-root is required");
   const candidateToOutsideInput = join(candidateDirectory, "input-link.json");
   symlinkSync(protectedCodexExport, candidateToOutsideInput);
   expectFailure("adapter-lexical-candidate-input", run([exporter, "--harness", "codex", "--input", candidateToOutsideInput, "--output", join(protectedDirectory, "lexical-inventory.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "input must stay outside the candidate repository");
@@ -138,20 +154,64 @@ try {
   if (registry.candidates[0].modelId !== "not_observable" || registry.candidates[0].qualification.status !== "qualified") {
     throw new Error("exact-match composition lost observable identity or qualification");
   }
-  const selection = run([selector, "--registry", registryPath, "--role", "reviewer", "--risk", "high", "--allow-fixture", "--json"]);
+  const roleMapPath = write("role-map.json", roleMap);
+  const selection = run([selector, "--registry", registryPath, "--role-map", roleMapPath, "--harness", "example-harness", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
   if (!selection.ok) throw new Error(`composed registry was not selectable: ${selection.output}`);
   const selectionReceipt = JSON.parse(selection.output);
   if (selectionReceipt.engine !== identity.id || selectionReceipt.modelId !== identity.modelId) {
     throw new Error("selection receipt lost the exact harness profile or model identity");
   }
 
+  const templateRoot = join(scriptDir, "..", "templates");
+  const publicInventory = JSON.parse(readFileSync(join(templateRoot, "harness-inventory.example.json"), "utf8"));
+  const publicLedger = JSON.parse(readFileSync(join(templateRoot, "qualification-ledger.example.json"), "utf8"));
+  const publicRoleMap = JSON.parse(readFileSync(join(templateRoot, "role-map.example.json"), "utf8"));
+  const publicNativeExport = {
+    version: publicInventory.version,
+    fixture: publicInventory.fixture,
+    harness: "codex",
+    observedAt: publicInventory.observedAt,
+    trust: publicInventory.trust,
+    profiles: publicInventory.engines.map((engine) => ({
+      id: engine.id,
+      modelId: engine.modelId,
+      reasoningMode: engine.reasoningMode,
+      roles: engine.roles,
+      capabilities: engine.capabilities,
+      cost: engine.cost,
+    })),
+  };
+  const publicExportPath = write("public-template-native-export.json", publicNativeExport);
+  const publicInventoryPath = join(protectedDirectory, "public-template-inventory.json");
+  const publicExport = run([exporter, "--harness", "codex", "--input", publicExportPath, "--output", publicInventoryPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
+  if (!publicExport.ok) throw new Error(`public template export failed: ${publicExport.output}`);
+  const publicLedgerPath = write("public-template-qualification-ledger.json", publicLedger);
+  const publicRoleMapPath = write("public-template-role-map.json", publicRoleMap);
+  const publicRegistryPath = join(protectedDirectory, "public-template-registry.json");
+  const publicComposition = run([composer, "--inventory", publicInventoryPath, "--qualifications", publicLedgerPath, "--reviewer-cost-ceiling-usd", "4", "--output", publicRegistryPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
+  if (!publicComposition.ok) throw new Error(`public template composition failed: ${publicComposition.output}`);
+  const publicRegistry = JSON.parse(readFileSync(publicRegistryPath, "utf8"));
+  for (const role of ["fast-reviewer", "deep-reviewer", "fixer", "watcher"]) {
+    const candidate = publicRegistry.candidates.find((value) => value.roles.includes(role));
+    const mapping = publicRoleMap.mappings.codex[role];
+    if (!candidate || candidate.harness !== "codex" || candidate.id !== mapping.profileId || candidate.modelId !== mapping.modelId || candidate.reasoningMode !== mapping.reasoningMode) {
+      throw new Error(`public template identity mismatch for ${role}`);
+    }
+  }
+  const publicSelection = run([selector, "--registry", publicRegistryPath, "--role-map", publicRoleMapPath, "--harness", "codex", "--role", "fast-reviewer", "--risk", "high", "--candidate-root", candidateDirectory, "--allow-fixture", "--json"]);
+  if (!publicSelection.ok) throw new Error(`public template selection failed: ${publicSelection.output}`);
+  const publicReceipt = JSON.parse(publicSelection.output);
+  if (publicReceipt.role !== "fast-reviewer" || publicReceipt.profileId !== "fast-profile" || publicReceipt.capabilities.verdictAuthority !== true) {
+    throw new Error("public template selection did not produce the fast-reviewer receipt");
+  }
+
   const mismatch = structuredClone(ledger);
   mismatch.records[0].modelId = "different-model";
-  expectFailure("identity-mismatch", run([composer, "--inventory", inventoryPath, "--qualifications", write("mismatch.json", mismatch), "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "no exact protected qualification");
+  expectFailure("identity-mismatch", run([composer, "--inventory", inventoryPath, "--qualifications", write("mismatch.json", mismatch), "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory, "--allow-fixture"]), "no exact protected qualification");
 
   const untrusted = structuredClone(inventory);
   untrusted.trust.sourceClass = "candidate-head";
-  expectFailure("untrusted-inventory", run([composer, "--inventory", write("untrusted.json", untrusted), "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "inventory.trust must use");
+  expectFailure("untrusted-inventory", run([composer, "--inventory", write("untrusted.json", untrusted), "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory, "--allow-fixture"]), "inventory.trust must use");
 
   expectFailure("candidate-local-inventory", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", root, "--allow-fixture"]), "inventory must stay outside the candidate repository");
   const candidateToOutsideInventory = join(candidateDirectory, "inventory-link.json");
@@ -170,8 +230,9 @@ try {
   if (readFileSync(outputTarget, "utf8") !== "do-not-overwrite") throw new Error("composer-output-symlink: composer followed the output symlink");
   expectFailure("composer-lexical-candidate-output", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--output", join(candidateDirectory, "registry.json"), "--candidate-root", candidateDirectory, "--allow-fixture"]), "output must stay outside the candidate repository");
 
-  expectFailure("fixture-refusal", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4"]), "fixture inputs require --allow-fixture");
-  expectFailure("invalid-cost-ceiling", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "NaN", "--allow-fixture"]), "finite positive number");
+  expectFailure("composer-candidate-root-required", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--allow-fixture"]), "--candidate-root is required");
+  expectFailure("fixture-refusal", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "4", "--candidate-root", candidateDirectory]), "fixture inputs require --allow-fixture");
+  expectFailure("invalid-cost-ceiling", run([composer, "--inventory", inventoryPath, "--qualifications", ledgerPath, "--reviewer-cost-ceiling-usd", "NaN", "--candidate-root", candidateDirectory, "--allow-fixture"]), "finite positive number");
   console.log("PASS harness-adapters");
 } finally {
   for (const directory of [candidateDirectory, protectedDirectory]) {

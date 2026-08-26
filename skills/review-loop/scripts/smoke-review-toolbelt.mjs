@@ -1558,8 +1558,12 @@ const referenceFiles = [
 ];
 const referenceTexts = referenceFiles.map((file) => readFileSync(join(scriptDir, "..", "references", file), "utf8"));
 const skillCorpus = [skillText, ...referenceTexts].join("\n");
-expectIncludes("deterministic-is-not-gate", skillText, "The deterministic collector is tool support for the reviewer.");
-expectIncludes("independent-review", skillText, "fresh, read-only reviewer");
+expectIncludes("fast-default", skillText, "focused checks run concurrently");
+expectIncludes("independent-review", skillText, "fresh independent");
+expectIncludes("portable-role-receipts", skillText, "protected role receipts");
+expectIncludes("autonomous-critical-high", skillText, "There is no fixed review-pass cap");
+expectIncludes("separate-code-state", skillText, "CODE READY");
+expectIncludes("watcher-no-authority", skillText, "watcher");
 for (const file of referenceFiles) {
   expectIncludes("reference-routing", skillText, `references/${file}`);
 }
@@ -1567,15 +1571,14 @@ for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION
   expectIncludes("five-gate-contract", skillText, `\`${gate}\``);
 }
 expectIncludes("definition-of-done", skillText, "## Definition of done");
-expectIncludes("self-approval-denied", skillText, "fixing agent must never approve");
-expectIncludes("review-only-authority", skillText, "In a review-only task, return the findings without");
-expectIncludes("fresh-candidate-review", skillText, "verdict never survives a changed candidate identity");
+expectIncludes("self-approval-denied", skillText, "fixer never reviews or approves its own work");
+expectIncludes("fresh-candidate-review", skillText, "Always rebuild evidence and require fresh independent approval");
 expectIncludes("simplification-gate", skillCorpus, "Prefer deleting incidental complexity");
 expectIncludes("semantic-gate", skillCorpus, "roadmap phases");
 expectIncludes("documentation-gate", skillCorpus, "NOT_APPLICABLE");
-expectIncludes("engine-capability-floor", skillCorpus, "Cheapest` never means cheapest overall");
-expectIncludes("engine-cost-ceiling", skillCorpus, "extreme premium candidate only through a recorded escalation");
-expectIncludes("fixer-boundary", skillCorpus, "The fixer must not approve");
+expectIncludes("engine-capability-floor", skillCorpus, "exact protected mapping");
+expectIncludes("engine-no-fallback", skillCorpus, "never ranks, substitutes, silently");
+expectIncludes("fixer-boundary", skillCorpus, "It must not approve");
 expectNotIncludes("no-local-user-paths", skillCorpus, "/Users/");
 console.log("PASS public-skill-contract");
 
