@@ -33,6 +33,7 @@ const FIXER_EVIDENCE = [
 const SENSITIVE_CLASSES = ["auth", "tenancy", "credentials", "migrations", "transactions", "concurrency", "public-contracts-ops"];
 const SENSITIVE_EVIDENCE = ["firstPassAcceptance", "criticalRegressions", "scopeCreepRate", "escalationCompliance"];
 const SHA256 = /^sha256:[a-f0-9]{64}$/i;
+const CANDIDATE_FINGERPRINT = /^(?:sha256:)?[a-f0-9]{64}$/i;
 const ID = /^[a-z0-9][a-z0-9._:-]{0,127}$/i;
 const DAY = 86_400_000;
 const MAX_CLOCK_SKEW_HOURS = 1;
@@ -109,6 +110,33 @@ function hash(value) {
 function receiptId(value) {
   if (typeof value === "string" && ID.test(value) && !/(credential|jwt|key|password|private|secret|token)/i.test(value)) return value;
   return hash(value);
+}
+
+function normalizeCandidateFingerprint(value) {
+  if (typeof value !== "string" || !CANDIDATE_FINGERPRINT.test(value.trim())) die("--candidate-fingerprint must be a SHA-256 fingerprint");
+  const fingerprint = value.trim();
+  return fingerprint.startsWith("sha256:") ? fingerprint.toLowerCase() : `sha256:${fingerprint.toLowerCase()}`;
+}
+
+function nativeCapabilities(role) {
+  const reviewer = role === "fast-reviewer" || role === "deep-reviewer";
+  return {
+    readOnly: reviewer || role === "watcher",
+    freshContext: reviewer,
+    workspaceWrite: role === "fixer",
+    monitoring: role === "watcher",
+    verdictAuthority: reviewer,
+  };
+}
+
+function emit(receipt) {
+  if (has("--json")) console.log(JSON.stringify(receipt, null, 2));
+  else {
+    console.log(`${receipt.role}: ${receipt.profileId} (${receipt.harness})`);
+    console.log(`selection: ${receipt.selectionMode}`);
+    console.log(`fallback: ${receipt.fallback}`);
+    console.log(`rationale: ${receipt.rationale}`);
+  }
 }
 
 function dateMs(label, value) {
@@ -282,17 +310,23 @@ function mappingIdentity(role, mapping) {
 }
 
 function usage() {
-  console.log(`review-loop protected role selection
+  console.log(`review-loop portable role selection
 
 Usage:
+  node select-review-engines.mjs --harness <opaque-id>
+    --role fast-reviewer|deep-reviewer|fixer|watcher
+    --risk low|medium|high|critical [--native-role-id <native-role>]
+    --candidate-fingerprint sha256:<fingerprint> --candidate-root <repo> [--json]
+
   node select-review-engines.mjs --registry <protected-registry.json> --role-map <protected-role-map.json>
-    --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer|watcher
-    --risk low|medium|high|critical --candidate-root <repo> [--json]
+    --protected --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer|watcher
+    --risk low|medium|high|critical --candidate-fingerprint sha256:<fingerprint>
+    --candidate-root <repo> [--json]
     [--required-context-tokens <integer>] [--required-tool <name>]
     [--require-repository-access] [--sensitive --sensitive-class <class>]
 
-The role map is protected harness configuration. The selector performs one
-exact map-to-registry-to-qualification join and never chooses a fallback.`);
+Native harness roles are the default and need no external configuration.
+Protected mode performs one exact map-to-registry-to-qualification join.`);
 }
 
 if (has("--help")) {
@@ -310,6 +344,61 @@ const candidateRootLexical = resolve(candidateRootOption);
 if (!existsSync(candidateRootLexical)) die("--candidate-root must exist");
 if (lstatSync(candidateRootLexical).isSymbolicLink()) die("--candidate-root must not be a symbolic link");
 const candidateRootCanonical = realpathSync.native(candidateRootLexical);
+const candidateFingerprint = normalizeCandidateFingerprint(option("--candidate-fingerprint"));
+const requestedHarness = option("--harness").trim();
+const protectedRequested = has("--protected") || Boolean(
+  option("--registry") ||
+  option("--role-map")
+);
+
+if (!protectedRequested) {
+  const activeHarness = requireString("harness", requestedHarness);
+  if (!OPAQUE_HARNESSES.has(activeHarness)) die("native harness must be codex, claude-code, cursor, or opencode");
+  const nativeRoleId = requireString("native role ID", option("--native-role-id", role));
+  const managedIdentity = ["harness", "managed"].join("-");
+  const caps = nativeCapabilities(role);
+  const rationale = role === "fast-reviewer"
+    ? "harness-native fresh independent reviewer; no external role configuration required"
+    : role === "deep-reviewer"
+      ? "harness-native fresh independent reviewer for one escalation"
+      : role === "fixer"
+        ? "harness-native writer or author/controller correction lane without verdict authority"
+        : "harness-native read-only monitoring without verdict authority";
+  emit({
+    status: "selected",
+    selectionMode: "harness-native",
+    role,
+    harness: receiptId(activeHarness),
+    profileId: receiptId(nativeRoleId),
+    engine: receiptId(nativeRoleId),
+    modelId: receiptId(managedIdentity),
+    reasoningMode: receiptId(managedIdentity),
+    candidateFingerprint,
+    roleReceipt: {
+      exact: true,
+      role,
+      harness: receiptId(activeHarness),
+      profileId: receiptId(nativeRoleId),
+      modelId: receiptId(managedIdentity),
+      reasoningMode: receiptId(managedIdentity),
+      sourceClass: "harness-native-role",
+      fallback: false,
+    },
+    qualification: {
+      source: "harness-native-role-contract",
+      benchmarkClaimed: false,
+    },
+    capabilities: caps,
+    enforcement: {
+      candidateUnchanged: caps.verdictAuthority ? "re-fingerprint-before-verdict" : "not-applicable",
+      freshContext: caps.verdictAuthority ? "required-before-dispatch" : "not-required",
+    },
+    fallback: false,
+    expectedTotalCostUsd: null,
+    rationale,
+  });
+  process.exit(0);
+}
 
 function protectedPath(name, explicit, envName, fallback) {
   if (explicit) return explicit;
@@ -353,7 +442,6 @@ fresh("roleMap.observedAt", roleMap.observedAt, requirePositive("--max-role-map-
 
 const observedHarnesses = [...new Set(registry.candidates.map((candidate) => candidate.harness).filter((value) => typeof value === "string" && value))];
 const mappedHarnesses = roleMap ? mapHarnesses(roleMap) : [];
-const requestedHarness = option("--harness").trim();
 if (!requestedHarness && new Set([...observedHarnesses, ...mappedHarnesses]).size !== 1) die("--harness is required when protected state contains multiple harnesses");
 const activeHarness = requestedHarness || observedHarnesses[0] || mappedHarnesses[0];
 requireString("harness", activeHarness);
@@ -394,12 +482,14 @@ const registryTrust = registry.trust;
 const roleMapTrust = roleMap?.trust ?? registryTrust;
 const receipt = {
   status: "selected",
+  selectionMode: "protected",
   role,
   harness: receiptId(activeHarness),
   profileId: receiptId(selected.id),
   engine: receiptId(selected.id),
   modelId: receiptId(selected.modelId),
   reasoningMode: receiptId(selected.reasoningMode),
+  candidateFingerprint,
   roleReceipt: {
     exact: true,
     role,
@@ -464,11 +554,4 @@ if (sensitiveRequested) {
     ])),
   };
 }
-if (has("--json")) {
-  console.log(JSON.stringify(receipt, null, 2));
-} else {
-  console.log(`${receipt.role}: ${receipt.profileId} (${receipt.harness})`);
-  console.log(`qualification: ${receipt.qualification.source} @ ${receipt.qualification.evaluatedAt}`);
-  console.log(`fallback: ${receipt.fallback}`);
-  console.log(`rationale: ${receipt.rationale}`);
-}
+emit(receipt);

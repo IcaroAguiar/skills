@@ -127,13 +127,26 @@ function write(name, value, directory = protectedDir) {
 function run(registryValue, mapValue, role, extra = [], { fixture = true, harness = "codex", candidateRoot = candidate } = {}) {
   const registryPath = typeof registryValue === "string" ? registryValue : write(`registry-${Math.random()}.json`, registryValue);
   const mapPath = mapValue === null ? null : typeof mapValue === "string" ? mapValue : write(`roles-${Math.random()}.json`, mapValue);
-  const args = [selector, "--registry", registryPath, "--role", role, "--risk", "high", "--harness", harness, "--json"];
+  const args = [selector, "--registry", registryPath, "--role", role, "--risk", "high", "--harness", harness, "--candidate-fingerprint", fingerprint, "--json"];
   if (candidateRoot) args.push("--candidate-root", candidateRoot);
   if (mapPath) args.push("--role-map", mapPath);
   if (fixture) args.push("--allow-fixture");
   args.push(...extra);
   try {
     return { ok: true, output: execFileSync(process.execPath, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: protectedDir, REVIEW_LOOP_ROLE_MAP: "" } }) };
+  } catch (error) {
+    return { ok: false, output: `${error.stdout?.toString() ?? ""}${error.stderr?.toString() ?? ""}` };
+  }
+}
+
+function runNative(role, extra = [], { harness = "codex", candidateRoot = candidate, includeFingerprint = true, includeNativeRoleId = true, env = {} } = {}) {
+  const nativeArgs = [selector, "--role", role, "--risk", "high", "--harness", harness, "--json"];
+  if (includeNativeRoleId) nativeArgs.push("--native-role-id", `${harness}-native-${role}`);
+  if (candidateRoot) nativeArgs.push("--candidate-root", candidateRoot);
+  if (includeFingerprint) nativeArgs.push("--candidate-fingerprint", fingerprint);
+  nativeArgs.push(...extra);
+  try {
+    return { ok: true, output: execFileSync(process.execPath, nativeArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, HOME: protectedDir, REVIEW_LOOP_ENGINE_REGISTRY: "", REVIEW_LOOP_ROLE_MAP: "", ...env } }) };
   } catch (error) {
     return { ok: false, output: `${error.stdout?.toString() ?? ""}${error.stderr?.toString() ?? ""}` };
   }
@@ -149,8 +162,24 @@ function fail(label, result, phrase) {
 }
 
 try {
+  for (const harness of harnesses) {
+    const native = pass(`native-${harness}`, runNative("fast-reviewer", [], { harness }));
+    if (native.selectionMode !== "harness-native" || native.harness !== harness || native.candidateFingerprint !== fingerprint || native.capabilities.verdictAuthority !== true || native.qualification.benchmarkClaimed !== false || native.fallback !== false) {
+      throw new Error(`native-${harness}: native receipt lost its contract`);
+    }
+  }
+  const nativeFixer = pass("native-fixer", runNative("fixer"));
+  if (nativeFixer.capabilities.workspaceWrite !== true || nativeFixer.capabilities.verdictAuthority !== false) throw new Error("native-fixer: fixer gained verdict authority");
+  const nativeWatcher = pass("native-watcher", runNative("watcher"));
+  if (nativeWatcher.capabilities.readOnly !== true || nativeWatcher.capabilities.verdictAuthority !== false) throw new Error("native-watcher: watcher gained verdict authority");
+  const nativeDefaultRole = pass("native-default-role-id", runNative("fast-reviewer", [], { includeNativeRoleId: false }));
+  if (nativeDefaultRole.profileId !== "fast-reviewer") throw new Error("native-default-role-id: portable role name was not retained");
+  fail("native-fingerprint-required", runNative("fast-reviewer", [], { includeFingerprint: false }), "--candidate-fingerprint must be a SHA-256 fingerprint");
+  fail("native-harness-guard", runNative("fast-reviewer", [], { harness: "unknown-harness" }), "native harness must be");
+  pass("native-ignores-stale-protected-env", runNative("fast-reviewer", [], { env: { REVIEW_LOOP_ENGINE_REGISTRY: "/missing/registry.json", REVIEW_LOOP_ROLE_MAP: "/missing/roles.json" } }));
+
   const fast = pass("fast-default-role", run(registryFor("codex"), roleMapFor("codex"), "fast-reviewer"));
-  if (fast.role !== "fast-reviewer" || fast.profileId !== "codex-fast-reviewer" || fast.fallback !== false || fast.roleReceipt.fallback !== false || fast.roleReceipt.exact !== true || fast.capabilities.verdictAuthority !== true) {
+  if (fast.selectionMode !== "protected" || fast.candidateFingerprint !== fingerprint || fast.role !== "fast-reviewer" || fast.profileId !== "codex-fast-reviewer" || fast.fallback !== false || fast.roleReceipt.fallback !== false || fast.roleReceipt.exact !== true || fast.capabilities.verdictAuthority !== true) {
     throw new Error("fast-default-role: did not consume the exact protected role receipt");
   }
   if (!fast.rationale.includes("one fresh independent review")) throw new Error("fast-default-role: fast rationale is not explicit");

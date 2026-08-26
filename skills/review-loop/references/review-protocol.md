@@ -59,7 +59,9 @@ Keep `CODE READY`, `CHECKS GREEN`, `FORMAL REVIEW`, and `MERGE READY` separate.
 External PR reviewers and providers are outside this loop and are never waited
 on. A `watcher` may report read-only external state but cannot decide approval.
 
-If a required engine, diff, context, or check is unavailable, mark the affected
-state blocked and report the residual uncertainty. A clean reviewer output is
-scoped evidence, not formal hosting approval, merge, deploy, or tracker
-completion.
+Missing optional protected engine files never block the native review path. If
+the harness exposes no native subagent, use a fresh task/session with the same
+role contract. Only the absence of any fresh independent context, the diff, or
+a required check can block the affected state. Report that residual uncertainty.
+A clean reviewer output is scoped evidence, not formal hosting approval, merge,
+deploy, or tracker completion.
