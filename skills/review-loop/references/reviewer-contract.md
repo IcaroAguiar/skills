@@ -31,7 +31,7 @@ semantics, and documentation findings are visible residuals after final review
 unless they demonstrate a correctness or verification failure.
 
 Return the five gate receipts, reviewed/excluded scope, rejected leads, checks,
-residual uncertainty, protected role receipt, convergence evidence, and one of
+residual uncertainty, native or protected role receipt, convergence evidence, and one of
 `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
 Never approve while a gate receipt, identity, fresh context, or blocker
 correction is missing.
