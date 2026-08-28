@@ -101,27 +101,32 @@ const frontmatter = skill.match(/^---\n([\s\S]*?)\n---\n/);
 const frontmatterKeys = frontmatter ? [...frontmatter[1].matchAll(/^([A-Za-z0-9_-]+):/gm)].map((match) => match[1]) : [];
 if (frontmatterKeys.join(",") !== "name,description") fail(`frontmatter keys must be exactly name,description; found ${frontmatterKeys.join(",") || "none"}`);
 expectIncludes("SKILL.md", skill, "name: review-loop");
-for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) expectIncludes("SKILL.md", skill, `\`${gate}\``);
 for (const phrase of [
-  "self-audits and stabilizes",
-  "focused checks run concurrently",
-  "fast-reviewer",
-  "deep-reviewer",
-  "delta-first",
-  "There is no fixed review-pass cap",
-  "does not need permission",
-  "visible residuals",
-  "CODE READY",
-  "CHECKS GREEN",
-  "FORMAL REVIEW",
-  "MERGE READY",
-  "External PR reviewers and providers are outside this skill and are never waited",
-  "watcher",
-  "no verdict or approval authority",
-  "harness-native",
-  "Missing role maps",
-  "never a prerequisite",
+  "$code-review",
+  "Invoke once when all are true",
+  "the change affects behavior",
+  "git diff <base>...<head>",
+  "reads the full PR diff once",
+  "same reviewer session",
+  "Start a new fresh reviewer only when the base changes",
+  "There is no fixed correction cap",
+  "another in-scope correction",
+  "Hosting review, CI monitoring, external",
+  "Protected engine selection is an optional",
 ]) expectIncludes("FAST contract", skill, phrase);
+for (const phrase of ["PR maintenance mode", "`watcher`", "base/head or worktree identity", "ask a fresh reviewer for a", "fingerprint-review-state.mjs"]) expectNotIncludes("stable PR contract", skill, phrase);
+
+const codeReviewPath = resolve(skillRoot, "..", "code-review", "SKILL.md");
+const codeReviewStandardsPath = resolve(skillRoot, "..", "code-review", "references", "review-standards.md");
+if (!existsSync(codeReviewPath) || !existsSync(codeReviewStandardsPath)) {
+  fail("review-loop requires the sibling code-review skill and its review standards");
+} else {
+  const codeReview = readFileSync(codeReviewPath, "utf8");
+  const reviewStandards = readFileSync(codeReviewStandardsPath, "utf8");
+  for (const phrase of ["Review directly in the current context", "Standards", "Spec", "Delta review"]) expectIncludes("code-review dependency", codeReview, phrase);
+  for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) expectIncludes("code-review standards", reviewStandards, `\`${gate}\``);
+  expectIncludes("code-review standards", reviewStandards, "Tautological tests considered harmful");
+}
 
 const actualReferences = existsSync(safePath("references"))
   ? readdirSync(safePath("references")).filter((file) => file.endsWith(".md")).sort().map((file) => `references/${file}`)
@@ -140,11 +145,6 @@ if (publicCorpusLines > MAX_PUBLIC_CORPUS_LINES) fail(`public skill corpus has $
 
 for (const phrase of [
   "fresh independent",
-  "CORRECTNESS",
-  "SIMPLIFICATION",
-  "SEMANTICS",
-  "DOCUMENTATION",
-  "VERIFICATION",
   "NOT_APPLICABLE",
   "residual uncertainty",
 ]) expectIncludes("public corpus", publicCorpus, phrase);
@@ -195,12 +195,16 @@ const result = {
     frontmatter: frontmatterKeys,
     references: actualReferences,
     mandatoryGates: 5,
-    fastDefault: true,
+    implicitStablePrGate: true,
+    prDiffOnly: true,
+    oneFullDiffReview: true,
+    sameSessionDeltaRecheck: true,
     autonomousCriticalHighCorrection: true,
     portableNativeRoles: true,
     protectedOverrides: true,
     noHardcodedModelIds: true,
-    externalWatcherHasNoVerdictAuthority: true,
+    codeReviewDependency: true,
+    externalMonitoringExcluded: true,
     freshIndependentApproval: true,
   },
   failures,
