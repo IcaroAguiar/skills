@@ -1,97 +1,62 @@
 ---
 name: review-loop
-description: Review, correct, and re-review material changes until the current candidate has evidence-backed code readiness; keep checks, formal review, merge, deployment, and external monitoring separate.
+description: Review a stable material pull request after implementation and focused checks are complete; invoke implicitly once for code readiness, or when the user asks for review-loop.
 ---
 
-# Review Loop
+# Review loop
 
-Drive one immutable candidate through a speed-first review loop. The authoring
-agent self-audits and stabilizes the change, then focused checks run concurrently.
-Once stable, dispatch exactly one fresh independent
-`fast-reviewer`. Do not start a duplicate reviewer wave.
+Control when review happens and how corrections converge. `$code-review` owns
+the review standards, Spec comparison, five gates, findings, and code verdict.
 
-## Five mandatory gates
+## Stable PR gate
 
-Every material candidate receives all five gates:
+Invoke once when all are true:
 
-1. `CORRECTNESS`: behavior, contracts, security, data, lifecycle, and failure paths.
-2. `SIMPLIFICATION`: deletion, ownership, duplication, branching, and structure.
-3. `SEMANTICS`: names, states, roles, units, and logic-bearing values.
-4. `DOCUMENTATION`: changed docs are current, or `NOT_APPLICABLE` is justified.
-5. `VERIFICATION`: focused checks and the affected path are proven, or uncertainty is recorded.
+- the change affects behavior, a public contract, data, security, concurrency,
+  or multiple modules for one behavior, unless the user explicitly requests review;
+- the PR has an exact base SHA and head SHA;
+- the requested implementation is complete;
+- focused checks passed or their known blockers are recorded;
+- the author has no planned code edits before review.
 
-Risk changes depth and checks, never the gate set. The author may self-audit
-and stabilize locally, but only a fresh independent reviewer may approve.
+Before this gate, continue implementation. Commits, pushes, CI updates, review
+comments, and local corrections do not start another review-loop run.
 
-## FAST workflow
+## Loop
 
-1. Pin repository, base/head or worktree identity, request, scope, and risk.
-2. Self-audit the full diff against the five gates; fix and stabilize locally.
-3. Run focused checks concurrently. Record failures, baseline failures, and skipped proof.
-4. Resolve a harness-native `fast-reviewer` receipt bound to the candidate
-   fingerprint, then dispatch one fresh read-only reviewer with the complete
-   diff and current evidence. Protected engine configuration is an optional
-   override, never a prerequisite.
-5. For critical/high actionable local findings, reuse the same `fixer`, correct
-   automatically, run focused checks again, and ask a fresh reviewer for a
-   delta-first independent recheck. Continue while blocker count or severity
-   decreases. There is no fixed review-pass cap, and another local round does not need permission.
-6. Escalate automatically once to `deep-reviewer` only for high-risk ambiguity
-   or disagreement. Ask the user only for product, architecture, production,
-   credential, permission, or destructive authority, or genuine non-convergence.
-7. Keep medium/low simplification, semantics, and documentation observations
-   as visible residuals after final review unless they prove correctness or
-   verification failure.
+1. Pin the PR base and head. Review only `git diff <base>...<head>` and the PR
+   commit list. Exclude staged, unstaged, untracked, and unrelated worktree state.
+2. Dispatch one fresh independent harness-native reviewer. Give it the request,
+   PR base/head, focused checks, relevant repository context, and instruct it to
+   use `$code-review`. The reviewer reads the full PR diff once.
+3. Give accepted critical/high findings to the author or one fixer. Rerun only
+   affected checks.
+4. Continue the same reviewer session with `git diff <old-head>..<new-head>`,
+   affected callers, and affected tests. Do not invoke review-loop again, reread
+   the full PR, or launch a reviewer for each correction.
+5. Start a new fresh reviewer only when the base changes, scope expands
+   materially, reviewers disagree, or a correction crosses auth, tenancy,
+   credentials, migrations, transactions, concurrency, or public contracts.
+6. When blockers converge, run required final checks once, confirm the final PR
+   head, and return the `$code-review` verdict with residual risk.
 
-Always rebuild evidence and require fresh independent approval after a changed
-candidate. The fixer never reviews or approves its own work.
+There is no fixed correction cap and another in-scope correction does not need
+permission. Ask only for missing product or architecture decisions, production,
+credentials, permission-changing or destructive authority, or genuine
+non-convergence. The author and fixer never approve their own work.
 
-## Separate states
+Hosting review, CI monitoring, external providers, merge, deployment, and
+tracker state stay outside this skill.
 
-Report these independently on the unchanged candidate:
+## Roles and references
 
-- `CODE READY`: local authoring, self-audit, and required focused proof are complete.
-- `CHECKS GREEN`: promised local/remote checks passed; this does not imply review.
-- `FORMAL REVIEW`: hosting approvals, change requests, and threads.
-- `MERGE READY`: all required states hold on the same candidate identity.
+Use native reviewer and fixer roles. Protected engine selection is an optional
+explicit override described in `references/engine-selection.md`, never part of
+the normal path. Use a stronger reviewer only for the escalation conditions
+above.
 
-External PR reviewers and providers are outside this skill and are never waited
-on. The `watcher` role may monitor external state with read-only capability but
-has no verdict or approval authority.
+Read `references/real-diff-benchmark.md` only when evaluating this skill.
 
-## Portable roles
-
-Use truthful role receipts for `fast-reviewer`, `deep-reviewer`, `fixer`, and
-`watcher`. The default path uses the current harness's native isolated role or
-fresh task/session and records `harness-native` provenance. Missing role maps,
-registries, benchmarks, or model identity are not blockers. Do not ask the user
-to configure review infrastructure during ordinary delivery.
-
-Use protected profile/model mappings only when the user or harness policy
-explicitly requires that override. A malformed explicit override fails closed;
-it does not disable the native path for later runs. The author or controller may
-act as fixer and watcher, but only a fresh independent context may approve. A
-reviewer receipt is valid only while the pre-verdict fingerprint is unchanged.
-
-Before reviewer dispatch load only:
-
-- `references/review-protocol.md` for identity, lifecycle, convergence, and states;
-- `references/reviewer-contract.md` for packets, findings, receipts, and approval.
-
-Triggered references:
-
-- `references/correctness-and-risk.md`, `references/quality-simplification.md`, and `references/semantic-integrity.md` for concrete code questions;
-- `references/documentation-impact.md` and `references/runtime-proof-and-qa.md` for docs or executable-path proof;
-- `references/systemic-risks.md`, `references/go-review.md`, and `references/quality-gate-ratchet.md` for their named boundaries;
-- `references/engine-selection.md` for native and protected role receipts and `references/real-diff-benchmark.md` only when evaluating this skill.
-
-Load other references only when their concrete trigger applies. A clean review
-is scoped evidence, not formal approval, merge, deploy, or tracker completion.
-
-## Definition of done
-
-- The current candidate has one identity and truthful native or protected role receipts.
-- All five gates have receipts; every critical/high blocker is fixed or directly rebutted.
-- Final approval is fresh, independent, and bound to the current fingerprint.
-- Focused checks, applicable lint/typecheck/build, and `git diff --check` passed or are explicit blockers.
-- Residual debt, skipped proof, baseline failures, and uncertainty are visible.
+The loop is complete when the final head is unchanged, `$code-review` reports
+no critical/high blocker, required checks passed or are explicitly blocked, and
+residual risk is visible.

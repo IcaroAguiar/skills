@@ -1548,38 +1548,35 @@ console.log("PASS review-loop-namespace");
 
 const skillText = readFileSync(join(scriptDir, "..", "SKILL.md"), "utf8");
 const referenceFiles = [
-  "correctness-and-risk.md",
-  "quality-simplification.md",
-  "semantic-integrity.md",
-  "documentation-impact.md",
   "engine-selection.md",
-  "review-protocol.md",
-  "reviewer-contract.md",
 ];
 const referenceTexts = referenceFiles.map((file) => readFileSync(join(scriptDir, "..", "references", file), "utf8"));
-const skillCorpus = [skillText, ...referenceTexts].join("\n");
-expectIncludes("fast-default", skillText, "focused checks run concurrently");
+const codeReviewRoot = join(scriptDir, "..", "..", "code-review");
+const codeReviewText = readFileSync(join(codeReviewRoot, "SKILL.md"), "utf8");
+const codeReviewStandards = readFileSync(join(codeReviewRoot, "references", "review-standards.md"), "utf8");
+const skillCorpus = [skillText, ...referenceTexts, codeReviewText, codeReviewStandards].join("\n");
+expectIncludes("stable-pr-gate", skillText, "Invoke once when all are true");
+expectIncludes("code-review-dependency", skillText, "$code-review");
 expectIncludes("independent-review", skillText, "fresh independent");
-expectIncludes("portable-role-receipts", skillText, "native or protected role receipts");
-expectIncludes("autonomous-critical-high", skillText, "There is no fixed review-pass cap");
-expectIncludes("separate-code-state", skillText, "CODE READY");
-expectIncludes("watcher-no-authority", skillText, "watcher");
+expectIncludes("one-full-diff", skillText, "reads the full PR diff once");
+expectIncludes("same-reviewer-session", skillText, "same reviewer session");
+expectIncludes("autonomous-critical-high", skillText, "There is no fixed correction cap");
+expectIncludes("pr-diff-only", skillText, "git diff <base>...<head>");
+expectIncludes("external-state-boundary", skillText, "CI monitoring, external providers");
 for (const file of referenceFiles) {
   expectIncludes("reference-routing", skillText, `references/${file}`);
 }
 for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) {
-  expectIncludes("five-gate-contract", skillText, `\`${gate}\``);
+  expectIncludes("five-gate-contract", codeReviewStandards, `\`${gate}\``);
 }
-expectIncludes("definition-of-done", skillText, "## Definition of done");
-expectIncludes("self-approval-denied", skillText, "fixer never reviews or approves its own work");
-expectIncludes("fresh-candidate-review", skillText, "Always rebuild evidence and require fresh independent approval");
-expectIncludes("simplification-gate", skillCorpus, "Prefer deleting incidental complexity");
-expectIncludes("semantic-gate", skillCorpus, "roadmap phases");
-expectIncludes("documentation-gate", skillCorpus, "NOT_APPLICABLE");
-expectIncludes("engine-native-default", skillCorpus, "Missing protected configuration is not a blocker");
-expectIncludes("engine-fingerprint-binding", skillCorpus, "candidate fingerprint");
-expectIncludes("engine-protected-no-substitution", skillCorpus, "never substitutes another protected profile");
-expectIncludes("fixer-boundary", skillCorpus, "It must not approve");
+expectIncludes("tautological-test-standard", codeReviewStandards, "Tautological tests considered harmful");
+expectIncludes("direct-single-review", codeReviewText, "Do not spawn nested reviewers");
+expectIncludes("standards-spec-axes", codeReviewText, "Keep the axes");
+expectIncludes("self-approval-denied", skillText, "author and fixer never approve their own work");
+expectIncludes("completion-criterion", skillText, "The loop is complete when the final head is unchanged");
+expectIncludes("engine-native-default", skillCorpus, "selection, registry, or qualification setup");
+expectIncludes("engine-protected-no-substitution", skillCorpus, "never substitute another profile");
+expectIncludes("fixer-boundary", skillCorpus, "never approve their own work");
 expectNotIncludes("no-local-user-paths", skillCorpus, "/Users/");
 console.log("PASS public-skill-contract");
 

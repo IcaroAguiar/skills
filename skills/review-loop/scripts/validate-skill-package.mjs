@@ -74,6 +74,16 @@ function lineCount(text) {
   return text ? (text.endsWith("\n") ? text.split("\n").length - 1 : text.split("\n").length) : 0;
 }
 
+function corpusUnder(directory) {
+  const texts = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) texts.push(corpusUnder(path));
+    else texts.push(readFileSync(path, "utf8"));
+  }
+  return texts.join("\n");
+}
+
 function expectIncludes(label, text, phrase) {
   if (!text.includes(phrase)) fail(`${label} must include ${JSON.stringify(phrase)}`);
 }
@@ -101,27 +111,32 @@ const frontmatter = skill.match(/^---\n([\s\S]*?)\n---\n/);
 const frontmatterKeys = frontmatter ? [...frontmatter[1].matchAll(/^([A-Za-z0-9_-]+):/gm)].map((match) => match[1]) : [];
 if (frontmatterKeys.join(",") !== "name,description") fail(`frontmatter keys must be exactly name,description; found ${frontmatterKeys.join(",") || "none"}`);
 expectIncludes("SKILL.md", skill, "name: review-loop");
-for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) expectIncludes("SKILL.md", skill, `\`${gate}\``);
 for (const phrase of [
-  "self-audits and stabilizes",
-  "focused checks run concurrently",
-  "fast-reviewer",
-  "deep-reviewer",
-  "delta-first",
-  "There is no fixed review-pass cap",
-  "does not need permission",
-  "visible residuals",
-  "CODE READY",
-  "CHECKS GREEN",
-  "FORMAL REVIEW",
-  "MERGE READY",
-  "External PR reviewers and providers are outside this skill and are never waited",
-  "watcher",
-  "no verdict or approval authority",
-  "harness-native",
-  "Missing role maps",
-  "never a prerequisite",
+  "$code-review",
+  "Invoke once when all are true",
+  "the change affects behavior",
+  "git diff <base>...<head>",
+  "reads the full PR diff once",
+  "same reviewer session",
+  "Start a new fresh reviewer only when the base changes",
+  "There is no fixed correction cap",
+  "another in-scope correction",
+  "Hosting review, CI monitoring, external",
+  "Protected engine selection is an optional",
 ]) expectIncludes("FAST contract", skill, phrase);
+for (const phrase of ["PR maintenance mode", "base/head or worktree identity", "ask a fresh reviewer for a", "fingerprint-review-state.mjs"]) expectNotIncludes("stable PR contract", skill, phrase);
+
+const codeReviewPath = resolve(skillRoot, "..", "code-review", "SKILL.md");
+const codeReviewStandardsPath = resolve(skillRoot, "..", "code-review", "references", "review-standards.md");
+if (!existsSync(codeReviewPath) || !existsSync(codeReviewStandardsPath)) {
+  fail("review-loop requires the sibling code-review skill and its review standards");
+} else {
+  const codeReview = readFileSync(codeReviewPath, "utf8");
+  const reviewStandards = readFileSync(codeReviewStandardsPath, "utf8");
+  for (const phrase of ["Review directly in the current context", "Standards", "Spec", "Delta review"]) expectIncludes("code-review dependency", codeReview, phrase);
+  for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) expectIncludes("code-review standards", reviewStandards, `\`${gate}\``);
+  expectIncludes("code-review standards", reviewStandards, "Tautological tests considered harmful");
+}
 
 const actualReferences = existsSync(safePath("references"))
   ? readdirSync(safePath("references")).filter((file) => file.endsWith(".md")).sort().map((file) => `references/${file}`)
@@ -140,13 +155,6 @@ if (publicCorpusLines > MAX_PUBLIC_CORPUS_LINES) fail(`public skill corpus has $
 
 for (const phrase of [
   "fresh independent",
-  "CORRECTNESS",
-  "SIMPLIFICATION",
-  "SEMANTICS",
-  "DOCUMENTATION",
-  "VERIFICATION",
-  "NOT_APPLICABLE",
-  "residual uncertainty",
 ]) expectIncludes("public corpus", publicCorpus, phrase);
 for (const marker of ["/Users/", "/home/", "/private/tmp/", "CODEX_DEFAULT_ENGINE_POLICY"]) expectNotIncludes("public corpus", publicCorpus, marker);
 if (HARDCODED_MODEL_LITERAL.test(publicCorpus)) fail("public corpus contains a hardcoded model ID");
@@ -160,7 +168,7 @@ for (const template of EXPECTED_TEMPLATES) if (template.endsWith(".json")) parse
 
 const selector = readRequired("scripts/select-review-engines.mjs");
 for (const phrase of [
-  '"fast-reviewer", "deep-reviewer", "fixer", "watcher"',
+  '"fast-reviewer", "deep-reviewer", "fixer"',
   "role map",
   "no exact live candidate",
   "must not be a symbolic link",
@@ -177,12 +185,14 @@ if (HARDCODED_MODEL_LITERAL.test(selector)) fail("selector contains a hardcoded 
 for (const forbidden of ["CODEX_DEFAULT_ENGINE_POLICY", "reviewerCostCeilingUsd"]) expectNotIncludes("selector", selector, forbidden);
 
 const selectorTests = readRequired("scripts/test-engine-selection.mjs");
-for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "watcher", "codex", "claude-code", "cursor", "opencode", "runNative", "harness-native", "no-ranking-fallback", "watcher-no-authority", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
+for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "codex", "claude-code", "cursor", "opencode", "runNative", "harness-native", "no-ranking-fallback", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
 if (HARDCODED_MODEL_LITERAL.test(selectorTests)) fail("selector tests contain a hardcoded model ID");
 
 const roleMap = parseJson("templates/role-map.example.json");
 if (!roleMap.mappings || !roleMap.mappings.codex) fail("role-map.example.json must show a protected codex mapping");
-for (const role of ["fast-reviewer", "deep-reviewer", "fixer", "watcher"]) if (!roleMap.mappings.codex[role]) fail(`role-map.example.json is missing ${role}`);
+for (const role of ["fast-reviewer", "deep-reviewer", "fixer"]) if (!roleMap.mappings.codex[role]) fail(`role-map.example.json is missing ${role}`);
+const retiredMonitoringRole = ["watch", "er"].join("");
+if (corpusUnder(skillRoot).toLowerCase().includes(retiredMonitoringRole)) fail("retired monitoring role must not exist in review-loop");
 const openai = readRequired("agents/openai.yaml");
 expectIncludes("agents/openai.yaml", openai, "display_name: \"Review Loop\"");
 expectIncludes("agents/openai.yaml", openai, "$review-loop");
@@ -195,12 +205,16 @@ const result = {
     frontmatter: frontmatterKeys,
     references: actualReferences,
     mandatoryGates: 5,
-    fastDefault: true,
+    implicitStablePrGate: true,
+    prDiffOnly: true,
+    oneFullDiffReview: true,
+    sameSessionDeltaRecheck: true,
     autonomousCriticalHighCorrection: true,
     portableNativeRoles: true,
     protectedOverrides: true,
     noHardcodedModelIds: true,
-    externalWatcherHasNoVerdictAuthority: true,
+    codeReviewDependency: true,
+    externalMonitoringExcluded: true,
     freshIndependentApproval: true,
   },
   failures,

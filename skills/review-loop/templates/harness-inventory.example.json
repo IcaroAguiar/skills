@@ -60,25 +60,6 @@
         "risks": ["low", "medium", "high", "critical"]
       },
       "cost": { "tier": "medium", "expectedRunUsd": 0.7, "retryMultiplier": 1.1 }
-    },
-    {
-      "harness": "codex",
-      "id": "watcher-profile",
-      "modelId": "not_observable",
-      "reasoningMode": "opaque-watcher",
-      "roles": ["watcher"],
-      "capabilities": {
-        "readOnly": true,
-        "freshContext": true,
-        "workspaceWrite": false,
-        "monitoring": true,
-        "verdictAuthority": false,
-        "contextTokens": 64000,
-        "repositoryAccess": true,
-        "toolAccess": ["git", "rg", "monitoring"],
-        "risks": ["low", "medium", "high", "critical"]
-      },
-      "cost": { "tier": "low", "expectedRunUsd": 0.2, "retryMultiplier": 1 }
     }
   ]
 }

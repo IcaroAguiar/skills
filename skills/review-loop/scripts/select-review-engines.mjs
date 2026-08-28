@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { isAbsolute, relative, resolve } from "node:path";
 
 const args = process.argv.slice(2);
-const ROLES = ["fast-reviewer", "deep-reviewer", "fixer", "watcher"];
+const ROLES = ["fast-reviewer", "deep-reviewer", "fixer"];
 const RISKS = ["low", "medium", "high", "critical"];
 const OPAQUE_HARNESSES = new Set(["codex", "claude-code", "cursor", "opencode"]);
 const REVIEWER_GATE_RECALL_THRESHOLD = 0.85;
@@ -121,10 +121,9 @@ function normalizeCandidateFingerprint(value) {
 function nativeCapabilities(role) {
   const reviewer = role === "fast-reviewer" || role === "deep-reviewer";
   return {
-    readOnly: reviewer || role === "watcher",
+    readOnly: reviewer,
     freshContext: reviewer,
     workspaceWrite: role === "fixer",
-    monitoring: role === "watcher",
     verdictAuthority: reviewer,
   };
 }
@@ -189,7 +188,7 @@ function evidenceFor(candidate, role, fixture, maxAgeDays) {
   requireString(`candidate ${candidate.id} evidence.corpusId`, evidence.corpusId);
   if (!SHA256.test(requireString(`candidate ${candidate.id} evidence.artifactFingerprint`, evidence.artifactFingerprint))) die(`candidate ${candidate.id} evidence fingerprint is invalid`);
   fresh(`candidate ${candidate.id} evidence.observedAt`, evidence.observedAt, maxAgeDays * DAY, fixture);
-  const required = role === "fixer" ? FIXER_EVIDENCE : role === "watcher" ? [] : REVIEWER_EVIDENCE;
+  const required = role === "fixer" ? FIXER_EVIDENCE : REVIEWER_EVIDENCE;
   if (!Array.isArray(evidence.metricNames) || required.some((metric) => !evidence.metricNames.includes(metric))) die(`candidate ${candidate.id} evidence does not cover ${role}`);
   return evidence;
 }
@@ -230,7 +229,7 @@ function capabilities(candidate, role, risk, requiredContext, requireRepository,
   if (!Array.isArray(value.toolAccess) || value.toolAccess.some((tool) => typeof tool !== "string" || !tool)) die(`candidate ${candidate.id} has no normalized tool access`);
   const missing = requiredTools.filter((tool) => !value.toolAccess.includes(tool));
   if (missing.length) die(`candidate ${candidate.id} lacks required tools: ${missing.join(", ")}`);
-  if (role !== "watcher" && value.freshContext !== true) die(`candidate ${candidate.id} lacks fresh-context capability`);
+  if (value.freshContext !== true) die(`candidate ${candidate.id} lacks fresh-context capability`);
   if (role === "fast-reviewer" || role === "deep-reviewer") {
     if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not isolated for review`);
     if (value.verdictAuthority !== true) die(`candidate ${candidate.id} reviewer verdict authority must be true`);
@@ -238,11 +237,6 @@ function capabilities(candidate, role, risk, requiredContext, requireRepository,
   if (role === "fixer") {
     if (value.workspaceWrite !== true) die(`candidate ${candidate.id} lacks workspace-write capability`);
     if (value.verdictAuthority !== false) die(`candidate ${candidate.id} fixer verdict authority must be false`);
-  }
-  if (role === "watcher") {
-    if (value.readOnly !== true || value.workspaceWrite === true) die(`candidate ${candidate.id} is not read-only for monitoring`);
-    if (value.monitoring !== true && !value.toolAccess.some((tool) => /^(monitor|monitoring)$/i.test(tool))) die(`candidate ${candidate.id} lacks monitoring capability`);
-    if ((value.verdictAuthority ?? candidate.verdictAuthority) !== false) die(`candidate ${candidate.id} watcher authority must be false`);
   }
   return value;
 }
@@ -314,12 +308,12 @@ function usage() {
 
 Usage:
   node select-review-engines.mjs --harness <opaque-id>
-    --role fast-reviewer|deep-reviewer|fixer|watcher
+    --role fast-reviewer|deep-reviewer|fixer
     --risk low|medium|high|critical [--native-role-id <native-role>]
     --candidate-fingerprint sha256:<fingerprint> --candidate-root <repo> [--json]
 
   node select-review-engines.mjs --registry <protected-registry.json> --role-map <protected-role-map.json>
-    --protected --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer|watcher
+    --protected --harness <opaque-id> --role fast-reviewer|deep-reviewer|fixer
     --risk low|medium|high|critical --candidate-fingerprint sha256:<fingerprint>
     --candidate-root <repo> [--json]
     [--required-context-tokens <integer>] [--required-tool <name>]
@@ -335,7 +329,7 @@ if (has("--help")) {
 }
 
 const role = option("--role");
-if (!ROLES.includes(role)) die("--role must be fast-reviewer, deep-reviewer, fixer, or watcher");
+if (!ROLES.includes(role)) die("--role must be fast-reviewer, deep-reviewer, or fixer");
 const risk = option("--risk", "medium");
 if (!RISKS.includes(risk)) die("--risk must be low, medium, high, or critical");
 const candidateRootOption = option("--candidate-root");
@@ -524,7 +518,6 @@ const receipt = {
     readOnly: validated.capabilities.readOnly === true,
     freshContext: validated.capabilities.freshContext === true,
     workspaceWrite: validated.capabilities.workspaceWrite === true,
-    monitoring: validated.capabilities.monitoring === true,
     verdictAuthority: validated.capabilities.verdictAuthority === true,
     contextTokens: validated.capabilities.contextTokens,
     repositoryAccess: validated.capabilities.repositoryAccess,
@@ -536,9 +529,7 @@ const receipt = {
     ? "explicit protected fast-reviewer mapping; one fresh independent review"
     : role === "deep-reviewer"
       ? "explicit protected deep-reviewer mapping for one authorized escalation"
-      : role === "fixer"
-        ? "explicit protected fixer mapping reused for local blocker corrections"
-        : "explicit protected watcher mapping; read-only monitoring without verdict authority",
+      : "explicit protected fixer mapping reused for local blocker corrections",
 };
 if (sensitiveRequested) {
   const sensitive = selected.qualification.evidence.sensitive;
