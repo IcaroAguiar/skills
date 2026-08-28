@@ -10,7 +10,9 @@ Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-The issue tracker should have been provided to you — run `/setup-matt-pocock-skills` if `docs/agents/issue-tracker.md` is missing.
+Use `docs/agents/issue-tracker.md` when present. Otherwise use available
+issue-tracker tooling or the user-provided request; missing tracker integration
+must not block the review.
 
 ## Process
 
@@ -18,15 +20,18 @@ The issue tracker should have been provided to you — run `/setup-matt-pocock-s
 
 Whatever the user said is the fixed point — a commit SHA, branch name, tag, `main`, `HEAD~5`, etc. If they didn't specify one, ask for it.
 
-Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
+Resolve both ends once with `git rev-parse <fixed-point>` and `git rev-parse HEAD`.
+Use only those full SHAs afterward. Capture `git diff <base-sha>...<head-sha>`
+and `git log <base-sha>..<head-sha> --oneline`.
 
-Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside two parallel sub-agents.
+Before going further, confirm the diff is non-empty. A bad ref or empty diff
+should fail here — not inside two parallel sub-agents.
 
 ### 2. Identify the spec source
 
 Look for the originating spec, in this order:
 
-1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.) — fetch via the workflow in `docs/agents/issue-tracker.md`.
+1. Issue references in the commit messages (`#123`, `Closes #45`, GitLab `!67`, etc.) — use `docs/agents/issue-tracker.md` when available, otherwise use a harness-native tracker integration.
 2. A path the user passed as an argument.
 3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
@@ -63,19 +68,21 @@ heuristic smells, but do not remove a gate.
 
 ### 4. Spawn both sub-agents in parallel
 
-Send a single message with two `Agent` tool calls. Use the `general-purpose` subagent for both.
+Dispatch two independent read-only sub-agents in parallel with the harness-native
+collaboration tool. If parallel sub-agents are unavailable, run the axes in
+separate fresh contexts without sharing conclusions.
 
 **Standards sub-agent prompt** — include:
 
 - The full diff command and commit list.
 - The list of standards-source files you found in step 3, **plus the smell baseline from step 3 and `references/review-standards.md`** pasted in full — the sub-agent has no other access to them.
-- The brief: "Report — per file/hunk where relevant — (a) every place the diff violates a documented standard: cite the standard (file + the rule); (b) any baseline smell you spot: name it and quote the hunk; and (c) any test-evidence violation from the shared review standards. Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. End with the five gate statuses. Under 400 words."
+- The brief: "Report — per file/hunk where relevant — (a) every place the diff violates a documented standard: cite the standard (file + the rule); (b) any baseline smell you spot: name it and quote the hunk; and (c) any test-evidence violation from the shared review standards. Label each finding with its affected gate. Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling enforces. Under 400 words."
 
 **Spec sub-agent prompt** — include:
 
 - The diff command and commit list.
 - The path or fetched contents of the spec.
-- The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line for each finding. Under 400 words."
+- The brief: "Report: (a) requirements the spec asked for that are missing or partial; (b) behaviour in the diff that wasn't asked for (scope creep); (c) requirements that look implemented but where the implementation looks wrong. Quote the spec line and label the affected gate for each finding. Under 400 words."
 
 If the spec is missing, skip the Spec sub-agent and note this in the final report.
 
@@ -88,6 +95,13 @@ End with a one-line summary: total findings per axis, and the worst issue _withi
 Then add the compact gate line from `references/review-standards.md` and one
 verdict: `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or
 `BLOCKED`.
+
+Derive that single gate line from both reports. A missing or incorrectly
+implemented Spec requirement fails `CORRECTNESS`. Any blocking finding fails its
+labelled gate. Use `BLOCKED` when required evidence is unavailable, otherwise
+`PASS`; documentation may be `N/A`. Return `REQUEST_CHANGES` for any failed gate,
+`BLOCKED` for any blocked gate, `APPROVE_WITH_RESIDUAL_RISK` only for non-blocking
+residuals, and `APPROVE` when both axes are clean.
 
 ## Why two axes
 
