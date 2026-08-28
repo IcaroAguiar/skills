@@ -1,6 +1,3 @@
 interface:
   display_name: "Code Review"
-  short_description: "Uma revisão no diff estável da PR"
-  default_prompt: "Use $code-review quando a implementação e os checks estiverem concluídos: revise o diff estável da PR uma vez e reutilize o mesmo reviewer para os deltas."
-policy:
-  allow_implicit_invocation: true
+  short_description: "Review a diff on standards and spec"

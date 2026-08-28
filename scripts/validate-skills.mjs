@@ -87,7 +87,7 @@ for (const requiredName of requiredSkillNames) {
 }
 
 const codeReview = skillSources.get("code-review") ?? "";
-for (const phrase of ["Stable review gate", "dispatch exactly one fresh", "git diff <base>...<head>", "Delta review"]) {
+for (const phrase of ["Two-axis review of the diff", "parallel sub-agents", "git diff <fixed-point>...HEAD", "Standards sub-agent prompt", "Spec sub-agent prompt", "references/review-standards.md", "APPROVE_WITH_RESIDUAL_RISK"]) {
   if (!codeReview.includes(phrase)) {
     console.error(`code-review: missing required contract ${phrase}`);
     failures += 1;
