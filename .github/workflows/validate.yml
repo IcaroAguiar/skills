@@ -17,4 +17,5 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/validate-skills.mjs
+      - run: node scripts/test-validate-skills.mjs
       - run: node scripts/test-design-art-direction-contracts.mjs
