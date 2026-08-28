@@ -27,20 +27,8 @@ contract-level inputs and outputs, or a regression that fails before the fix.
 A short test with an obvious literal expectation is not tautological merely
 because it is simple.
 
-## Structural baseline
+Report the gate result compactly:
 
-Repository standards override this baseline. Treat these as judgement calls and
-report them only when the changed diff shows a concrete cost:
+`CORRECTNESS=<status> SIMPLIFICATION=<status> SEMANTICS=<status> DOCUMENTATION=<status> VERIFICATION=<status>`
 
-- `Mysterious Name`: a name hides what a value, function, state, or unit means.
-- `Duplicated Code`: the same logic shape appears in more than one changed place.
-- `Data Clumps`: the same fields or parameters repeatedly travel together.
-- `Primitive Obsession`: a primitive stands in for a domain concept with rules.
-- `Repeated Conditionals`: the same decision is reimplemented across the change.
-- `Shotgun Surgery`: one behavior requires scattered edits across unrelated owners.
-- `Divergent Change`: one module changes for unrelated reasons in the same diff.
-- `Speculative Generality`: abstraction or configuration exists without a current requirement.
-- `Middle Man`: a changed layer delegates without owning policy, translation, or behavior.
-
-Do not propose cleanup outside the reviewed diff unless it is required to make
-the changed behavior correct or verifiable.
+Use `PASS`, `FAIL`, or `BLOCKED`; documentation may also use `N/A`.

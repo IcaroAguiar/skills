@@ -87,9 +87,15 @@ for (const requiredName of requiredSkillNames) {
 }
 
 const codeReview = skillSources.get("code-review") ?? "";
-for (const phrase of ["Stable review gate", "dispatch exactly one fresh", "git diff <base>...<head>", "Delta review"]) {
+for (const phrase of ["Two-axis review of the diff", "parallel sub-agents", "git rev-parse <fixed-point>", "git diff <base-sha>...<head-sha>", "Standards sub-agent prompt", "Spec sub-agent prompt", "references/review-standards.md", "Derive that single gate line from both reports", "APPROVE_WITH_RESIDUAL_RISK"]) {
   if (!codeReview.includes(phrase)) {
     console.error(`code-review: missing required contract ${phrase}`);
+    failures += 1;
+  }
+}
+for (const forbidden of ["/setup-matt-pocock-skills", "general-purpose` subagent"]) {
+  if (codeReview.includes(forbidden)) {
+    console.error(`code-review: contains harness-specific dependency ${forbidden}`);
     failures += 1;
   }
 }
