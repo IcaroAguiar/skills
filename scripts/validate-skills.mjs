@@ -10,11 +10,13 @@ const publicCorpusRoots = [
 ];
 const entries = await readdir(skillsRoot, { withFileTypes: true });
 const seen = new Set();
+const skillSources = new Map();
 const retiredSkillNames = new Set([
   ["split", "review"].join("-"),
   ["hardening", "agentic", "code"].join("-"),
+  ["review", "loop"].join("-"),
 ]);
-const requiredSkillNames = new Set(["code-review", "review-loop"]);
+const requiredSkillNames = new Set(["code-review"]);
 const publicTextExtensions = new Set([".json", ".md", ".mjs", ".py", ".toml", ".ts", ".yaml", ".yml"]);
 let failures = 0;
 
@@ -64,7 +66,10 @@ for (const entry of entries.filter((candidate) => candidate.isDirectory()).sort(
     console.error(`${entry.name}: duplicate skill name ${name}`);
     failures += 1;
   }
-  if (name) seen.add(name);
+  if (name) {
+    seen.add(name);
+    skillSources.set(name, source);
+  }
 
   for (const retiredName of retiredSkillNames) {
     if (source.includes(`$${retiredName}`) || source.includes(`skills/${retiredName}`)) {
@@ -79,6 +84,25 @@ for (const requiredName of requiredSkillNames) {
     console.error(`${requiredName}: required replacement skill is missing`);
     failures += 1;
   }
+}
+
+const codeReview = skillSources.get("code-review") ?? "";
+for (const phrase of ["Stable review gate", "dispatch exactly one fresh", "git diff <base>...<head>", "Delta review"]) {
+  if (!codeReview.includes(phrase)) {
+    console.error(`code-review: missing required contract ${phrase}`);
+    failures += 1;
+  }
+}
+const reviewStandards = await readFile(new URL("../skills/code-review/references/review-standards.md", import.meta.url), "utf8");
+for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) {
+  if (!reviewStandards.includes(`\`${gate}\``)) {
+    console.error(`code-review: missing ${gate} standard`);
+    failures += 1;
+  }
+}
+if (!reviewStandards.includes("Tautological tests considered harmful")) {
+  console.error("code-review: missing tautological-test standard");
+  failures += 1;
 }
 
 const rootPublicFiles = (await readdir(repositoryRoot, { withFileTypes: true }))

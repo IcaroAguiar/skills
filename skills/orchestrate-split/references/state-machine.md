@@ -26,8 +26,8 @@ fingerprint from the protected repository state (`--repo`), then pass the
 receipt id plus optional confirming fingerprint to the transition command. A
 material-code receipt is valid only when it is one of these two forms:
 
-- `REVIEW_LOOP_APPROVAL`: a current Review Loop evidence receipt has verdict
-  `APPROVE`, is bound to the exact candidate fingerprint, mode, base,
+- `CODE_REVIEW_APPROVAL`: a current Code Review evidence receipt has verdict
+  `APPROVE`, is bound to the exact committed candidate fingerprint, base,
   repository, and schema version, and each of `CORRECTNESS`, `SIMPLIFICATION`,
   `SEMANTICS`, `DOCUMENTATION`, and `VERIFICATION` has a current gate receipt
   bound to that same identity.
@@ -36,8 +36,8 @@ material-code receipt is valid only when it is one of these two forms:
   accepting identity, time, statement, risk evidence, and all five gate
   receipts. It is an exception receipt, never an inferred default.
 
-Reject a missing receipt, a second admission, any non-`APPROVE` Review Loop
-verdict, a missing gate, stale evidence, a changed graph version, a forged or
+Reject a missing receipt, a second admission, any non-`APPROVE` Code Review
+verdict, a non-commit review candidate, a missing gate, stale evidence, a changed graph version, a forged or
 self-declared fingerprint, or a fingerprint mismatch between the protected
 state, candidate, gate evidence, review/acceptance evidence, and transition
 argument. `NOT_APPLICABLE` needs a gate-specific rationale; it does not remove

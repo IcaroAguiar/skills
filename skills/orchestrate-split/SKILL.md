@@ -44,14 +44,15 @@ Act as the control plane. Keep requirements, decisions, plan, integration, and u
 1. Transition to `REPORTING` only after every required execution, integration, and test receipt is current.
 2. Have `$split-report` produce a native, user-visible review canvas and materialize any contractually required artifacts.
 3. Present the outcome, graph status, changes, behavioral proof, residual risk, and blocked or skipped obligations.
-4. For material code, invoke `$review-loop` automatically on the immutable final
-   candidate identity. Reuse a current Review Loop receipt only when it covers
-   that exact commit, index, or worktree fingerprint; otherwise require a fresh
-   review. Non-code runs must record why review is `NOT_APPLICABLE`.
+4. For material code, invoke `$code-review` automatically on the immutable final
+   candidate identity. Reuse a current Code Review receipt only when it covers
+   that exact commit fingerprint; otherwise require a fresh review. Commit the
+   integrated candidate before review. Non-code runs must record why review is
+   `NOT_APPLICABLE`.
 5. Admit a structured completion receipt while in `AWAITING_REVIEW_DECISION`.
-   For a Review Loop closeout it must be `REVIEW_LOOP_APPROVAL`, carry the
+   For a Code Review closeout it must be `CODE_REVIEW_APPROVAL`, carry the
    current candidate SHA-256/mode/base/repository/schema identity and graph
-   version, name a Review Loop evidence receipt with verdict `APPROVE`, and
+   version, name a Code Review evidence receipt with verdict `APPROVE`, and
    link a current receipt for each of `CORRECTNESS`, `SIMPLIFICATION`,
    `SEMANTICS`, `DOCUMENTATION`, and `VERIFICATION`. Gate and review receipts
    must be bound to that same identity; a stale, forged, divergent, negative,

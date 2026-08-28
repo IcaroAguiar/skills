@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Produce a read-only identity for the exact repository state a review saw.
+ * Produce a read-only identity for the exact repository state a ledger receipt saw.
  *
  * The SHA-256 is over an explicitly framed byte stream, not a formatted diff:
  *
- *   review-loop-candidate-state-v1\0
+ *   split-engineering-candidate-state-v1\0
  *   <field-name>\0<byte-length-as-decimal>\0<raw-field-bytes>\0 ...
  *
  * Fields are emitted in the fixed order below. JSON fields use recursively
@@ -22,7 +22,7 @@ const NULL = Buffer.from([0]);
 const DIFF_OPTIONS = ["--binary", "--full-index", "--no-ext-diff", "--no-textconv", "--find-renames=50%"];
 
 function fail(message) {
-  process.stderr.write(`review-loop fingerprint: ${message}\n`);
+  process.stderr.write(`split-engineering fingerprint: ${message}\n`);
   process.exitCode = 1;
   throw new Error(message);
 }
@@ -195,7 +195,7 @@ function frame(parts, name, value) {
 }
 
 function buildIdentity({ repositoryId, mode, base, head, changedFiles, excluded, candidateBinaryFields, excludedBinaryFields = [], snapshots, excludedSnapshots = [] }) {
-  const parts = [Buffer.from("review-loop-candidate-state-v1\0", "utf8")];
+  const parts = [Buffer.from("split-engineering-candidate-state-v1\0", "utf8")];
   frame(parts, "repositoryId", repositoryId);
   frame(parts, "mode", mode);
   frame(parts, "base", base ?? "");
@@ -302,7 +302,7 @@ try {
   main();
 } catch (error) {
   if (!process.exitCode) {
-    process.stderr.write(`review-loop fingerprint: ${error.message}\n`);
+    process.stderr.write(`split-engineering fingerprint: ${error.message}\n`);
     process.exitCode = 1;
   }
 }
