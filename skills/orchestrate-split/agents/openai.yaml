@@ -1,6 +1,0 @@
-interface:
-  display_name: "Split Orchestrator"
-  short_description: "Run an evidence-gated engineering graph"
-  default_prompt: "Use $orchestrate-split to plan and run this task through gated split engineering."
-policy:
-  allow_implicit_invocation: false

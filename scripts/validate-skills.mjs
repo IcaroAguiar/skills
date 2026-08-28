@@ -10,13 +10,31 @@ const publicCorpusRoots = [
 ];
 const entries = await readdir(skillsRoot, { withFileTypes: true });
 const seen = new Set();
-const skillSources = new Map();
 const retiredSkillNames = new Set([
   ["split", "review"].join("-"),
   ["hardening", "agentic", "code"].join("-"),
   ["review", "loop"].join("-"),
+  ["academic", "authorship", "refinement"].join("-"),
+  ["advisor", "split"].join("-"),
+  ["catalog", "maintenance"].join("-"),
+  ["code", "review"].join("-"),
+  ["engineering", "advisor"].join("-"),
+  ["finding", "authenticated", "smoke", "context"].join("-"),
+  ["gating", "testability"].join("-"),
+  ["github", "runner", "ops"].join("-"),
+  ["interactive", "html", "reports"].join("-"),
+  ["luna", "executor"].join("-"),
+  ["orchestrate", "split"].join("-"),
+  ["plan", "advisor", "execute"].join("-"),
+  ["plan", "split"].join("-"),
+  ["root", "cause", "plan"].join("-"),
+  ["split", "execution"].join("-"),
+  ["split", "report"].join("-"),
+  ["split", "test"].join("-"),
+  ["sync", "agent", "harness", "pcwin"].join("-"),
+  ["visual", "fidelity"].join("-"),
 ]);
-const requiredSkillNames = new Set(["code-review"]);
+const requiredSkillNames = new Set(["antigravity-executor", "art-direction", "design-direction", "record-real-dev-e2e", "summarize"]);
 const publicTextExtensions = new Set([".json", ".md", ".mjs", ".py", ".toml", ".ts", ".yaml", ".yml"]);
 let failures = 0;
 
@@ -66,10 +84,7 @@ for (const entry of entries.filter((candidate) => candidate.isDirectory()).sort(
     console.error(`${entry.name}: duplicate skill name ${name}`);
     failures += 1;
   }
-  if (name) {
-    seen.add(name);
-    skillSources.set(name, source);
-  }
+  if (name) seen.add(name);
 
   for (const retiredName of retiredSkillNames) {
     if (source.includes(`$${retiredName}`) || source.includes(`skills/${retiredName}`)) {
@@ -84,31 +99,6 @@ for (const requiredName of requiredSkillNames) {
     console.error(`${requiredName}: required replacement skill is missing`);
     failures += 1;
   }
-}
-
-const codeReview = skillSources.get("code-review") ?? "";
-for (const phrase of ["Two-axis review of the diff", "parallel sub-agents", "git rev-parse <fixed-point>", "git diff <base-sha>...<head-sha>", "Standards sub-agent prompt", "Spec sub-agent prompt", "references/review-standards.md", "Derive that single gate line from both reports", "APPROVE_WITH_RESIDUAL_RISK"]) {
-  if (!codeReview.includes(phrase)) {
-    console.error(`code-review: missing required contract ${phrase}`);
-    failures += 1;
-  }
-}
-for (const forbidden of ["/setup-matt-pocock-skills", "general-purpose` subagent"]) {
-  if (codeReview.includes(forbidden)) {
-    console.error(`code-review: contains harness-specific dependency ${forbidden}`);
-    failures += 1;
-  }
-}
-const reviewStandards = await readFile(new URL("../skills/code-review/references/review-standards.md", import.meta.url), "utf8");
-for (const gate of ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"]) {
-  if (!reviewStandards.includes(`\`${gate}\``)) {
-    console.error(`code-review: missing ${gate} standard`);
-    failures += 1;
-  }
-}
-if (!reviewStandards.includes("Tautological tests considered harmful")) {
-  console.error("code-review: missing tautological-test standard");
-  failures += 1;
 }
 
 const rootPublicFiles = (await readdir(repositoryRoot, { withFileTypes: true }))

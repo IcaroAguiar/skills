@@ -1,4 +1,0 @@
-interface:
-  display_name: "Sync Agent Harness PCwin"
-  short_description: "Sync the Mac harness safely to WSL"
-  default_prompt: "Use $sync-agent-harness-pcwin to synchronize my custom Mac agent harness to PCwin WSL and verify the resulting catalog."

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Split Execution"
-  short_description: "Coordinate isolated implementation work"
-  default_prompt: "Use $split-execution to implement the approved graph in isolated work lanes."
-policy:
-  allow_implicit_invocation: false
