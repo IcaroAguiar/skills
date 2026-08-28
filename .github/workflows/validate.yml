@@ -18,17 +18,9 @@ jobs:
           node-version: 22
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-design-art-direction-contracts.mjs
-      - name: Validate Review Loop package
-        run: node skills/review-loop/scripts/validate-skill-package.mjs skills/review-loop
-      - name: Test Review Loop engine routing
+      - name: Validate code review consumers
         run: |
-          node skills/review-loop/scripts/test-engine-selection.mjs
-          node skills/review-loop/scripts/test-harness-adapters.mjs
-      - name: Test Review Loop state and corpus guards
-        run: |
-          node skills/review-loop/scripts/test-review-state-fingerprint.mjs
-          node skills/review-loop/scripts/test-real-diff-corpus.mjs
-          node skills/review-loop/scripts/test-quality-gate-ratchet.mjs
-          node skills/review-loop/scripts/validate-real-diff-corpus.mjs skills/review-loop/templates/real-diff-corpus.example.json
-      - name: Test Review Loop deterministic collector
-        run: node skills/review-loop/scripts/test-smoke-cleanup.mjs
+          node skills/gating-testability/scripts/validate-skill-package.mjs
+          node --test skills/gating-testability/tests/smoke-pressure-scenarios.test.mjs
+          node skills/orchestrate-split/scripts/test-schema-contract.mjs
+          node skills/orchestrate-split/scripts/fixture-smoke.mjs

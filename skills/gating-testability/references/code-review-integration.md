@@ -1,4 +1,4 @@
-# Review Loop Integration
+# Code Review Integration
 
 This gate is a hard sub-gate for meaningful implementation review.
 
@@ -35,7 +35,7 @@ correctness.
 
 ## Closeout Handshake
 
-`review-loop` may approve only when this gate ends as:
+`code-review` may approve only when this gate ends as:
 
 - `PASS`; or
 - `PASS_WITH_RISK` with named non-blocking residual risk accepted by the primary

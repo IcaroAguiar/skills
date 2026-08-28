@@ -1,6 +1,0 @@
-interface:
-  display_name: "Review Loop"
-  short_description: "Uma revisão no diff estável da PR"
-  default_prompt: "Use $review-loop quando a implementação e os checks estiverem concluídos: revise o diff estável da PR uma vez, corrija blockers e reutilize o reviewer para os deltas."
-policy:
-  allow_implicit_invocation: true

@@ -101,10 +101,10 @@
       "required": ["id", "kind", "candidate", "graphVersion", "gates"],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["REVIEW_LOOP_APPROVAL", "USER_RISK_ACCEPTANCE"] },
+        "kind": { "enum": ["CODE_REVIEW_APPROVAL", "USER_RISK_ACCEPTANCE"] },
         "candidate": { "$ref": "#/$defs/candidate" },
         "graphVersion": { "type": "integer", "minimum": 1 },
-        "reviewLoopReceiptId": { "type": "string", "minLength": 1 },
+        "codeReviewReceiptId": { "type": "string", "minLength": 1 },
         "gates": {
           "type": "object",
           "required": ["CORRECTNESS", "SIMPLIFICATION", "SEMANTICS", "DOCUMENTATION", "VERIFICATION"],
@@ -132,8 +132,13 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "kind": { "const": "REVIEW_LOOP_APPROVAL" } }, "required": ["kind"] },
-          "then": { "required": ["reviewLoopReceiptId"] }
+          "if": { "properties": { "kind": { "const": "CODE_REVIEW_APPROVAL" } }, "required": ["kind"] },
+          "then": {
+            "required": ["codeReviewReceiptId"],
+            "properties": {
+              "candidate": { "properties": { "mode": { "const": "commit" } } }
+            }
+          }
         },
         {
           "if": { "properties": { "kind": { "const": "USER_RISK_ACCEPTANCE" } }, "required": ["kind"] },
