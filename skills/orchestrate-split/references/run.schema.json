@@ -133,7 +133,12 @@
       "allOf": [
         {
           "if": { "properties": { "kind": { "const": "CODE_REVIEW_APPROVAL" } }, "required": ["kind"] },
-          "then": { "required": ["codeReviewReceiptId"] }
+          "then": {
+            "required": ["codeReviewReceiptId"],
+            "properties": {
+              "candidate": { "properties": { "mode": { "const": "commit" } } }
+            }
+          }
         },
         {
           "if": { "properties": { "kind": { "const": "USER_RISK_ACCEPTANCE" } }, "required": ["kind"] },
