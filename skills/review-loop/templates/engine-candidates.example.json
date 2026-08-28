@@ -54,22 +54,6 @@
         "evidence": { "sourceClass": "recognized-harness-review-benchmark", "corpusId": "example-fixer-corpus-v1", "artifactLocator": "protected://review-loop/example-fixer-corpus-v1", "artifactFingerprint": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210", "observedAt": "2026-08-09T00:00:00Z", "metricNames": ["firstPassAcceptance", "criticalRegressions", "scopeCreepRate", "documentationCorrectness", "escalationCompliance"] },
         "metrics": { "firstPassAcceptance": 0.88, "criticalRegressions": 0, "scopeCreepRate": 0.04, "documentationCorrectness": 0.92, "escalationCompliance": 1 }
       }
-    },
-    {
-      "id": "watcher-profile",
-      "harness": "codex",
-      "modelId": "not_observable",
-      "reasoningMode": "opaque-watcher",
-      "roles": ["watcher"],
-      "capabilities": { "readOnly": true, "freshContext": true, "workspaceWrite": false, "monitoring": true, "verdictAuthority": false, "contextTokens": 64000, "repositoryAccess": true, "toolAccess": ["git", "rg", "monitoring"], "risks": ["low", "medium", "high", "critical"] },
-      "cost": { "tier": "low", "expectedRunUsd": 0.2, "retryMultiplier": 1 },
-      "qualification": {
-        "status": "qualified",
-        "source": "review-loop-real-diff",
-        "evaluatedAt": "2026-08-09",
-        "evidence": { "sourceClass": "review-loop-real-diff", "corpusId": "example-watcher-corpus-v1", "artifactLocator": "protected://review-loop/example-watcher-corpus-v1", "artifactFingerprint": "sha256:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "observedAt": "2026-08-09T00:00:00Z", "metricNames": [] },
-        "metrics": {}
-      }
     }
   ]
 }

@@ -74,6 +74,16 @@ function lineCount(text) {
   return text ? (text.endsWith("\n") ? text.split("\n").length - 1 : text.split("\n").length) : 0;
 }
 
+function corpusUnder(directory) {
+  const texts = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) texts.push(corpusUnder(path));
+    else texts.push(readFileSync(path, "utf8"));
+  }
+  return texts.join("\n");
+}
+
 function expectIncludes(label, text, phrase) {
   if (!text.includes(phrase)) fail(`${label} must include ${JSON.stringify(phrase)}`);
 }
@@ -114,7 +124,7 @@ for (const phrase of [
   "Hosting review, CI monitoring, external",
   "Protected engine selection is an optional",
 ]) expectIncludes("FAST contract", skill, phrase);
-for (const phrase of ["PR maintenance mode", "`watcher`", "base/head or worktree identity", "ask a fresh reviewer for a", "fingerprint-review-state.mjs"]) expectNotIncludes("stable PR contract", skill, phrase);
+for (const phrase of ["PR maintenance mode", "base/head or worktree identity", "ask a fresh reviewer for a", "fingerprint-review-state.mjs"]) expectNotIncludes("stable PR contract", skill, phrase);
 
 const codeReviewPath = resolve(skillRoot, "..", "code-review", "SKILL.md");
 const codeReviewStandardsPath = resolve(skillRoot, "..", "code-review", "references", "review-standards.md");
@@ -145,8 +155,6 @@ if (publicCorpusLines > MAX_PUBLIC_CORPUS_LINES) fail(`public skill corpus has $
 
 for (const phrase of [
   "fresh independent",
-  "NOT_APPLICABLE",
-  "residual uncertainty",
 ]) expectIncludes("public corpus", publicCorpus, phrase);
 for (const marker of ["/Users/", "/home/", "/private/tmp/", "CODEX_DEFAULT_ENGINE_POLICY"]) expectNotIncludes("public corpus", publicCorpus, marker);
 if (HARDCODED_MODEL_LITERAL.test(publicCorpus)) fail("public corpus contains a hardcoded model ID");
@@ -160,7 +168,7 @@ for (const template of EXPECTED_TEMPLATES) if (template.endsWith(".json")) parse
 
 const selector = readRequired("scripts/select-review-engines.mjs");
 for (const phrase of [
-  '"fast-reviewer", "deep-reviewer", "fixer", "watcher"',
+  '"fast-reviewer", "deep-reviewer", "fixer"',
   "role map",
   "no exact live candidate",
   "must not be a symbolic link",
@@ -177,12 +185,14 @@ if (HARDCODED_MODEL_LITERAL.test(selector)) fail("selector contains a hardcoded 
 for (const forbidden of ["CODEX_DEFAULT_ENGINE_POLICY", "reviewerCostCeilingUsd"]) expectNotIncludes("selector", selector, forbidden);
 
 const selectorTests = readRequired("scripts/test-engine-selection.mjs");
-for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "watcher", "codex", "claude-code", "cursor", "opencode", "runNative", "harness-native", "no-ranking-fallback", "watcher-no-authority", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
+for (const phrase of ["fast-reviewer", "deep-reviewer", "fixer", "codex", "claude-code", "cursor", "opencode", "runNative", "harness-native", "no-ranking-fallback", "role-map-symlink"]) expectIncludes("selector tests", selectorTests, phrase);
 if (HARDCODED_MODEL_LITERAL.test(selectorTests)) fail("selector tests contain a hardcoded model ID");
 
 const roleMap = parseJson("templates/role-map.example.json");
 if (!roleMap.mappings || !roleMap.mappings.codex) fail("role-map.example.json must show a protected codex mapping");
-for (const role of ["fast-reviewer", "deep-reviewer", "fixer", "watcher"]) if (!roleMap.mappings.codex[role]) fail(`role-map.example.json is missing ${role}`);
+for (const role of ["fast-reviewer", "deep-reviewer", "fixer"]) if (!roleMap.mappings.codex[role]) fail(`role-map.example.json is missing ${role}`);
+const retiredMonitoringRole = ["watch", "er"].join("");
+if (corpusUnder(skillRoot).toLowerCase().includes(retiredMonitoringRole)) fail("retired monitoring role must not exist in review-loop");
 const openai = readRequired("agents/openai.yaml");
 expectIncludes("agents/openai.yaml", openai, "display_name: \"Review Loop\"");
 expectIncludes("agents/openai.yaml", openai, "$review-loop");

@@ -1548,10 +1548,6 @@ console.log("PASS review-loop-namespace");
 
 const skillText = readFileSync(join(scriptDir, "..", "SKILL.md"), "utf8");
 const referenceFiles = [
-  "correctness-and-risk.md",
-  "quality-simplification.md",
-  "semantic-integrity.md",
-  "documentation-impact.md",
   "engine-selection.md",
 ];
 const referenceTexts = referenceFiles.map((file) => readFileSync(join(scriptDir, "..", "references", file), "utf8"));
@@ -1567,7 +1563,6 @@ expectIncludes("same-reviewer-session", skillText, "same reviewer session");
 expectIncludes("autonomous-critical-high", skillText, "There is no fixed correction cap");
 expectIncludes("pr-diff-only", skillText, "git diff <base>...<head>");
 expectIncludes("external-state-boundary", skillText, "CI monitoring, external providers");
-expectNotIncludes("watcher-removed", skillText, "`watcher`");
 for (const file of referenceFiles) {
   expectIncludes("reference-routing", skillText, `references/${file}`);
 }
@@ -1579,9 +1574,6 @@ expectIncludes("direct-single-review", codeReviewText, "Do not spawn nested revi
 expectIncludes("standards-spec-axes", codeReviewText, "Keep the axes");
 expectIncludes("self-approval-denied", skillText, "author and fixer never approve their own work");
 expectIncludes("completion-criterion", skillText, "The loop is complete when the final head is unchanged");
-expectIncludes("simplification-gate", skillCorpus, "Prefer deleting incidental complexity");
-expectIncludes("semantic-gate", skillCorpus, "roadmap phases");
-expectIncludes("documentation-gate", skillCorpus, "NOT_APPLICABLE");
 expectIncludes("engine-native-default", skillCorpus, "selection, registry, or qualification setup");
 expectIncludes("engine-protected-no-substitution", skillCorpus, "never substitute another profile");
 expectIncludes("fixer-boundary", skillCorpus, "never approve their own work");

@@ -55,12 +55,7 @@ explicit override described in `references/engine-selection.md`, never part of
 the normal path. Use a stronger reviewer only for the escalation conditions
 above.
 
-Load these references only when their concrete trigger applies:
-
-- `references/correctness-and-risk.md`, `references/quality-simplification.md`, and `references/semantic-integrity.md` for a relevant code question;
-- `references/documentation-impact.md` and `references/runtime-proof-and-qa.md` for docs or executable proof;
-- `references/systemic-risks.md`, `references/go-review.md`, and `references/quality-gate-ratchet.md` for their named boundary;
-- `references/real-diff-benchmark.md` only when evaluating this skill.
+Read `references/real-diff-benchmark.md` only when evaluating this skill.
 
 The loop is complete when the final head is unchanged, `$code-review` reports
 no critical/high blocker, required checks passed or are explicitly blocked, and

@@ -14,7 +14,7 @@ mkdirSync(candidate);
 mkdirSync(protectedDir);
 const fixtureDate = "2026-08-09T00:00:00Z";
 const fingerprint = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-const roles = ["fast-reviewer", "deep-reviewer", "fixer", "watcher"];
+const roles = ["fast-reviewer", "deep-reviewer", "fixer"];
 const harnesses = ["codex", "claude-code", "cursor", "opencode"];
 
 function clone(value) {
@@ -41,7 +41,7 @@ function evidence(role) {
     corpusId: `test-${role}-corpus`,
     artifactFingerprint: fingerprint,
     observedAt: fixtureDate,
-    metricNames: role === "watcher" ? [] : role === "fixer" ? fixerMetrics : reviewerMetrics,
+    metricNames: role === "fixer" ? fixerMetrics : reviewerMetrics,
   };
 }
 
@@ -54,10 +54,9 @@ function candidateFor(harness, role, overrides = {}) {
     reasoningMode: `opaque-${role}`,
     roles: [role],
     capabilities: {
-      readOnly: reviewer || role === "watcher",
-      freshContext: role !== "watcher",
+      readOnly: reviewer,
+      freshContext: true,
       workspaceWrite: role === "fixer",
-      monitoring: role === "watcher",
       verdictAuthority: reviewer,
       contextTokens: 128000,
       repositoryAccess: true,
@@ -170,8 +169,6 @@ try {
   }
   const nativeFixer = pass("native-fixer", runNative("fixer"));
   if (nativeFixer.capabilities.workspaceWrite !== true || nativeFixer.capabilities.verdictAuthority !== false) throw new Error("native-fixer: fixer gained verdict authority");
-  const nativeWatcher = pass("native-watcher", runNative("watcher"));
-  if (nativeWatcher.capabilities.readOnly !== true || nativeWatcher.capabilities.verdictAuthority !== false) throw new Error("native-watcher: watcher gained verdict authority");
   const nativeDefaultRole = pass("native-default-role-id", runNative("fast-reviewer", [], { includeNativeRoleId: false }));
   if (nativeDefaultRole.profileId !== "fast-reviewer") throw new Error("native-default-role-id: portable role name was not retained");
   fail("native-fingerprint-required", runNative("fast-reviewer", [], { includeFingerprint: false }), "--candidate-fingerprint must be a SHA-256 fingerprint");
@@ -184,7 +181,7 @@ try {
   }
   if (!fast.rationale.includes("one fresh independent review")) throw new Error("fast-default-role: fast rationale is not explicit");
   fail("candidate-root-required", run(registryFor("codex"), roleMapFor("codex"), "fast-reviewer", [], { candidateRoot: null }), "--candidate-root is required");
-  fail("legacy-role-rejected", run(registryFor("codex"), roleMapFor("codex"), "reviewer"), "--role must be fast-reviewer, deep-reviewer, fixer, or watcher");
+  fail("legacy-role-rejected", run(registryFor("codex"), roleMapFor("codex"), "reviewer"), "--role must be fast-reviewer, deep-reviewer, or fixer");
 
   for (const harness of harnesses) {
     const receipt = pass(`opaque-harness-${harness}`, run(registryFor(harness), roleMapFor(harness), "fast-reviewer", [], { harness }));
@@ -205,11 +202,6 @@ try {
   const invalidFixer = registryFor("codex");
   invalidFixer.candidates.find((candidate) => candidate.id === "codex-fixer").capabilities.verdictAuthority = true;
   fail("fixer-authority-denied", run(invalidFixer, roleMapFor("codex"), "fixer"), "fixer verdict authority must be false");
-
-  const watcher = pass("watcher-no-authority", run(registryFor("codex"), roleMapFor("codex"), "watcher"));
-  if (watcher.role !== "watcher" || watcher.capabilities.readOnly !== true || watcher.capabilities.verdictAuthority !== false || watcher.rationale.includes("approve")) throw new Error("watcher-no-authority: watcher gained verdict authority");
-  const unsafeWatcher = registryFor("codex", { candidates: roles.map((role) => role === "watcher" ? candidateFor("codex", role, { capabilities: { ...candidateFor("codex", role).capabilities, verdictAuthority: true } }) : candidateFor("codex", role)) });
-  fail("watcher-authority-guard", run(unsafeWatcher, roleMapFor("codex"), "watcher"), "watcher authority must be false");
 
   const mappedLowerCandidate = candidateFor("codex", "fast-reviewer", { id: "mapped-lower-profile" });
   const explicitMap = roleMapFor("codex", { mappings: { codex: { ...roleMapFor("codex").mappings.codex, "fast-reviewer": { profileId: "mapped-lower-profile", modelId: "not_observable", reasoningMode: "opaque-fast-reviewer" } } } });

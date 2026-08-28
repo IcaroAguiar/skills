@@ -86,7 +86,6 @@ const roleMap = {
       "fast-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
       "deep-reviewer": { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
       fixer: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
-      watcher: { profileId: identity.id, modelId: identity.modelId, reasoningMode: identity.reasoningMode },
     },
   },
 };
@@ -200,7 +199,7 @@ try {
   const publicComposition = run([composer, "--inventory", publicInventoryPath, "--qualifications", publicLedgerPath, "--reviewer-cost-ceiling-usd", "4", "--output", publicRegistryPath, "--candidate-root", candidateDirectory, "--allow-fixture"]);
   if (!publicComposition.ok) throw new Error(`public template composition failed: ${publicComposition.output}`);
   const publicRegistry = JSON.parse(readFileSync(publicRegistryPath, "utf8"));
-  for (const role of ["fast-reviewer", "deep-reviewer", "fixer", "watcher"]) {
+  for (const role of ["fast-reviewer", "deep-reviewer", "fixer"]) {
     const candidate = publicRegistry.candidates.find((value) => value.roles.includes(role));
     const mapping = publicRoleMap.mappings.codex[role];
     if (!candidate || candidate.harness !== "codex" || candidate.id !== mapping.profileId || candidate.modelId !== mapping.modelId || candidate.reasoningMode !== mapping.reasoningMode) {
