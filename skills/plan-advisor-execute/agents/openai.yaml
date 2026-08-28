@@ -1,6 +1,0 @@
-interface:
-  display_name: "Plan, Advisor, Execute"
-  short_description: "One approval for advised execution"
-  default_prompt: "Use $plan-advisor-execute to reconcile independent advice, obtain one execution authorization, and autonomously run every approved specialist wave."
-policy:
-  allow_implicit_invocation: false

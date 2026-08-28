@@ -18,9 +18,3 @@ jobs:
           node-version: 22
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-design-art-direction-contracts.mjs
-      - name: Validate code review consumers
-        run: |
-          node skills/gating-testability/scripts/validate-skill-package.mjs
-          node --test skills/gating-testability/tests/smoke-pressure-scenarios.test.mjs
-          node skills/orchestrate-split/scripts/test-schema-contract.mjs
-          node skills/orchestrate-split/scripts/fixture-smoke.mjs

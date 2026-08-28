@@ -1,6 +1,0 @@
-interface:
-  display_name: "Visual Fidelity"
-  short_description: "Adapt UI faithfully from visual references"
-  default_prompt: "Use $visual-fidelity to adapt this UI from the supplied visual reference without making a static copy."
-policy:
-  allow_implicit_invocation: true

@@ -1,6 +1,0 @@
-interface:
-  display_name: "Split Report"
-  short_description: "Render a live evidence canvas for each run"
-  default_prompt: "Use $split-report to render the current split engineering ledger as an evidence canvas."
-policy:
-  allow_implicit_invocation: false
