@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+runnerctl_source=${BASH_SOURCE[0]:-$0}
+script_dir=$(CDPATH= cd -- "$(dirname -- "$runnerctl_source")" && pwd)
 state_dir="$script_dir/state"
 registry="$state_dir/registry.tsv"
 lock_file="$state_dir/runnerctl.lock"
@@ -57,6 +58,18 @@ container_state() {
   docker container inspect "$container" --format '{{if .State.Running}}{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}{{else}}{{.State.Status}}{{end}}'
 }
 
+security_args_for_role() {
+  local role=$1
+  printf '%s\n' --security-opt no-new-privileges:true
+  if [[ "$role" == ci ]]; then
+    printf '%s\n' \
+      --security-opt seccomp=unconfined \
+      --security-opt apparmor=unconfined
+  elif [[ "$role" != deploy ]]; then
+    return 64
+  fi
+}
+
 launch_container() {
   local role=$1
   local url=$2
@@ -66,6 +79,12 @@ launch_container() {
   local work_volume=$6
   local runner_group=$7
   local -a runner_group_args=()
+  local -a security_args=()
+  local security_arg
+
+  while IFS= read -r security_arg; do
+    security_args+=("$security_arg")
+  done < <(security_args_for_role "$role")
 
   if [[ -n "$runner_group" ]]; then
     runner_group_args=(--env "RUNNER_GROUP=$runner_group")
@@ -78,7 +97,7 @@ launch_container() {
     --init \
     --network host \
     --add-host host.docker.internal:host-gateway \
-    --security-opt no-new-privileges:true \
+    "${security_args[@]}" \
     --memory "$(if [[ "$role" == ci ]]; then echo 6g; else echo 2g; fi)" \
     --cpus "$(if [[ "$role" == ci ]]; then echo 3.5; else echo 1.5; fi)" \
     --pids-limit "$(if [[ "$role" == ci ]]; then echo 4096; else echo 2048; fi)" \
@@ -315,4 +334,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${RUNNERCTL_LIB_ONLY:-0}" != 1 ]]; then
+  main "$@"
+fi

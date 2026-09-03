@@ -24,6 +24,25 @@ The controller maps `host.docker.internal` to Docker's host gateway so workflows
 
 Runner configuration volumes contain durable GitHub registration credentials. Do not inspect or export their contents. Work volumes are separate so cleanup and removal can be scoped to one registration.
 
+### CI namespace policy
+
+Pullfrog requires user, PID, and mount namespaces to isolate agent shell commands. The bundled CI
+container therefore keeps `no-new-privileges` but runs without Docker's default seccomp and
+AppArmor profiles. It does not use `--privileged` or add Linux capabilities. The deploy container
+keeps the default seccomp and AppArmor profiles and receives only `no-new-privileges`.
+
+Removing the default CI profiles widens the kernel interface reachable by trusted workflow code.
+The host Docker socket already makes the CI registration root-equivalent, so this exception does
+not turn an untrusted repository into an acceptable tenant. Admit only reviewed private
+repositories. Repositories that allow forks must keep Pullfrog on a hosted runner unless the
+dispatcher proves the head repository before scheduling. Never apply this exception to
+`local-deploy`.
+
+Inside a Pullfrog job, its nested mount namespace masks the Docker socket and managed credentials
+before dropping all bounding, inheritable, and ambient capabilities for the agent shell. Validate
+that complete pipeline after changing the host policy; a successful `unshare` probe alone is not
+sufficient.
+
 ## Job cleanup
 
 The bundled image configures GitHub's `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` hook. Path guards and a bounded timeout constrain each cleanup target. The hook cleans workspaces, runner temporary and update directories, pnpm and npm caches, and dedicated Pullfrog state. The workflow remains responsible for its own containers, databases, ports, volumes, browser processes, and failure-path cleanup.

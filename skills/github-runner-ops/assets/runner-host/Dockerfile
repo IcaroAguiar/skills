@@ -11,6 +11,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        build-essential \
         ca-certificates \
         curl \
         docker.io \
@@ -19,8 +20,10 @@ RUN apt-get update \
         jq \
         libicu74 \
         libssl3 \
+        openssh-client \
         postgresql-client \
         procps \
+        rsync \
         sudo \
         tar \
         unzip \

@@ -34,9 +34,60 @@ grep -Fq 'ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/opt/runner-hooks/job-completed.sh' 
 grep -Fq 'clean_contents /runner/_work/.pnpm-store' "$host_package/job-completed.sh"
 grep -Fq 'clean_contents /runner/_work/_update' "$host_package/job-completed.sh"
 grep -Fq 'clean_contents /root/.npm/_cacache' "$host_package/job-completed.sh"
-grep -Fq 'clean_contents /root/.npm/_npx' "$host_package/job-completed.sh"
+grep -Fq 'clean_contents /root/.npm/_logs' "$host_package/job-completed.sh"
 grep -Fq 'clean_contents /var/lib/pullfrog' "$host_package/job-completed.sh"
-grep -Fq 'for pullfrog_temp in /tmp/pullfrog-*; do' "$host_package/job-completed.sh"
+grep -Fq 'clean_pullfrog_temp_dirs()' "$host_package/job-completed.sh"
+grep -Fq 'rmdir "$target"' "$host_package/job-completed.sh"
+
+RUNNERCTL_LIB_ONLY=1 source "$host_package/runnerctl"
+
+validate_security_args() {
+  local role=$1
+  shift
+  local rendered
+  rendered=$(printf '%s\n' "$@")
+
+  ! grep -Eq -- '(^|[[:space:]])--(privileged|cap-add)([=[:space:]]|$)' <<< "$rendered"
+  case "$role" in
+    ci)
+      [[ "$rendered" == $'--security-opt\nno-new-privileges:true\n--security-opt\nseccomp=unconfined\n--security-opt\napparmor=unconfined' ]]
+      ;;
+    deploy)
+      [[ "$rendered" == $'--security-opt\nno-new-privileges:true' ]]
+      ;;
+    *) return 64 ;;
+  esac
+}
+
+ci_security_args=()
+while IFS= read -r security_arg; do
+  ci_security_args+=("$security_arg")
+done < <(security_args_for_role ci)
+
+deploy_security_args=()
+while IFS= read -r security_arg; do
+  deploy_security_args+=("$security_arg")
+done < <(security_args_for_role deploy)
+validate_security_args ci "${ci_security_args[@]}"
+validate_security_args deploy "${deploy_security_args[@]}"
+
+if validate_security_args ci \
+  --security-opt no-new-privileges:true \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
+  --privileged; then
+  echo "Runner security validation accepted a forbidden privileged CI container." >&2
+  exit 1
+fi
+
+if validate_security_args ci \
+  --security-opt no-new-privileges:true \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
+  --cap-add SYS_ADMIN; then
+  echo "Runner security validation accepted a forbidden CI capability." >&2
+  exit 1
+fi
 
 if grep -R -n --exclude=validate-runner-host.sh -E '100\.[0-9]+\.[0-9]+\.[0-9]+|/Users/|BEGIN (OPENSSH|RSA|EC) PRIVATE KEY' "$skill_root"; then
   echo "Private or machine-specific content found in skill package." >&2
