@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+runnerctl_source=${BASH_SOURCE[0]:-$0}
+script_dir=$(CDPATH= cd -- "$(dirname -- "$runnerctl_source")" && pwd)
+state_dir="$script_dir/state"
+registry="$state_dir/registry.tsv"
+lock_file="$state_dir/runnerctl.lock"
+image_name="local/github-actions-runner:2.336.0"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  runnerctl doctor
+  runnerctl build
+  runnerctl add --scope repo|org --target OWNER/REPO|ORG --role ci|deploy [--runner-group GROUP]
+  runnerctl list [--json]
+  runnerctl start --id ID
+  runnerctl stop --id ID
+  runnerctl logs --id ID
+  runnerctl recreate --id ID --yes
+  runnerctl remove --id ID --yes
+
+Registration and removal tokens are read from standard input and are never stored.
+Organization registrations require an explicit runner group.
+EOF
+}
+
+die() {
+  echo "$*" >&2
+  exit 64
+}
+
+init_state() {
+  mkdir -p "$state_dir"
+  chmod 0700 "$state_dir"
+  if [[ ! -f "$registry" ]]; then
+    : > "$registry"
+    chmod 0600 "$registry"
+  fi
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command is missing: $1"
+}
+
+record_for_id() {
+  local id=$1
+  awk -F '\t' -v wanted="$id" '$1 == wanted { print; found=1 } END { if (!found) exit 1 }' "$registry"
+}
+
+container_state() {
+  local container=$1
+  if ! docker container inspect "$container" >/dev/null 2>&1; then
+    echo absent
+    return
+  fi
+  docker container inspect "$container" --format '{{if .State.Running}}{{if .State.Health}}{{.State.Health.Status}}{{else}}running{{end}}{{else}}{{.State.Status}}{{end}}'
+}
+
+security_args_for_role() {
+  local role=$1
+  printf '%s\n' --security-opt no-new-privileges:true
+  if [[ "$role" == ci ]]; then
+    printf '%s\n' \
+      --security-opt seccomp=unconfined \
+      --security-opt apparmor=unconfined
+  elif [[ "$role" != deploy ]]; then
+    return 64
+  fi
+}
+
+launch_container() {
+  local role=$1
+  local url=$2
+  local runner_name=$3
+  local container=$4
+  local config_volume=$5
+  local work_volume=$6
+  local runner_group=$7
+  local -a runner_group_args=()
+  local -a security_args=()
+  local security_arg
+
+  while IFS= read -r security_arg; do
+    security_args+=("$security_arg")
+  done < <(security_args_for_role "$role")
+
+  if [[ -n "$runner_group" ]]; then
+    runner_group_args=(--env "RUNNER_GROUP=$runner_group")
+  fi
+
+  docker run --detach \
+    --name "$container" \
+    --hostname "$runner_name" \
+    --restart unless-stopped \
+    --init \
+    --network host \
+    --add-host host.docker.internal:host-gateway \
+    "${security_args[@]}" \
+    --memory "$(if [[ "$role" == ci ]]; then echo 6g; else echo 2g; fi)" \
+    --cpus "$(if [[ "$role" == ci ]]; then echo 3.5; else echo 1.5; fi)" \
+    --pids-limit "$(if [[ "$role" == ci ]]; then echo 4096; else echo 2048; fi)" \
+    --env "RUNNER_URL=$url" \
+    --env "RUNNER_NAME=$runner_name" \
+    --env "RUNNER_LABELS=local-$role" \
+    "${runner_group_args[@]}" \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume "$config_volume:/runner" \
+    --volume "$work_volume:/runner/_work" \
+    "$image_name" >/dev/null
+
+  local state=starting
+  for _ in $(seq 1 30); do
+    state=$(container_state "$container")
+    if [[ "$state" == healthy ]]; then
+      break
+    fi
+    sleep 2
+  done
+  [[ "$state" == healthy ]] || die "Runner container did not become healthy: $container ($state)"
+  echo "$state"
+}
+
+cmd_doctor() {
+  require_command docker
+  require_command jq
+  require_command sha256sum
+  require_command flock
+
+  local arch
+  arch=$(uname -m)
+  [[ "$arch" == x86_64 ]] || die "Unsupported architecture for this image: $arch"
+  docker info >/dev/null
+
+  jq -n \
+    --arg architecture "$arch" \
+    --arg docker_version "$(docker version --format '{{.Server.Version}}')" \
+    --arg disk_available "$(df -Pk "$script_dir" | awk 'NR == 2 { print $4 * 1024 }')" \
+    --arg memory_total "$(awk '/MemTotal:/ { print $2 * 1024 }' /proc/meminfo)" \
+    '{ok:true, architecture:$architecture, docker_version:$docker_version, disk_available_bytes:($disk_available|tonumber), memory_total_bytes:($memory_total|tonumber), values_redacted:true}'
+}
+
+cmd_build() {
+  require_command docker
+  docker build --pull --tag "$image_name" "$script_dir"
+  docker image inspect "$image_name" --format '{{json .RepoDigests}} {{.Id}}'
+}
+
+cmd_add() {
+  local scope= target= role= runner_group=
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --scope) scope=${2:-}; shift 2 ;;
+      --target) target=${2:-}; shift 2 ;;
+      --role) role=${2:-}; shift 2 ;;
+      --runner-group) runner_group=${2:-}; shift 2 ;;
+      *) die "Unknown add argument: $1" ;;
+    esac
+  done
+
+  [[ "$scope" == repo || "$scope" == org ]] || die "Scope must be repo or org."
+  [[ "$role" == ci || "$role" == deploy ]] || die "Role must be ci or deploy."
+  [[ "$target" =~ ^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$ ]] || die "Invalid target."
+  [[ -z "$runner_group" || "$runner_group" =~ ^[A-Za-z0-9][A-Za-z0-9_.\ -]*$ ]] || die "Invalid runner group."
+  if [[ "$scope" == repo ]]; then
+    [[ "$target" == */* ]] || die "Repository target must be OWNER/REPO."
+    [[ -z "$runner_group" ]] || die "Runner groups apply only to organization registrations."
+  else
+    [[ "$target" != */* ]] || die "Organization target must be ORG."
+    [[ -n "$runner_group" ]] || die "Organization registrations require --runner-group."
+  fi
+
+  require_command docker
+  docker image inspect "$image_name" >/dev/null 2>&1 || die "Runner image is missing. Run: runnerctl build"
+
+  local label url digest short_id runner_name container config_volume work_volume token created_at
+  label="local-$role"
+  url="https://github.com/$target"
+  digest=$(printf '%s' "$scope:$target:$role" | sha256sum | awk '{print $1}')
+  short_id=${digest:0:12}
+  runner_name="$(hostname -s)-${role}-${short_id}"
+  container="github-runner-${role}-${short_id}"
+  config_volume="github-runner-config-${short_id}"
+  work_volume="github-runner-work-${short_id}"
+
+  if awk -F '\t' -v s="$scope" -v t="$target" -v r="$role" '$2 == s && $3 == t && $4 == r { found=1 } END { exit !found }' "$registry"; then
+    die "A runner already exists for $scope $target role $role."
+  fi
+
+  IFS= read -r token || true
+  [[ -n "$token" ]] || die "A registration token is required on standard input."
+
+  docker volume create --label io.icaro.runnerctl=managed "$config_volume" >/dev/null
+  docker volume create --label io.icaro.runnerctl=managed "$work_volume" >/dev/null
+
+  local -a runner_group_args=()
+  if [[ -n "$runner_group" ]]; then
+    runner_group_args=(--env "RUNNER_GROUP=$runner_group")
+  fi
+
+  printf '%s\n' "$token" | docker run --rm --interactive \
+    --name "${container}-configure" \
+    --env "RUNNER_URL=$url" \
+    --env "RUNNER_NAME=$runner_name" \
+    --env "RUNNER_LABELS=$label" \
+    "${runner_group_args[@]}" \
+    --volume "$config_volume:/runner" \
+    --volume "$work_volume:/runner/_work" \
+    "$image_name" configure
+  token=
+
+  created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$short_id" "$scope" "$target" "$role" "$url" "$runner_name" "$container" "$config_volume" "$work_volume" "$runner_group" "$created_at" \
+    >> "$registry"
+
+  local state
+  state=$(launch_container "$role" "$url" "$runner_name" "$container" "$config_volume" "$work_volume" "$runner_group")
+
+  jq -n \
+    --arg id "$short_id" \
+    --arg scope "$scope" \
+    --arg target "$target" \
+    --arg role "$role" \
+    --arg runner_name "$runner_name" \
+    --arg container "$container" \
+    --arg state "$state" \
+    '{id:$id, scope:$scope, target:$target, role:$role, runner_name:$runner_name, container:$container, state:$state, values_redacted:true}'
+}
+
+cmd_recreate() {
+  [[ "${1:-}" == --id && -n "${2:-}" && "${3:-}" == --yes ]] || die "recreate requires --id ID --yes."
+  local id=$2 record role url runner_name container config_volume work_volume runner_group state
+  record=$(record_for_id "$id") || die "Unknown runner id: $id"
+  IFS=$'\t' read -r _ _ _ role url runner_name container config_volume work_volume runner_group _ <<< "$record"
+
+  docker stop --time 30 "$container" >/dev/null 2>&1 || true
+  docker container rm "$container" >/dev/null 2>&1 || true
+  state=$(launch_container "$role" "$url" "$runner_name" "$container" "$config_volume" "$work_volume" "$runner_group")
+
+  jq -n \
+    --arg id "$id" \
+    --arg runner_name "$runner_name" \
+    --arg container "$container" \
+    --arg state "$state" \
+    '{id:$id, runner_name:$runner_name, container:$container, state:$state, values_redacted:true}'
+}
+
+cmd_list() {
+  local json=false
+  [[ "${1:-}" == --json ]] && json=true
+  if [[ "$json" == false ]]; then
+    printf 'ID\tSCOPE\tTARGET\tROLE\tRUNNER\tCONTAINER_STATE\n'
+  fi
+
+  local rows=()
+  while IFS=$'\t' read -r id scope target role url runner_name container config_volume work_volume runner_group created_at; do
+    [[ -n "$id" ]] || continue
+    local state
+    state=$(container_state "$container")
+    if [[ "$json" == true ]]; then
+      rows+=("$(jq -nc --arg id "$id" --arg scope "$scope" --arg target "$target" --arg role "$role" --arg runner_name "$runner_name" --arg state "$state" --arg created_at "$created_at" '{id:$id,scope:$scope,target:$target,role:$role,runner_name:$runner_name,state:$state,created_at:$created_at}')")
+    else
+      printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$scope" "$target" "$role" "$runner_name" "$state"
+    fi
+  done < "$registry"
+
+  if [[ "$json" == true ]]; then
+    if [[ ${#rows[@]} -eq 0 ]]; then
+      jq -n '{values_redacted:true,runners:[]}'
+    else
+      printf '%s\n' "${rows[@]}" | jq -s '{values_redacted:true,runners:.}'
+    fi
+  fi
+}
+
+cmd_lifecycle() {
+  local action=$1
+  shift
+  [[ "${1:-}" == --id && -n "${2:-}" ]] || die "$action requires --id ID."
+  local id=$2 record container
+  record=$(record_for_id "$id") || die "Unknown runner id: $id"
+  IFS=$'\t' read -r _ _ _ _ _ _ container _ _ _ _ <<< "$record"
+  case "$action" in
+    start) docker start "$container" >/dev/null ;;
+    stop) docker stop --time 30 "$container" >/dev/null ;;
+    logs) docker logs --tail 100 "$container" ;;
+  esac
+}
+
+cmd_remove() {
+  [[ "${1:-}" == --id && -n "${2:-}" && "${3:-}" == --yes ]] || die "remove requires --id ID --yes."
+  local id=$2 record url runner_name container config_volume work_volume token temp_registry
+  record=$(record_for_id "$id") || die "Unknown runner id: $id"
+  IFS=$'\t' read -r _ _ _ _ url runner_name container config_volume work_volume _ _ <<< "$record"
+  IFS= read -r token || true
+  [[ -n "$token" ]] || die "A removal token is required on standard input."
+
+  docker stop --time 30 "$container" >/dev/null 2>&1 || true
+  docker container rm "$container" >/dev/null 2>&1 || true
+  printf '%s\n' "$token" | docker run --rm --interactive \
+    --env "RUNNER_URL=$url" \
+    --env "RUNNER_NAME=$runner_name" \
+    --env RUNNER_LABELS=unused \
+    --volume "$config_volume:/runner" \
+    "$image_name" remove
+  token=
+  docker volume rm "$work_volume" "$config_volume" >/dev/null
+
+  temp_registry=$(mktemp "$state_dir/registry.XXXXXX")
+  awk -F '\t' -v wanted="$id" '$1 != wanted { print }' "$registry" > "$temp_registry"
+  chmod 0600 "$temp_registry"
+  mv "$temp_registry" "$registry"
+}
+
+main() {
+  init_state
+  exec 9>"$lock_file"
+  flock 9
+
+  local command=${1:-}
+  shift || true
+  case "$command" in
+    doctor) cmd_doctor "$@" ;;
+    build) cmd_build "$@" ;;
+    add) cmd_add "$@" ;;
+    list) cmd_list "$@" ;;
+    start|stop|logs) cmd_lifecycle "$command" "$@" ;;
+    recreate) cmd_recreate "$@" ;;
+    remove) cmd_remove "$@" ;;
+    help|-h|--help|'') usage ;;
+    *) die "Unknown command: $command" ;;
+  esac
+}
+
+if [[ "${RUNNERCTL_LIB_ONLY:-0}" != 1 ]]; then
+  main "$@"
+fi

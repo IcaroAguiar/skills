@@ -16,6 +16,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: bash skills/github-runner-ops/scripts/validate-runner-host.sh
+      - run: docker build --pull --platform linux/amd64 --tag github-runner-ops:validate skills/github-runner-ops/assets/runner-host
+      - run: |
+          docker run --rm --platform linux/amd64 --entrypoint bash github-runner-ops:validate -lc '
+            set -euo pipefail
+            test "$(node --version)" = v24.14.0
+            npm --version >/dev/null
+            npx --version >/dev/null
+            corepack --version >/dev/null
+            test "$(pnpm --version)" = 10.31.0
+          '
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-validate-skills.mjs
       - run: node scripts/test-design-art-direction-contracts.mjs
