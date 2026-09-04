@@ -77,7 +77,16 @@ For public journeys, record that authentication is not applicable. Done when the
 
 Prefer application-owned, browser-owned, emulator, or device capture when desktop movement could disturb operating-system screen recording. Keep the selected session, viewport or device profile, zoom, orientation, and resolution stable throughout a journey.
 
-For GUI and browser recordings, the interaction itself must be easy to observe. Keep the cursor visible, move it along plausible paths between controls instead of teleporting it, and let each state transition remain on screen long enough to be understood. Use a natural, purposeful pace: briefly settle before a click or tap, pause after state-changing actions until feedback is readable, type at a human-observable speed, and scroll in controlled increments. Avoid both rapid automation that a reviewer cannot follow and long idle pauses that make the recording feel staged or slow. If the chosen capture path cannot render the pointer or another clear interaction indicator, change the capture path or re-record; do not deliver an interaction video whose manipulation is invisible.
+For GUI and browser recordings:
+- **Resolution and DPI standards**:
+  - Viewport: minimum **1920x1080** (Full HD) for desktop surfaces. Never record desktop UI at 720p.
+  - Scale factor: set `deviceScaleFactor: 2` (Retina 2x) in the browser context so fine typography (`text-xs`, 12px), subtle borders, badges, and vector icons render with razor sharpness without raster blur.
+  - Video encoding: encode MP4 using high-fidelity parameters (`-c:v libx264 -crf 16 -preset slow -pix_fmt yuv420p -movflags +faststart`) to eliminate compression artifacts and macroblocking.
+- **Interaction and pacing**:
+  - Keep the cursor visible via an interaction pointer, move it along plausible paths between controls instead of teleporting it, and let each state transition remain on screen long enough to be understood.
+  - Use a natural, purposeful pace: briefly settle before a click or tap, pause after state-changing actions until feedback is readable, type at a human-observable speed, and scroll in controlled increments.
+  - Avoid both rapid automation that a reviewer cannot follow and long idle pauses that make the recording feel staged or slow.
+  - If the chosen capture path cannot render the pointer or another clear interaction indicator, change the capture path or re-record; do not deliver an interaction video whose manipulation is invisible.
 
 Match the interaction to the feature surface:
 
@@ -89,7 +98,7 @@ Avoid instant route injection, DOM evaluation, hidden state changes, or direct s
 
 Use direct setup operations only between clearly separated test states. After each setup change, return to the claimed product surface and prove the resulting behavior through its real interaction path.
 
-Done when a reviewer can follow every action without knowing the automation implementation, see how the interface was manipulated, and read the result without replaying the video at reduced speed.
+Done when a reviewer can follow every action without knowing the automation implementation, see how the interface was manipulated, read every text and UI element clearly without blurriness, and evaluate the result without replaying the video at reduced speed.
 
 ### 6. Handle time-dependent features when required
 
