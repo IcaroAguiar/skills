@@ -73,7 +73,7 @@ codex exec -m <model> -c model_reasoning_effort=<effort> -s workspace-write -C <
 
 1. **Judge the diff.** Scope creep, weak tests, silent contract gaps (a DTO or error normalizer dropping a new field), behaviour hidden in refactors. If something is wrong, send it back to the fixer; do not patch it yourself.
 2. **Rerun the checks yourself**: T0 and the affected suites. Fixers often delete the `node_modules` or generated clients they installed; reinstall before trusting "it passed".
-3. **Commit** per repo with a message that lists the fixed findings, and push.
+3. **Commit** per repo with a message that lists the fixed findings. Push only when the task already authorizes publishing; an implicit run (from the `code-review` gate) authorizes nothing outward, so its commits stay local and the delta review reads them there.
 4. **Delta review** with the same reviewer (same CLI session, or a new T3 task carrying the full history). Start a fresh full reviewer only after an account switch. Deltas are not cheap: on this workflow a full review took a median of 7.5 minutes and a delta 6–7, so time is saved by fewer rounds. A fix that arrives with its RED → GREEN test and a green T0 should need one delta at most.
    ```bash
    codex exec resume <reviewer-session> -m <model> -c model_reasoning_effort=<effort> \

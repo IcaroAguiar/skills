@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review a stable material pull-request diff once after implementation and focused checks are complete. Invoke implicitly, without being asked, whenever a material change is ready; it runs T0, the fast pre-pass (T1) and one independent reviewer. Also invoke explicitly for a fixed branch or PR review.
+description: Review a stable material pull-request diff once after implementation and focused checks are complete. Invoke implicitly, without being asked, whenever a material change is ready; it runs T0, the fast pre-pass (T1) when T0's route asks for it, and one independent reviewer. Also invoke explicitly for a fixed branch or PR review.
 ---
 
 # Code review
@@ -65,7 +65,7 @@ the account that owns the repository, at the starting effort from T0's route.
 If the current context is already that reviewer, review directly. Never create
 separate Standards and Spec reviewers or other nested reviewer waves.
 
-The whole sequence (T0, T1, independent review, delta reviews) runs without the
+The whole sequence (T0, T1 when routed, independent review, delta reviews) runs without the
 user asking: reaching the stable review gate is the trigger. It authorizes
 nothing outward; pushing, merging and deploying still follow the task's own
 authorization.
