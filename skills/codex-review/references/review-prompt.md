@@ -42,5 +42,5 @@ Achados separados em Standards e Spec, cada um com severidade, local, impacto, e
 ## Delta prompt
 
 ```markdown
-Revisão de delta ($code-review), mesma revisão de antes. Um corretor aplicou {{quais achados}}. Novo head publicado: {{NEW_HEAD}}; T0 do novo head: {{PASS + warnings}}. Revise `git diff {{OLD_HEAD}}..{{NEW_HEAD}}` mais chamadores e testes afetados, preservando a cobertura do diff completo anterior. {{Se a correção toca auth, tenancy, credenciais, migrations ou contratos públicos: "Se julgar necessário, faça a revisão completa de `{{BASE}}...{{NEW_HEAD}}`."}} Evidência do autor: {{…}}. Mesmas regras: sem edição, sem suítes neste sandbox, sem serviços externos. Termine com a linha de gate e o veredito da skill.
+Revisão de delta ($code-review), mesma revisão de antes. Um corretor aplicou {{quais achados}}. Novo head: {{NEW_HEAD}} (local ou publicado); T0 do novo head: {{PASS + warnings}}. Revise `git diff {{OLD_HEAD}}..{{NEW_HEAD}}` mais chamadores e testes afetados, preservando a cobertura do diff completo anterior. {{Se a correção toca auth, tenancy, credenciais, migrations ou contratos públicos: "Se julgar necessário, faça a revisão completa de `{{BASE}}...{{NEW_HEAD}}`."}} Evidência do autor: {{…}}. Mesmas regras: sem edição, sem suítes neste sandbox, sem serviços externos. Termine com a linha de gate e o veredito da skill.
 ```
