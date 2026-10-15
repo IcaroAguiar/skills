@@ -4,19 +4,14 @@
 // checks run the repo's own typecheck, lint and affected tests.
 // Contract: ../references/t0.md. Exit 0 = PASS, 1 = BLOCKED, 2 = usage error.
 
-import { createHash } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
-import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { defaultReportPath, git, isGenerated, LOCKFILES, readJson, run, stopGroups, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
 
 const RULES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../rules");
-const LOCKFILES = new Set([
-  "pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lock",
-  "Cargo.lock", "go.mod", "poetry.lock", "uv.lock", "Pipfile.lock", "requirements.txt",
-  "Gemfile.lock", "composer.lock", "pubspec.lock", "mix.lock", "gradle.lockfile",
-]);
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 // Checks must never rewrite the tree: skip fixers, formatters and baseline/snapshot updaters.
 // A tree fingerprint around every check catches whatever these patterns miss.
@@ -24,9 +19,7 @@ const MUTATING_COMMAND = /--write\b|--fix\b|--apply\b|--update[-A-Za-z]*(?=\s|=|
 const MUTATING_NAME = /:(fix|write|format|update|baseline|generate|gen|regen|snapshot|accept|record|bless|seed|reset|clean)\b/;
 const MAX_SECRET_SCAN_BYTES = 20 * 1024 * 1024;
 const MAX_CODE_SCAN_BYTES = 1024 * 1024;
-const GENERATED_DIRS = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", ".next", ".turbo", "generated", "__generated__"]);
 const SEVERITY_ORDER = { error: 0, warning: 1, info: 2 };
-const activeGroups = new Set();
 let scratchDir = null;
 
 const USAGE = `usage: review-t0 [-C <dir>] [--base <ref>] [--json <file>] [--wrap <cmd>]
@@ -75,20 +68,6 @@ function parseArgs(argv) {
 function usage(message) {
   console.error(`review-t0: ${message}\n\n${USAGE}`);
   process.exit(2);
-}
-
-// Pathspecs are literal and user diff settings (noprefix, external diff, colors) never apply.
-function git(root, args, { allowFailure = false } = {}) {
-  const result = spawnSync("git", ["-C", root, "-c", "core.quotepath=off", "-c", "diff.noprefix=false", "-c", "diff.mnemonicPrefix=false", "-c", "diff.relative=false", ...args], {
-    encoding: "utf8",
-    maxBuffer: 512 * 1024 * 1024,
-    env: { ...process.env, GIT_LITERAL_PATHSPECS: "1", GIT_EXTERNAL_DIFF: "" },
-  });
-  if (result.status !== 0) {
-    if (allowFailure) return null;
-    throw new Error(`git ${args.join(" ")} failed: ${result.stderr.trim()}`);
-  }
-  return result.stdout;
 }
 
 function hasCommand(command) {
@@ -192,10 +171,6 @@ function scanTargets(root, added) {
   return { secret, code, skipped };
 }
 
-function isGenerated(file) {
-  return file.split("/").some((segment) => GENERATED_DIRS.has(segment)) || /\.min\.[a-z]+$|\.map$/.test(file);
-}
-
 function readHead(path) {
   const buffer = Buffer.alloc(16_000);
   const descriptor = openSync(path, "r");
@@ -244,60 +219,6 @@ function globToRegExp(pattern) {
     } else source += char.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   }
   return new RegExp(`${floating ? "(^|/)" : "^"}${source}(/|$)`);
-}
-
-function run(command, args, { cwd, timeoutMs = 300_000, env = process.env } = {}) {
-  return new Promise((resolvePromise) => {
-    const started = Date.now();
-    // Own process group, so a timeout or Ctrl-C stops the whole tool tree.
-    const child = spawn(command, args, { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-    if (child.pid) activeGroups.add(child.pid);
-    const chunks = [];
-    let size = 0;
-    let timedOut = false;
-    const keep = (chunk) => {
-      chunks.push(chunk);
-      size += chunk.length;
-      while (size > 4 * 1024 * 1024 && chunks.length > 1) size -= chunks.shift().length;
-    };
-    child.stdout.on("data", keep);
-    child.stderr.on("data", keep);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      killGroup(child.pid, "SIGTERM");
-      setTimeout(() => killGroup(child.pid, "SIGKILL"), 5000).unref();
-    }, timeoutMs);
-    child.on("error", (error) => {
-      activeGroups.delete(child.pid);
-      clearTimeout(timer);
-      resolvePromise({ code: 127, output: String(error.message), timedOut, durationMs: Date.now() - started });
-    });
-    child.on("close", (code) => {
-      activeGroups.delete(child.pid);
-      clearTimeout(timer);
-      resolvePromise({ code: code ?? 1, output: Buffer.concat(chunks).toString("utf8"), timedOut, durationMs: Date.now() - started });
-    });
-  });
-}
-
-function killGroup(pid, signal) {
-  try {
-    process.kill(-pid, signal);
-  } catch {
-    // The group already exited.
-  }
-}
-
-function tail(text, lines = 60) {
-  return text.trimEnd().split("\n").slice(-lines).join("\n");
-}
-
-function readJson(read) {
-  try {
-    return JSON.parse(read());
-  } catch {
-    return null;
-  }
 }
 
 // Tools may print warnings before their JSON document.
@@ -559,24 +480,6 @@ function discoverChecks(root, base, options) {
   return { source: "package.json", checks, skipped };
 }
 
-// Status plus size and mtime of every changed or untracked path: cheap, and a
-// check that rewrites a tracked or untracked file changes it. Ignored output does not count.
-function treeFingerprint(root) {
-  const hash = createHash("sha256");
-  const status = git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"]);
-  hash.update(status);
-  for (const record of status.split("\0").filter(Boolean)) {
-    const file = record.slice(3);
-    try {
-      const stat = lstatSync(join(root, file));
-      hash.update(`${file}\0${stat.size}\0${stat.mtimeMs}\0`);
-    } catch {
-      hash.update(`${file}\0gone\0`);
-    }
-  }
-  return hash.digest("hex");
-}
-
 async function runChecks(root, discovered, options) {
   const results = [];
   for (const check of discovered.checks) {
@@ -599,6 +502,55 @@ async function runChecks(root, discovered, options) {
   return results;
 }
 
+// ---- route ------------------------------------------------------------------
+
+// Docs, tests, styles, locales and assets: a diff made only of these gets the
+// deep review's lowest effort and no fast pre-pass.
+const LOW_RISK_FILE = /\.(md|mdx|txt|rst|adoc|css|scss|sass|less|po|pot|png|jpe?g|gif|svg|webp|avif|ico)$|\.(test|spec|e2e)\.[cm]?[jt]sx?$|_test\.(go|py)$|(^|\/)test_[^/]*\.py$|(^|\/)(docs?|__tests__|__snapshots__|tests?|e2e|fixtures?|locales?|i18n|translations?)\//i;
+// Path words for the areas where the deep review runs at its highest effort.
+const SENSITIVE_AREAS = Object.entries({
+  auth: "auth authn authz authentication authorization authorize oauth oidc saml sso jwt session sessions login logout password passwords mfa otp permission permissions rbac acl role roles guard guards",
+  tenancy: "tenant tenants tenancy multitenant multitenancy",
+  credentials: "secret secrets credential credentials crypto encrypt encryption decrypt kms vault keystore apikey apikeys",
+  money: "billing payment payments invoice invoices checkout wallet wallets ledger ledgers refund refunds payout payouts pricing subscription subscriptions stripe",
+}).map(([area, words]) => [area, new Set(words.split(" "))]);
+const MIGRATION_FILE = /(^|\/)migrations?\/|\.sql$|(^|\/)schema\.prisma$|\.migration\.[cm]?[jt]s$/i;
+const T1_MIN_CHANGED_LINES = 20;
+const LARGE_DIFF = { lines: 800, files: 30 };
+
+// Deterministic routing for the model tiers: the deep review's starting effort,
+// whether the fast pre-pass (T1) is worth running, and the diff's size.
+function routeChange(root, base, changed, addedLines) {
+  const deletedLines = git(root, ["diff", "--numstat", "-M", "--no-ext-diff", base, "--"]).split("\n")
+    .reduce((sum, line) => sum + (Number(line.split("\t")[1]) || 0), 0);
+  const changedLines = addedLines + deletedLines;
+  // Both sides of a rename: moving code out of an auth path still touches auth.
+  const paths = new Set([...changed, ...git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean)]);
+  const code = [...paths].filter((file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !LOW_RISK_FILE.test(file));
+  const areas = new Map();
+  for (const file of code) {
+    const words = file.split(/[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/).map((word) => word.toLowerCase());
+    const hits = SENSITIVE_AREAS.filter(([, set]) => words.some((word) => set.has(word))).map(([area]) => area);
+    if (MIGRATION_FILE.test(file)) hits.push("migrations");
+    for (const area of hits) areas.set(area, [...(areas.get(area) ?? []), file]);
+  }
+  return {
+    effort: !code.length ? "medium" : areas.size ? "xhigh" : "high",
+    reasons: [...areas].map(([area, files]) => ({ area, files: files.slice(0, 3), more: Math.max(0, files.length - 3) })),
+    size: changedLines > LARGE_DIFF.lines || changed.length > LARGE_DIFF.files ? "large" : changedLines < 50 ? "small" : "medium",
+    changedLines,
+    codeFiles: code.length,
+    t1: !code.length ? { run: false, why: "docs, tests, styles, locales or assets only" }
+      : changedLines < T1_MIN_CHANGED_LINES ? { run: false, why: `under ${T1_MIN_CHANGED_LINES} changed lines` }
+      : { run: true, why: `${code.length} code file(s), ${changedLines} changed lines` },
+  };
+}
+
+function formatRoute(route) {
+  const reasons = route.reasons.map(({ area, files, more }) => `${area}: ${files.join(", ")}${more ? ` +${more}` : ""}`).join("; ");
+  return `ROUTE deep-review effort ${route.effort}${reasons ? ` (${reasons})` : ""}  T1 ${route.t1.run ? "run" : `skip (${route.t1.why})`}  ${route.size} diff, ${route.changedLines} changed lines`;
+}
+
 // ---- report -----------------------------------------------------------------
 
 function format(report) {
@@ -611,6 +563,7 @@ function format(report) {
   for (const check of report.checks) lines.push(`  ${mark[check.status]} ${check.name.padEnd(28)} ${seconds(check.durationMs).padStart(7)}  ${check.command}`);
   for (const skipped of report.skippedChecks) lines.push(`  -    ${skipped}`);
   if (report.skippedFiles.length) lines.push(`  -    ${report.skippedFiles.length} file(s) not scanned or code-rules only; see skippedFiles in the report`);
+  if (report.route) lines.push("", formatRoute(report.route));
   if (report.findings.length) {
     lines.push("", "findings (added lines only):");
     for (const finding of report.findings) {
@@ -624,15 +577,6 @@ function format(report) {
   const qualifiers = [...report.blockers, ...report.incomplete.map((reason) => `incomplete: ${reason}`)];
   lines.push("", `RESULT ${report.verdict}${qualifiers.length ? ` (${qualifiers.join("; ")})` : ""}  report: ${report.reportPath}`);
   return lines.join("\n");
-}
-
-// Written through a fresh temporary file and renamed, so an existing symlink at the
-// report path is replaced instead of followed.
-function writeReport(path, report) {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-  renameSync(temporary, path);
 }
 
 async function main() {
@@ -650,15 +594,17 @@ async function main() {
   }
   const headSha = git(root, ["rev-parse", "HEAD"]).trim();
   const dirty = git(root, ["status", "--porcelain"]).trim().length > 0;
-  const reportPath = options.json ?? join(process.env.TMPDIR || tmpdir(), "review-t0", `${basename(root)}-${headSha.slice(0, 12)}${dirty ? "-dirty" : ""}.json`);
+  const reportPath = options.json ?? defaultReportPath("review-t0", root, headSha, dirty);
   const { changed, added } = collectChanges(root, base.sha);
   const report = {
     tool: "review-t0",
-    version: 2,
+    version: 3,
     repo: basename(root),
     root,
     base,
-    head: { sha: headSha, dirty },
+    // review-t1 compares this to the tree it is about to show the models. A check
+    // that rewrites the tree blocks T0, so the fingerprint before the checks is final.
+    head: { sha: headSha, dirty, tree: treeFingerprint(root) },
     changedFiles: changed.length,
     addedLines: 0,
     verdict: "PASS",
@@ -670,6 +616,7 @@ async function main() {
     skippedChecks: [],
     skippedFiles: [],
     findings: [],
+    route: null,
     reportPath,
   };
   if (!changed.length) {
@@ -713,6 +660,7 @@ async function main() {
     }
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
+      route: routeChange(root, base.sha, changed, report.addedLines),
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,
@@ -730,10 +678,10 @@ async function main() {
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    for (const pid of activeGroups) killGroup(pid, "SIGTERM");
+  process.on(signal, async () => {
     // The scratch mirror holds copies of changed files, possibly with secrets.
     if (scratchDir) rmSync(scratchDir, { recursive: true, force: true });
+    await stopGroups();
     process.exit(130);
   });
 }

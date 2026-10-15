@@ -21,6 +21,9 @@ Diff fixo: `git diff {{BASE_SHA}}...{{HEAD_SHA}}` ({{N}} commits)
 ## T0 (determinístico, já executado)
 {{Resumo do review-t0: PASS, checks executados e warnings.}} Não reporte de novo o que o T0 ou o tooling do repositório já cobre. Confirme ou descarte cada warning do T0 com um motivo.
 
+## T1 (pré-revisão rápida, já executada)
+{{Achados do review-t1 que o autor descartou, cada um com o motivo; os aceitos já estão corrigidos neste diff. Se o T1 não rodou, diga por quê (rota do T0 ou nenhum modelo respondeu).}} Reabra qualquer descarte de que discorde, com evidência.
+
 ## Contexto verificado pelo autor
 {{Fatos do código fora do diff que o revisor precisaria descobrir (guards, transações, contratos com outros serviços), com arquivo:linha.}}
 

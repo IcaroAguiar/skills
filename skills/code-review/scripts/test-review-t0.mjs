@@ -3,7 +3,7 @@
 // Needs git, node, npm, gitleaks and semgrep; osv-scanner is not exercised (network).
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -153,6 +153,8 @@ try {
     assert.ok(report.skippedChecks.some((skipped) => skipped.startsWith(`${mutating} `)), `${mutating} must never run\n${report.skippedChecks.join("\n")}`);
   }
   assert.match(blocked.output, /lint: LINT_FAIL found/);
+  assert.deepEqual([report.route.effort, report.route.t1.run, report.route.reasons], ["high", true, []], "generated build/secret.ts does not make the change sensitive");
+  assert.ok(report.head.tree, "the report pins the reviewed working tree");
 
   const sneaky = reviewT0(["--no-tests"], { T0_SNEAKY: "1" });
   assert.equal(sneaky.status, 1, sneaky.output);
@@ -203,6 +205,58 @@ try {
   const deletion = reviewT0();
   assert.equal(deletion.status, 1, deletion.output);
   assert.equal(deletion.report.checks[0].status, "fail", "a deletion that breaks typecheck blocks");
+
+  // ---- route: deep-review effort and T1 from the paths the diff touches -------
+  newRepo("route");
+  write("README.md", "# route\n");
+  commit("base");
+  const code = (count) => Array.from({ length: count }, (_, index) => `export const value${index} = ${index};\n`).join("");
+  const routed = () => {
+    const result = reviewT0(["--no-checks"]);
+    assert.equal(result.status, 0, result.output);
+    return { route: result.report.route, output: result.output };
+  };
+  write("src/tiny.ts", code(3));
+  assert.deepEqual(routed().route.t1, { run: false, why: "under 20 changed lines" });
+  rmSync(join(repo, "src/tiny.ts"));
+  write("docs/guide.md", code(30));
+  write("src/auth/session.test.ts", code(30));
+  const docs = routed().route;
+  assert.deepEqual([docs.effort, docs.t1.run], ["medium", false], "docs and tests only");
+  write("src/design/designTokens.ts", code(30));
+  const plain = routed().route;
+  assert.deepEqual([plain.effort, plain.t1.run, plain.reasons], ["high", true, []], "design tokens and tests under auth/ are not sensitive code");
+  write("src/billing/InvoiceService.ts", code(5));
+  write("src/JWTStrategy.ts", code(5));
+  write("db/migrations/001_init.sql", "create table t (id int);\n");
+  const sensitive = routed();
+  assert.equal(sensitive.route.effort, "xhigh");
+  assert.deepEqual(sensitive.route.reasons.map((reason) => reason.area).sort(), ["auth", "migrations", "money"]);
+  assert.match(sensitive.output, /ROUTE deep-review effort xhigh \(.*money: src\/billing\/InvoiceService\.ts/);
+
+  newRepo("route-rename");
+  write("src/auth/session.ts", code(30));
+  commit("base");
+  sh("git", ["mv", "src/auth/session.ts", "src/client.ts"]);
+  const moved = routed().route;
+  assert.deepEqual([moved.effort, moved.reasons.map((reason) => reason.area)], ["xhigh", ["auth"]], "moving code out of an auth path still touches auth");
+
+  // ---- Ctrl-C during a check starts no further check ---------------------------
+  newRepo("cancel");
+  const marks = join(workspace, "marks");
+  mkdirSync(marks);
+  write("first.mjs", `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(join(marks, "first"))}, "");\nsetTimeout(() => {}, 60000);\n`);
+  write("second.mjs", `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(join(marks, "second"))}, "");\n`);
+  write("package.json", `${JSON.stringify({ name: "cancel", private: true, scripts: { typecheck: "node first.mjs", lint: "node second.mjs" } }, null, 2)}\n`);
+  commit("base");
+  write("src/change.ts", "export const changed = 1;\n");
+  const cancelled = spawn(process.execPath, [script, "-C", repo, "--json", join(workspace, "cancel.json"), "--no-tests"], { stdio: "ignore" });
+  const exited = new Promise((done) => cancelled.on("exit", (code) => done(code)));
+  for (let waited = 0; !existsSync(join(marks, "first")) && waited < 300; waited += 1) await new Promise((wake) => setTimeout(wake, 100));
+  cancelled.kill("SIGINT");
+  assert.equal(await exited, 130);
+  await new Promise((wake) => setTimeout(wake, 500));
+  assert.ok(!existsSync(join(marks, "second")), "a check started after Ctrl-C");
 
   console.log("PASS review-t0 contract");
 } finally {
