@@ -1,0 +1,25 @@
+rules:
+  - id: hard-truncate-text
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Hard cut of human text at a fixed length. It splits words, sentences and
+      UTF-16 surrogate pairs (emoji), and the full text is lost for any later
+      "read more". Keep the full value and truncate at display time with a
+      word- or grapheme-aware helper (Intl.Segmenter), or store a separate
+      excerpt.
+    metadata:
+      lens: contract
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*"]
+    patterns:
+      - pattern-either:
+          - pattern: $S.slice(0, $N)
+          - pattern: $S.substring(0, $N)
+          - pattern: $S.substr(0, $N)
+      - metavariable-regex:
+          metavariable: $N
+          regex: ^([1-9][0-9_]{1,}|[A-Z][A-Z0-9_]*(LENGTH|LEN|CHARS|LIMIT|MAX)[A-Z0-9_]*)$
+      - metavariable-regex:
+          metavariable: $S
+          regex: (?i)^(?!.*(file|path|host|user|class|tag|key|type|node|field|column|table|module|package|branch)name\)?$).*(text|title|name|description|summary|message|content|body|label|excerpt|snippet|comment|note|subject|caption|bio|reason|prompt|markdown|answer)\)?$

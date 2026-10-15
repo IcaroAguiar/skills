@@ -1,0 +1,26 @@
+rules:
+  - id: regen-flag-without-ci-guard
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      An environment flag makes this test or script rewrite its expected output
+      (docs, fixtures, snapshots), and nothing refuses it under CI. If the
+      variable reaches CI the run regenerates the file before comparing it and
+      passes while hiding the drift. Throw when the flag is set and
+      process.env.CI is truthy.
+    metadata:
+      lens: contract
+      t0-suppress-if-file-matches: 'process\.env\.CI\b|process\.env\[["''`]CI["''`]\]|\bisCI\b|ci-info'
+    paths:
+      include: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/scripts/**"]
+    pattern-either:
+      - patterns:
+          - pattern: process.env.$FLAG
+          - metavariable-regex:
+              metavariable: $FLAG
+              regex: ^((UPDATE|REGEN|REGENERATE|BLESS|OVERWRITE)(_[A-Z0-9_]+)?|(RECORD|WRITE|ACCEPT|REFRESH)_(SNAPSHOTS?|FIXTURES?|GOLDEN|BASELINES?|DOCS|OUTPUT|EXPECTED)|[A-Z0-9_]+_(UPDATE|REGEN|REGENERATE|SNAPSHOTS?|GOLDEN|FIXTURES?|BASELINE))$
+      - patterns:
+          - pattern: process.env[$KEY]
+          - metavariable-regex:
+              metavariable: $KEY
+              regex: ^["'`]((UPDATE|REGEN|REGENERATE|BLESS|OVERWRITE)(_[A-Z0-9_]+)?|(RECORD|WRITE|ACCEPT|REFRESH)_(SNAPSHOTS?|FIXTURES?|GOLDEN|BASELINES?|DOCS|OUTPUT|EXPECTED)|[A-Z0-9_]+_(UPDATE|REGEN|REGENERATE|SNAPSHOTS?|GOLDEN|FIXTURES?|BASELINE))["'`]$

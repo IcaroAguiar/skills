@@ -1,0 +1,33 @@
+rules:
+  - id: fs-path-without-containment
+    languages: [typescript, javascript]
+    severity: INFO
+    message: >-
+      File-system access with a path joined from a variable and no visible
+      containment check. "../" segments, absolute segments and symlinks can
+      escape the intended root. Resolve with fs.realpath, then require
+      resolved === root or resolved.startsWith(root + path.sep).
+    metadata:
+      lens: sec
+      t0-suppress-if-file-matches: 'realpath|path\.relative\(|\.startsWith\([^)]*(\bsep\b|[Rr]oot|ROOT|[Bb]ase|BASE|[Dd]ir\b|DIR)'
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*", "**/scripts/**", "*.config.*"]
+    patterns:
+      - pattern-either:
+          - pattern: $FS.$OP($P.$JOIN(..., $X, ...), ...)
+          - pattern: |
+              const $V = $P.$JOIN(..., $X, ...);
+              ...
+              $FS.$OP($V, ...);
+      - metavariable-regex:
+          metavariable: $JOIN
+          regex: ^(join|resolve)$
+      - metavariable-regex:
+          metavariable: $OP
+          regex: ^(readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|createReadStream|createWriteStream|open|openSync|unlink|unlinkSync|rm|rmSync|readdir|readdirSync|copyFile|copyFileSync|rename|renameSync|cp|cpSync|sendFile|download)$
+      - metavariable-pattern:
+          metavariable: $X
+          patterns:
+            - pattern-not: '"..."'
+            - pattern-not: __dirname
+            - pattern-not: process.cwd()

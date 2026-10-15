@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = mkdtempSync(join(tmpdir(), "skills-catalog-validator-"));
-const retired = ["code", "review"].join("-");
+const retired = ["review", "loop"].join("-");
 
 function run(expected, diagnostic) {
   const result = spawnSync(process.execPath, [join(fixtureRoot, "scripts", "validate-skills.mjs")], {

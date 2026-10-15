@@ -1,0 +1,47 @@
+rules:
+  - id: unbounded-module-cache
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Long-lived Map/Set (module scope or service field) grows from request
+      code with no visible eviction. In a server it keeps one entry per key
+      (tenant, user, id) forever and can serve stale data. Bound it (LRU, TTL,
+      max size) or scope it to the request.
+    metadata:
+      lens: perf
+      # review-t0 drops the finding when the file shows an eviction policy or
+      # is a registry filled once at startup.
+      t0-suppress-if-file-matches: '\b{receiver}\.(delete|clear)\(|\bLRU|lru-cache|\bmax(Size|Entries)\b|\bttl\b|\bTTL\b|\bregister[A-Za-z]*\s*\(|onModuleInit'
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*", "**/scripts/**"]
+    pattern-either:
+      - patterns:
+          - pattern-inside: |
+              const $C = new $T(...);
+              ...
+          - pattern-not-inside: |
+              function $F(...) { ... const $C = new $T(...); ... }
+          - pattern-not-inside: |
+              (...) => { ... const $C = new $T(...); ... }
+          - pattern-not-inside: |
+              class $K { ... $M(...) { ... const $C = new $T(...); ... } ... }
+          - pattern-either:
+              - pattern-inside: function $G(...) { ... }
+              - pattern-inside: (...) => { ... }
+              - pattern-inside: |
+                  class $K2 { ... }
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(Map|Set)$
+          - pattern-either:
+              - pattern: $C.set(...)
+              - pattern: $C.add(...)
+      - patterns:
+          - pattern-inside: |
+              class $K { ... $C = new $T(...); ... }
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(Map|Set)$
+          - pattern-either:
+              - pattern: this.$C.set(...)
+              - pattern: this.$C.add(...)

@@ -1,0 +1,43 @@
+rules:
+  - id: read-before-transaction
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      A value read before the transaction is used inside it. A concurrent write
+      between the read and the transaction makes that decision stale (TOCTOU):
+      the write lands on a record that changed state, or the audit "before" is
+      wrong. Read it inside the transaction with a lock, a conditional update
+      (where: { status }) or a version check.
+    metadata:
+      lens: contract
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*"]
+    patterns:
+      - pattern-inside: |
+          const $X = await $R.$READ(...);
+          ...
+      - metavariable-regex:
+          metavariable: $READ
+          regex: ^(find[A-Za-z]*|get[A-Z][A-Za-z]*|load[A-Za-z]*|fetch[A-Za-z]*|count|aggregate)$
+      - pattern-either:
+          - pattern-inside: $DB.$transaction(...)
+          - pattern-inside: $DB.transaction(...)
+          - pattern-inside: $DB.withTransaction(...)
+          - pattern-inside: $DB.runInTransaction(...)
+      - pattern-not-inside: |
+          $DB.$transaction(..., async ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.$transaction(..., ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.transaction(..., async ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.transaction(..., ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.withTransaction(..., async ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.withTransaction(..., ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.runInTransaction(..., async ($T) => { ... const $X = $E; ... }, ...)
+      - pattern-not-inside: |
+          $DB.runInTransaction(..., ($T) => { ... const $X = $E; ... }, ...)
+      - pattern: $X

@@ -17,7 +17,6 @@ const retiredSkillNames = new Set([
   ["academic", "authorship", "refinement"].join("-"),
   ["advisor", "split"].join("-"),
   ["catalog", "maintenance"].join("-"),
-  ["code", "review"].join("-"),
   ["engineering", "advisor"].join("-"),
   ["finding", "authenticated", "smoke", "context"].join("-"),
   ["gating", "testability"].join("-"),

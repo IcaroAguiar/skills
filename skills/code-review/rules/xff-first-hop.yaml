@@ -1,0 +1,32 @@
+rules:
+  - id: xff-first-hop
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      The first X-Forwarded-For entry is chosen by the client, so it can be
+      spoofed to bypass rate limits, audit trails or IP allow-lists. Take the
+      address appended by your own trusted proxy (count hops from the right)
+      or use the framework's trust-proxy setting.
+    metadata:
+      lens: sec
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: $H[$K]
+              - pattern: $H.get($K)
+              - pattern: $H.header($K)
+              - pattern: $H.getHeader($K)
+          - metavariable-regex:
+              metavariable: $K
+              regex: (?i)^["'`]x-forwarded-for["'`]$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $S.split(...)[0]
+              - pattern: $S.split(...).at(0)
+              - pattern: $S.split(...).shift()
+              - pattern: $S.split(...)?.[0]
+              - pattern: $S.split(...).map(...)[0]
+              - pattern: const [$FIRST, ...] = $S.split(...);
+          - focus-metavariable: $S
