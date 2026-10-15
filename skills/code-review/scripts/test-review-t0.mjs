@@ -153,6 +153,8 @@ try {
     assert.ok(report.skippedChecks.some((skipped) => skipped.startsWith(`${mutating} `)), `${mutating} must never run\n${report.skippedChecks.join("\n")}`);
   }
   assert.match(blocked.output, /lint: LINT_FAIL found/);
+  assert.deepEqual([report.route.effort, report.route.t1.run, report.route.reasons], ["high", true, []], "generated build/secret.ts does not make the change sensitive");
+  assert.ok(report.head.tree, "the report pins the reviewed working tree");
 
   const sneaky = reviewT0(["--no-tests"], { T0_SNEAKY: "1" });
   assert.equal(sneaky.status, 1, sneaky.output);
@@ -203,6 +205,34 @@ try {
   const deletion = reviewT0();
   assert.equal(deletion.status, 1, deletion.output);
   assert.equal(deletion.report.checks[0].status, "fail", "a deletion that breaks typecheck blocks");
+
+  // ---- route: deep-review effort and T1 from the paths the diff touches -------
+  newRepo("route");
+  write("README.md", "# route\n");
+  commit("base");
+  const code = (count) => Array.from({ length: count }, (_, index) => `export const value${index} = ${index};\n`).join("");
+  const routed = () => {
+    const result = reviewT0(["--no-checks"]);
+    assert.equal(result.status, 0, result.output);
+    return { route: result.report.route, output: result.output };
+  };
+  write("src/tiny.ts", code(3));
+  assert.deepEqual(routed().route.t1, { run: false, why: "under 20 changed lines" });
+  rmSync(join(repo, "src/tiny.ts"));
+  write("docs/guide.md", code(30));
+  write("src/auth/session.test.ts", code(30));
+  const docs = routed().route;
+  assert.deepEqual([docs.effort, docs.t1.run], ["medium", false], "docs and tests only");
+  write("src/design/designTokens.ts", code(30));
+  const plain = routed().route;
+  assert.deepEqual([plain.effort, plain.t1.run, plain.reasons], ["high", true, []], "design tokens and tests under auth/ are not sensitive code");
+  write("src/billing/InvoiceService.ts", code(5));
+  write("src/JWTStrategy.ts", code(5));
+  write("db/migrations/001_init.sql", "create table t (id int);\n");
+  const sensitive = routed();
+  assert.equal(sensitive.route.effort, "xhigh");
+  assert.deepEqual(sensitive.route.reasons.map((reason) => reason.area).sort(), ["auth", "migrations", "money"]);
+  assert.match(sensitive.output, /ROUTE deep-review effort xhigh \(.*money: src\/billing\/InvoiceService\.ts/);
 
   console.log("PASS review-t0 contract");
 } finally {

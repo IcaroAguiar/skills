@@ -32,8 +32,24 @@ conflict markers, manifest without lockfile, the rules in `rules/`, and reposito
 rules in `.semgrep/`) and runs the repository's typecheck, lint and affected
 tests. `BLOCKED` goes back to the author; no reviewer runs on a red T0. Hand the
 reviewer the T0 summary: it does not re-report what T0 or repository tooling
-covers, and confirms or dismisses each T0 warning with a reason. Details,
-configuration and suppression: `references/t0.md`.
+covers, and confirms or dismisses each T0 warning with a reason. T0's `ROUTE`
+line gives the reviewer's starting reasoning effort and says whether T1 runs.
+Details, configuration and suppression: `references/t0.md`.
+
+## Fast pre-pass (T1)
+
+When T0 passes and its route says `T1 run`, the author runs:
+
+```bash
+node <this-skill>/scripts/review-t1.mjs -C <repo> [--spec <pr-body-file>] [--claude <account wrapper>]
+```
+
+Two fast models (by default Claude Sonnet at medium effort and Claude Haiku)
+review the same diff in parallel, read-only, in about three minutes. The author
+fixes or dismisses each finding with a reason, reruns T0 if code changed, and
+gives the reviewer the dismissed findings, which it may re-raise. Like T0, T1 is
+the author's tool, not a reviewer wave: it never approves or blocks, and it runs
+once, before the first full review. Details: `references/t1.md`.
 
 If `~/.config/agent-review/local.md` (or `$AGENT_REVIEW_LOCAL`) exists, read it
 first: it is this machine's private policy for accounts, models and job queues.
@@ -78,7 +94,7 @@ Use `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
 ## Delta review
 
 The author or one fixer applies accepted critical/high findings, reruns only
-affected checks, and reruns T0 until it passes. The same reviewer then reviews
+affected checks, and reruns T0 until it passes; T1 does not run again. The same reviewer then reviews
 `git diff <old-head>..<new-head>` plus affected callers and tests. Preserve the
 earlier full-diff coverage. Request another full review only if the base changes,
 the scope expands materially, reviewers disagree, or the correction crosses

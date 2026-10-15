@@ -16,13 +16,14 @@ The approval standard is the `code-review` skill from this catalog: findings spl
 2. **Model.** Use the model the user names, else the local policy's, else `gpt-6.1-sol`. Confirm the slug in `codex debug models`; if it is missing, show the list and ask.
 3. **Smoke** (once per machine/session): `codex exec -m <model> -s read-only --skip-git-repo-check -o "$TMPDIR/ping.txt" "Reply OK and your model name"`. If your own account's `config.toml` fails to parse, run with a temporary `CODEX_HOME` holding a copy of that account's `auth.json` and a minimal config, and delete it afterwards. Never do this across accounts.
 4. **Targets.** Pin the exact base and head SHA of every PR. Working trees clean and on the right branches. For interactive testing, confirm the app is up.
-5. **T0.** Run `review-t0` from the `code-review` skill on every PR checkout. A `BLOCKED` result goes back to the author before any reviewer starts; a `PASS` summary goes into the review prompt.
+5. **T0.** Run `review-t0` from the `code-review` skill on every PR checkout. A `BLOCKED` result goes back to the author before any reviewer starts; a `PASS` summary goes into the review prompt, and its `ROUTE` line gives the starting effort and whether T1 runs.
+6. **T1.** When the route says `T1 run`, run `review-t1` from the `code-review` skill on the account that owns the code (`--claude <account wrapper>`). It takes about three minutes, all PRs in parallel. Judge each finding as in step 2: accepted ones go back to the author, or to a fix round (step 3) before the first review, followed by T0; dismissed ones, with reasons, go into the review prompt. T1 never approves, and deltas skip it.
 
 ## 1. Review round — one fresh reviewer per PR
 
-Write one prompt per PR from [references/review-prompt.md](references/review-prompt.md). It invokes `$code-review` and carries: the fixed diff (`git diff <base>...<head>`), the spec (what the change must do and what is out of scope), the T0 summary, the author's verification evidence, and the unchanged neighbours the reviewer needs. For plans, skills and other artifacts, use [references/artifact-review.md](references/artifact-review.md) instead.
+Write one prompt per PR from [references/review-prompt.md](references/review-prompt.md). It invokes `$code-review` and carries: the fixed diff (`git diff <base>...<head>`), the spec (what the change must do and what is out of scope), the T0 summary, the T1 findings the author dismissed and why, the author's verification evidence, and the unchanged neighbours the reviewer needs. For plans, skills and other artifacts, use [references/artifact-review.md](references/artifact-review.md) instead.
 
-Pick reasoning by risk, not by habit:
+Pick reasoning by risk, not by habit. Start from T0's `route.effort`, which applies the first and third rows to file paths, and raise it when the diff reaches those areas in ways paths do not show:
 
 | Change | Effort |
 | --- | --- |
