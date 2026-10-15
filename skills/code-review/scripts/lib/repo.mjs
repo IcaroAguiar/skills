@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -12,6 +12,8 @@ export const LOCKFILES = new Set([
   "Cargo.lock", "go.mod", "poetry.lock", "uv.lock", "Pipfile.lock", "requirements.txt",
   "Gemfile.lock", "composer.lock", "pubspec.lock", "mix.lock", "gradle.lockfile",
 ]);
+// Larger changed files are fingerprinted by size and mtime instead of content.
+const MAX_HASHED_BYTES = 64 * 1024 * 1024;
 const GENERATED_DIRS = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", ".next", ".turbo", "generated", "__generated__"]);
 // Process groups still running, so a signal handler can stop them.
 export const activeGroups = new Set();
@@ -90,6 +92,26 @@ export function killGroup(pid, signal) {
   }
 }
 
+// On Ctrl-C: SIGTERM every running group, then SIGKILL whatever outlives `graceMs`,
+// so a tool that ignores SIGTERM cannot keep running (and spending) after we exit.
+export async function stopGroups(graceMs = 3000) {
+  const groups = [...activeGroups];
+  for (const pid of groups) killGroup(pid, "SIGTERM");
+  const deadline = Date.now() + graceMs;
+  while (groups.some(groupAlive) && Date.now() < deadline) await new Promise((wake) => setTimeout(wake, 100));
+  for (const pid of groups) killGroup(pid, "SIGKILL");
+}
+
+// Only "no such process" means gone; any other error leaves the group to SIGKILL.
+function groupAlive(pid) {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== "ESRCH";
+  }
+}
+
 export function tail(text, lines = 60) {
   return text.trimEnd().split("\n").slice(-lines).join("\n");
 }
@@ -102,22 +124,32 @@ export function readJson(read) {
   }
 }
 
-// Status plus size and mtime of every changed or untracked path: cheap, and a
-// check that rewrites a tracked or untracked file changes it. Ignored output does not count.
+// Status plus the content and mode of every changed or untracked path: a check that
+// rewrites a file changes it, and so does any edit between review-t0 and review-t1.
+// Ignored output does not count.
 export function treeFingerprint(root) {
   const hash = createHash("sha256");
   const status = git(root, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"]);
   hash.update(status);
   for (const record of status.split("\0").filter(Boolean)) {
     const file = record.slice(3);
-    try {
-      const stat = lstatSync(join(root, file));
-      hash.update(`${file}\0${stat.size}\0${stat.mtimeMs}\0`);
-    } catch {
-      hash.update(`${file}\0gone\0`);
-    }
+    hash.update(`${file}\0${pathDigest(join(root, file))}\0`);
   }
   return hash.digest("hex");
+}
+
+// Symlinks are never followed: their target text is what counts.
+function pathDigest(path) {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return "gone";
+  }
+  if (stat.isSymbolicLink()) return `link ${readlinkSync(path)}`;
+  if (!stat.isFile()) return `mode ${stat.mode}`;
+  if (stat.size > MAX_HASHED_BYTES) return `mode ${stat.mode} size ${stat.size} mtime ${stat.mtimeMs}`;
+  return `mode ${stat.mode} ${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
 }
 
 // Where a tool writes its report when no path is given; review-t1 finds T0's report here.

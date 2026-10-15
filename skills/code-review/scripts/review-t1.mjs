@@ -7,11 +7,14 @@
 
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, relative, resolve } from "node:path";
-import { activeGroups, defaultReportPath, git, isGenerated, killGroup, LOCKFILES, readJson, run, tail, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
+import { defaultReportPath, git, isGenerated, LOCKFILES, readJson, run, stopGroups, tail, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
 const DEFAULT_REVIEWERS = ["sonnet:medium", "haiku"];
 const MAX_DIFF_BYTES = 400 * 1024;
 const MAX_FINDINGS = 10;
+// Ten findings fit in a few KB; a longer answer is not the requested object.
+const MAX_ANSWER_BYTES = 256 * 1024;
+const MAX_ANSWER_CANDIDATES = 20;
 const NEARBY_LINES = 3;
 const SEVERITIES = ["P1", "P2", "P3"];
 const LENSES = new Set(["SEC", "PERF", "CORRECTNESS", "CONTRACT", "CLEAN", "TEST"]);
@@ -165,15 +168,19 @@ Your final message must be ONLY this JSON object, with no prose and no code fenc
 
 // Models wrap the object in prose or code fences despite the instructions. Take the
 // first balanced object that opens with "findings", else everything between the
-// outermost braces; each candidate is scanned and parsed once.
+// outermost braces. The answer size and the candidates tried are capped, so a
+// runaway answer costs a bounded, linear amount of work.
 function parseAnswer(text) {
-  const candidates = [...text.matchAll(/\{\s*"findings"\s*:/g)].map((match) => [match.index, closingBrace(text, match.index)]);
-  candidates.push([text.indexOf("{"), text.lastIndexOf("}")]);
-  for (const [start, end] of candidates) {
-    const value = start !== -1 && end > start ? readJson(() => text.slice(start, end + 1)) : null;
+  if (Buffer.byteLength(text) > MAX_ANSWER_BYTES) return null;
+  const parse = (start, end) => (start !== -1 && end > start ? readJson(() => text.slice(start, end + 1)) : null);
+  let tried = 0;
+  for (const match of text.matchAll(/\{\s*"findings"\s*:/g)) {
+    if (tried++ === MAX_ANSWER_CANDIDATES) break;
+    const value = parse(match.index, closingBrace(text, match.index));
     if (Array.isArray(value?.findings)) return value;
   }
-  return null;
+  const value = parse(text.indexOf("{"), text.lastIndexOf("}"));
+  return Array.isArray(value?.findings) ? value : null;
 }
 
 // Index of the brace that closes the one at `start`, skipping braces inside strings.
@@ -336,8 +343,8 @@ async function main() {
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    for (const pid of activeGroups) killGroup(pid, "SIGTERM");
+  process.on(signal, async () => {
+    await stopGroups();
     process.exit(130);
   });
 }

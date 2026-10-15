@@ -9,7 +9,7 @@ import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { activeGroups, defaultReportPath, git, isGenerated, killGroup, LOCKFILES, readJson, run, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
+import { defaultReportPath, git, isGenerated, LOCKFILES, readJson, run, stopGroups, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
 
 const RULES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../rules");
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
@@ -524,7 +524,9 @@ function routeChange(root, base, changed, addedLines) {
   const deletedLines = git(root, ["diff", "--numstat", "-M", "--no-ext-diff", base, "--"]).split("\n")
     .reduce((sum, line) => sum + (Number(line.split("\t")[1]) || 0), 0);
   const changedLines = addedLines + deletedLines;
-  const code = changed.filter((file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !LOW_RISK_FILE.test(file));
+  // Both sides of a rename: moving code out of an auth path still touches auth.
+  const paths = new Set([...changed, ...git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean)]);
+  const code = [...paths].filter((file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !LOW_RISK_FILE.test(file));
   const areas = new Map();
   for (const file of code) {
     const words = file.split(/[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/).map((word) => word.toLowerCase());
@@ -676,10 +678,10 @@ async function main() {
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => {
-    for (const pid of activeGroups) killGroup(pid, "SIGTERM");
+  process.on(signal, async () => {
     // The scratch mirror holds copies of changed files, possibly with secrets.
     if (scratchDir) rmSync(scratchDir, { recursive: true, force: true });
+    await stopGroups();
     process.exit(130);
   });
 }

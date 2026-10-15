@@ -234,6 +234,13 @@ try {
   assert.deepEqual(sensitive.route.reasons.map((reason) => reason.area).sort(), ["auth", "migrations", "money"]);
   assert.match(sensitive.output, /ROUTE deep-review effort xhigh \(.*money: src\/billing\/InvoiceService\.ts/);
 
+  newRepo("route-rename");
+  write("src/auth/session.ts", code(30));
+  commit("base");
+  sh("git", ["mv", "src/auth/session.ts", "src/client.ts"]);
+  const moved = routed().route;
+  assert.deepEqual([moved.effort, moved.reasons.map((reason) => reason.area)], ["xhigh", ["auth"]], "moving code out of an auth path still touches auth");
+
   console.log("PASS review-t0 contract");
 } finally {
   rmSync(workspace, { recursive: true, force: true });

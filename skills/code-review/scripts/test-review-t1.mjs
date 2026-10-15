@@ -3,8 +3,8 @@
 // Needs git, node, gitleaks and semgrep: review-t0 runs first.
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,7 @@ const workspace = mkdtempSync(join(tmpdir(), "review-t1-fixture-"));
 const env = { ...process.env, TMPDIR: workspace };
 const bin = join(workspace, "bin");
 let repo = "";
+let stubborn = 0;
 
 function sh(command, args) {
   const result = spawnSync(command, args, { cwd: repo, encoding: "utf8" });
@@ -96,10 +97,12 @@ try {
     "--reviewer-cmd", "slow=node -e 'setTimeout(() => {}, 60000)'",
     "--reviewer-cmd", "broken=echo crashed >&2; exit 3",
     ...reviewer("junk", "no json here"),
+    ...reviewer("nested", `${'{"findings":['.repeat(5000)}never closed`),
+    ...reviewer("huge", JSON.stringify({ findings: [{ severity: "P3", lens: "CLEAN", file: "src/feature.ts", line: 1, title: "padded", why: "x".repeat(300 * 1024) }] })),
   ]);
   assert.equal(run.status, 0, run.output);
   const statuses = Object.fromEntries(run.report.reviewers.map((entry) => [entry.name, entry.status]));
-  assert.deepEqual(statuses, { a: "ok", b: "ok", slow: "timeout", broken: "error", junk: "malformed" });
+  assert.deepEqual(statuses, { a: "ok", b: "ok", slow: "timeout", broken: "error", junk: "malformed", nested: "malformed", huge: "malformed" }, "runaway answers are rejected, not parsed");
   assert.equal(run.report.reviewers.find((entry) => entry.name === "b").dropped, 1, "a finding without a title is dropped");
   const spots = run.report.findings.map((spot) => [spot.severity, spot.file, spot.line, spot.reviewers.join("+"), spot.inDiff]);
   assert.deepEqual(spots, [
@@ -108,7 +111,7 @@ try {
     ["P3", "other/file.ts", 5, "a", false],
   ], "same spot grouped across reviewers, absolute paths made relative, severity first");
   assert.equal(run.report.findings[1].items[0].lens, "CORRECTNESS");
-  assert.match(run.output, /RESULT 4 finding\(s\) at 3 spot\(s\) from 2\/5 reviewers/);
+  assert.match(run.output, /RESULT 4 finding\(s\) at 3 spot\(s\) from 2\/7 reviewers/);
 
   const prompt = readFileSync(join(bin, "a.prompt"), "utf8");
   for (const expected of ["INTENT-42", "src/feature.ts", "rename from src/legacy.ts", "UNSTAGED-EDIT", "UNTRACKED_MARKER", "silent-catch-default src/feature.ts:32", "package-lock.json (lockfile)", "dist/bundle.js (generated or vendored)"]) {
@@ -133,10 +136,28 @@ try {
   assert.equal(readFileSync(victim, "utf8"), "keep\n", "--prompt replaces a symlink instead of writing through it");
   assert.ok(!lstatSync(linked).isSymbolicLink() && (lstatSync(linked).mode & 0o777) === 0o600);
 
+  // Same size and mtime, different content: still a different tree. A whole-second
+  // mtime survives utimes exactly.
+  const extra = join(repo, "src/extra.ts");
+  utimesSync(extra, 1_700_000_000, 1_700_000_000);
+  reviewT0();
   write("src/extra.ts", "export const UNTRACKED_MARKER = 2;\n");
+  utimesSync(extra, 1_700_000_000, 1_700_000_000);
   const stale = reviewT1(reviewer("stale", "{}"));
   assert.equal(stale.status, 2, stale.output);
   assert.match(stale.output, /changed since review-t0/);
+
+  // ---- Ctrl-C stops reviewers that ignore SIGTERM ----------------------------
+  reviewT0();
+  const pidFile = join(bin, "stubborn.pid");
+  const cancelled = spawn(process.execPath, [join(scripts, "review-t1.mjs"), "-C", repo, "--json", join(workspace, "t1-cancel.json"),
+    "--reviewer-cmd", `stubborn=trap '' TERM; echo $$ > '${pidFile}'; while :; do sleep 0.2; done`], { env, stdio: "ignore" });
+  const exited = new Promise((done) => cancelled.on("exit", (code) => done(code)));
+  for (let waited = 0; !existsSync(pidFile) && waited < 100; waited += 1) await new Promise((wake) => setTimeout(wake, 100));
+  stubborn = Number(readFileSync(pidFile, "utf8"));
+  cancelled.kill("SIGINT");
+  assert.equal(await exited, 130);
+  assert.throws(() => process.kill(stubborn, 0), /ESRCH/, "the reviewer outlived review-t1");
 
   write("notes.md", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\n");
   reviewT0(1);
@@ -166,5 +187,12 @@ try {
 
   console.log("PASS review-t1 contract");
 } finally {
+  if (stubborn) {
+    try {
+      process.kill(-stubborn, "SIGKILL");
+    } catch {
+      // Already gone, as it should be.
+    }
+  }
   rmSync(workspace, { recursive: true, force: true });
 }
