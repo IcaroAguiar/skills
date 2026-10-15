@@ -37,6 +37,8 @@ configuration and suppression: `references/t0.md`.
 
 If `~/.config/agent-review/local.md` (or `$AGENT_REVIEW_LOCAL`) exists, read it
 first: it is this machine's private policy for accounts, models and job queues.
+Every model call for a repository, including subagents and delegated tasks, runs
+on the account that owns the repository.
 
 ## Independence
 
