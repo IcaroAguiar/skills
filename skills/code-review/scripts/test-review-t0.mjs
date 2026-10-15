@@ -3,7 +3,7 @@
 // Needs git, node, npm, gitleaks and semgrep; osv-scanner is not exercised (network).
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -240,6 +240,23 @@ try {
   sh("git", ["mv", "src/auth/session.ts", "src/client.ts"]);
   const moved = routed().route;
   assert.deepEqual([moved.effort, moved.reasons.map((reason) => reason.area)], ["xhigh", ["auth"]], "moving code out of an auth path still touches auth");
+
+  // ---- Ctrl-C during a check starts no further check ---------------------------
+  newRepo("cancel");
+  const marks = join(workspace, "marks");
+  mkdirSync(marks);
+  write("first.mjs", `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(join(marks, "first"))}, "");\nsetTimeout(() => {}, 60000);\n`);
+  write("second.mjs", `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(join(marks, "second"))}, "");\n`);
+  write("package.json", `${JSON.stringify({ name: "cancel", private: true, scripts: { typecheck: "node first.mjs", lint: "node second.mjs" } }, null, 2)}\n`);
+  commit("base");
+  write("src/change.ts", "export const changed = 1;\n");
+  const cancelled = spawn(process.execPath, [script, "-C", repo, "--json", join(workspace, "cancel.json"), "--no-tests"], { stdio: "ignore" });
+  const exited = new Promise((done) => cancelled.on("exit", (code) => done(code)));
+  for (let waited = 0; !existsSync(join(marks, "first")) && waited < 300; waited += 1) await new Promise((wake) => setTimeout(wake, 100));
+  cancelled.kill("SIGINT");
+  assert.equal(await exited, 130);
+  await new Promise((wake) => setTimeout(wake, 500));
+  assert.ok(!existsSync(join(marks, "second")), "a check started after Ctrl-C");
 
   console.log("PASS review-t0 contract");
 } finally {

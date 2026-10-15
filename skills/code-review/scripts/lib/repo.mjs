@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, writeFileSync } from "node:fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readlinkSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -12,11 +12,11 @@ export const LOCKFILES = new Set([
   "Cargo.lock", "go.mod", "poetry.lock", "uv.lock", "Pipfile.lock", "requirements.txt",
   "Gemfile.lock", "composer.lock", "pubspec.lock", "mix.lock", "gradle.lockfile",
 ]);
-// Larger changed files are fingerprinted by size and mtime instead of content.
-const MAX_HASHED_BYTES = 64 * 1024 * 1024;
 const GENERATED_DIRS = new Set(["node_modules", "dist", "build", "out", "vendor", "coverage", ".next", ".turbo", "generated", "__generated__"]);
-// Process groups still running, so a signal handler can stop them.
+// Process groups still running, so a signal handler can stop them. Once stopping,
+// run() starts nothing new, so a step that ends during shutdown cannot spawn the next.
 export const activeGroups = new Set();
+let stopping = false;
 
 // Pathspecs are literal and user diff settings (noprefix, external diff, colors) never apply.
 // `okStatus` lists the exit codes that mean success (`diff --no-index` exits 1 on a difference).
@@ -40,6 +40,7 @@ export function isGenerated(file) {
 // `output` interleaves stdout and stderr, keeping the last 4 MB; `stdout` is kept apart
 // for tools that answer on stdout. `input` is written to stdin when given.
 export function run(command, args, { cwd, timeoutMs = 300_000, env = process.env, input } = {}) {
+  if (stopping) return Promise.resolve({ code: 130, output: "cancelled", stdout: "", timedOut: false, durationMs: 0 });
   return new Promise((resolvePromise) => {
     const started = Date.now();
     // Own process group, so a timeout or Ctrl-C stops the whole tool tree.
@@ -95,6 +96,7 @@ export function killGroup(pid, signal) {
 // On Ctrl-C: SIGTERM every running group, then SIGKILL whatever outlives `graceMs`,
 // so a tool that ignores SIGTERM cannot keep running (and spending) after we exit.
 export async function stopGroups(graceMs = 3000) {
+  stopping = true;
   const groups = [...activeGroups];
   for (const pid of groups) killGroup(pid, "SIGTERM");
   const deadline = Date.now() + graceMs;
@@ -148,8 +150,20 @@ function pathDigest(path) {
   }
   if (stat.isSymbolicLink()) return `link ${readlinkSync(path)}`;
   if (!stat.isFile()) return `mode ${stat.mode}`;
-  if (stat.size > MAX_HASHED_BYTES) return `mode ${stat.mode} size ${stat.size} mtime ${stat.mtimeMs}`;
-  return `mode ${stat.mode} ${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
+  return `mode ${stat.mode} ${fileDigest(path)}`;
+}
+
+// Read in 1 MB blocks, so large files are hashed without loading them whole.
+function fileDigest(path) {
+  const hash = createHash("sha256");
+  const buffer = Buffer.alloc(1024 * 1024);
+  const descriptor = openSync(path, "r");
+  try {
+    for (let read; (read = readSync(descriptor, buffer, 0, buffer.length, null)) > 0;) hash.update(buffer.subarray(0, read));
+  } finally {
+    closeSync(descriptor);
+  }
+  return hash.digest("hex");
 }
 
 // Where a tool writes its report when no path is given; review-t1 finds T0's report here.
