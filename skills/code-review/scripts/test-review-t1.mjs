@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,6 +33,7 @@ function newRepo(name) {
   sh("git", ["init", "-q", "-b", "main"]);
   for (const [key, value] of [["user.email", "t1@example.invalid"], ["user.name", "t1 fixture"], ["commit.gpgsign", "false"]]) sh("git", ["config", key, value]);
   write("README.md", "# fixture\n");
+  write("src/legacy.ts", "export const legacy = 1;\n");
   sh("git", ["add", "-A"]);
   sh("git", ["commit", "-q", "--no-verify", "-m", "base"]);
 }
@@ -68,6 +69,7 @@ try {
   write("src/feature.ts", code(30) + silentCatch);
   write("package-lock.json", `{"lockfileVersion": 3, "marker": "LOCK-CONTENT"}\n`);
   write("dist/bundle.js", "GENERATED-CONTENT\n");
+  sh("git", ["mv", "src/legacy.ts", "src/renamed.ts"]);
   sh("git", ["add", "-A"]);
   sh("git", ["commit", "-q", "--no-verify", "-m", "feat: add feature\n\nIntent marker INTENT-42."]);
   write("README.md", "# fixture\nUNSTAGED-EDIT\n");
@@ -78,8 +80,8 @@ try {
   assert.match(early.output, /run review-t0 on this tree first/);
 
   reviewT0();
-  const fenced = `Here is my review.\n\`\`\`json\n${JSON.stringify({ findings: [
-    { severity: "P2", lens: "correctness", file: "src/feature.ts", line: 10, title: "a-title", why: "a-why" },
+  const fenced = `Here is my review {draft}.\n\`\`\`json\n${JSON.stringify({ findings: [
+    { severity: "P2", lens: "correctness", file: "src/feature.ts", line: 10, title: "a-title", why: "a } brace inside a string" },
     { severity: "P3", lens: "CLEAN", file: "other/file.ts", line: 5, title: "outside", why: "not in the diff" },
   ] })}\n\`\`\`\nThanks.`;
   const raw = JSON.stringify({ findings: [
@@ -109,7 +111,7 @@ try {
   assert.match(run.output, /RESULT 4 finding\(s\) at 3 spot\(s\) from 2\/5 reviewers/);
 
   const prompt = readFileSync(join(bin, "a.prompt"), "utf8");
-  for (const expected of ["INTENT-42", "src/feature.ts", "UNSTAGED-EDIT", "UNTRACKED_MARKER", "silent-catch-default src/feature.ts:32", "package-lock.json (lockfile)", "dist/bundle.js (generated or vendored)"]) {
+  for (const expected of ["INTENT-42", "src/feature.ts", "rename from src/legacy.ts", "UNSTAGED-EDIT", "UNTRACKED_MARKER", "silent-catch-default src/feature.ts:32", "package-lock.json (lockfile)", "dist/bundle.js (generated or vendored)"]) {
     assert.ok(prompt.includes(expected), `prompt lacks ${expected}`);
   }
   for (const omitted of ["LOCK-CONTENT", "GENERATED-CONTENT"]) assert.ok(!prompt.includes(omitted), `prompt includes ${omitted}`);
@@ -123,6 +125,13 @@ try {
   assert.equal(promptOnly.status, 0, promptOnly.output);
   assert.ok(readFileSync(promptFile, "utf8").includes("INTENT-42"));
   assert.ok(!existsSync(join(bin, "unused.prompt")), "--prompt calls no reviewer");
+  const victim = join(workspace, "victim.txt");
+  writeFileSync(victim, "keep\n");
+  const linked = join(workspace, "linked-prompt.md");
+  symlinkSync(victim, linked);
+  assert.equal(reviewT1(["--prompt", linked]).status, 0);
+  assert.equal(readFileSync(victim, "utf8"), "keep\n", "--prompt replaces a symlink instead of writing through it");
+  assert.ok(!lstatSync(linked).isSymbolicLink() && (lstatSync(linked).mode & 0o777) === 0o600);
 
   write("src/extra.ts", "export const UNTRACKED_MARKER = 2;\n");
   const stale = reviewT1(reviewer("stale", "{}"));
@@ -143,9 +152,17 @@ try {
   assert.equal(skipped.status, 0, skipped.output);
   assert.match(skipped.report.skipped, /docs, tests/);
   assert.ok(!existsSync(join(bin, "skipped.prompt")), "a skipped T1 calls no reviewer");
-  const forced = reviewT1(["--force", ...reviewer("forced", '{"findings":[]}')]);
+  const twelve = Array.from({ length: 12 }, (_, index) => ({ severity: "P3", lens: "CONTRACT", file: "docs/guide.md", line: index * 10 + 1, title: `t${index}`, why: "w" }));
+  const forced = reviewT1(["--force", ...reviewer("forced", JSON.stringify({ findings: twelve }))]);
   assert.equal(forced.status, 0, forced.output);
-  assert.equal(forced.report.reviewers[0].status, "ok");
+  const capped = forced.report.reviewers[0];
+  assert.deepEqual([capped.status, capped.findings, capped.dropped, capped.overCap], ["ok", 10, 0, 2], "the cap is not reported as malformed");
+
+  newRepo("empty");
+  reviewT0();
+  const empty = reviewT1(reviewer("empty", "{}"));
+  assert.equal(empty.status, 2, empty.output);
+  assert.match(empty.output, /found no changes/);
 
   console.log("PASS review-t1 contract");
 } finally {

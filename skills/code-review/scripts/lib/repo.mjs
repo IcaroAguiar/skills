@@ -126,10 +126,14 @@ export function defaultReportPath(tool, root, headSha, dirty) {
 }
 
 // Written through a fresh temporary file and renamed, so an existing symlink at the
-// report path is replaced instead of followed.
-export function writeReport(path, report) {
+// path is replaced instead of followed and the file is always private (mode 600).
+export function writePrivateFile(path, text) {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  writeFileSync(temporary, text, { flag: "wx", mode: 0o600 });
   renameSync(temporary, path);
+}
+
+export function writeReport(path, report) {
+  writePrivateFile(path, `${JSON.stringify(report, null, 2)}\n`);
 }

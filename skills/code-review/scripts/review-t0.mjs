@@ -600,7 +600,9 @@ async function main() {
     repo: basename(root),
     root,
     base,
-    head: { sha: headSha, dirty },
+    // review-t1 compares this to the tree it is about to show the models. A check
+    // that rewrites the tree blocks T0, so the fingerprint before the checks is final.
+    head: { sha: headSha, dirty, tree: treeFingerprint(root) },
     changedFiles: changed.length,
     addedLines: 0,
     verdict: "PASS",
@@ -656,8 +658,6 @@ async function main() {
     }
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
-      // review-t1 compares this to the tree it is about to show the models.
-      head: { sha: headSha, dirty, tree: treeFingerprint(root) },
       route: routeChange(root, base.sha, changed, report.addedLines),
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),

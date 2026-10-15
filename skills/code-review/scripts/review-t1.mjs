@@ -5,9 +5,9 @@
 // Exit 0 = a reviewer answered or the route skipped T1, 1 = no reviewer
 // answered, 2 = usage error, or T0 missing, stale or BLOCKED.
 
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, relative, resolve } from "node:path";
-import { activeGroups, defaultReportPath, git, isGenerated, killGroup, LOCKFILES, readJson, run, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
+import { activeGroups, defaultReportPath, git, isGenerated, killGroup, LOCKFILES, readJson, run, tail, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
 const DEFAULT_REVIEWERS = ["sonnet:medium", "haiku"];
 const MAX_DIFF_BYTES = 400 * 1024;
@@ -106,8 +106,9 @@ function loadT0(root, options) {
 
 // T0's base against the working tree, untracked files included. Lockfiles and
 // generated files stay out: T0 already scanned them and they drown the code.
+// Both sides of a rename are listed, so the diff shows it as a rename.
 function reviewDiff(root, base) {
-  const tracked = git(root, ["diff", "--name-only", "-z", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean);
+  const tracked = git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean);
   const untracked = git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean);
   const omitted = [];
   const shown = (file) => {
@@ -162,18 +163,33 @@ Your final message must be ONLY this JSON object, with no prose and no code fenc
 `;
 }
 
-// Models wrap the object in prose or code fences despite the instructions, so take
-// the first parseable object that opens with a findings array.
+// Models wrap the object in prose or code fences despite the instructions. Take the
+// first balanced object that opens with "findings", else everything between the
+// outermost braces; each candidate is scanned and parsed once.
 function parseAnswer(text) {
-  for (let at = text.indexOf('"findings"'); at !== -1; at = text.indexOf('"findings"', at + 1)) {
-    const start = text.lastIndexOf("{", at);
-    if (start === -1) continue;
-    for (let end = text.lastIndexOf("}"); end > at; end = text.lastIndexOf("}", end - 1)) {
-      const value = readJson(() => text.slice(start, end + 1));
-      if (Array.isArray(value?.findings)) return value;
-    }
+  const candidates = [...text.matchAll(/\{\s*"findings"\s*:/g)].map((match) => [match.index, closingBrace(text, match.index)]);
+  candidates.push([text.indexOf("{"), text.lastIndexOf("}")]);
+  for (const [start, end] of candidates) {
+    const value = start !== -1 && end > start ? readJson(() => text.slice(start, end + 1)) : null;
+    if (Array.isArray(value?.findings)) return value;
   }
   return null;
+}
+
+// Index of the brace that closes the one at `start`, skipping braces inside strings.
+function closingBrace(text, start) {
+  let depth = 0;
+  let inString = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (char === "\\") index += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return index;
+  }
+  return -1;
 }
 
 function normalize(raw, reviewer, root) {
@@ -224,8 +240,9 @@ async function review(reviewer, prompt, root, options) {
   if (result.code !== 0 || (claude && !text)) return { ...entry, status: "error", error: tail(result.output, 5), findings: [] };
   const answer = parseAnswer(text);
   if (!answer) return { ...entry, status: "malformed", error: tail(text, 5), findings: [] };
-  const findings = answer.findings.slice(0, MAX_FINDINGS).map((raw) => normalize(raw, reviewer.name, root)).filter(Boolean);
-  return { ...entry, status: "ok", dropped: answer.findings.length - findings.length, findings };
+  const listed = answer.findings.slice(0, MAX_FINDINGS);
+  const findings = listed.map((raw) => normalize(raw, reviewer.name, root)).filter(Boolean);
+  return { ...entry, status: "ok", dropped: listed.length - findings.length, overCap: answer.findings.length - listed.length, findings };
 }
 
 // Findings about the same spot (same file, lines within a few of each other) are
@@ -261,7 +278,9 @@ function format(report) {
     `review-t1 ${report.repo}  base ${report.base.ref}@${report.base.sha.slice(0, 8)}  head ${report.head.sha.slice(0, 8)}${report.head.dirty ? "+dirty" : ""}  route: deep-review effort ${route.effort}, ${route.size} diff`,
   ];
   for (const reviewer of report.reviewers) {
-    const detail = reviewer.status === "ok" ? `${reviewer.findings} finding(s)${reviewer.dropped ? `, ${reviewer.dropped} malformed dropped` : ""}` : (reviewer.error ?? "").split("\n").at(-1);
+    const detail = reviewer.status === "ok"
+      ? `${reviewer.findings} finding(s)${reviewer.dropped ? `, ${reviewer.dropped} malformed dropped` : ""}${reviewer.overCap ? `, ${reviewer.overCap} over the cap of ${MAX_FINDINGS} ignored` : ""}`
+      : (reviewer.error ?? "").split("\n").at(-1);
     lines.push(`  ${mark[reviewer.status]} ${reviewer.name.padEnd(10)} ${seconds(reviewer.durationMs).padStart(7)}  ${detail}  (${reviewer.command})`);
   }
   if (report.findings.length) {
@@ -299,7 +318,7 @@ async function main() {
     || "No description was given; infer the intent from the diff.";
   const prompt = buildPrompt({ t0, spec, diff, omitted });
   if (options.prompt) {
-    writeFileSync(options.prompt, prompt, { mode: 0o600 });
+    writePrivateFile(options.prompt, prompt);
     console.log(`review-t1 ${report.repo}: prompt written to ${options.prompt} (${Math.round(Buffer.byteLength(prompt) / 1024)} KB)`);
     return;
   }
