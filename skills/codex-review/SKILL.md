@@ -1,6 +1,6 @@
 ---
 name: codex-review
-description: Get an independent review of a branch, PR, plan or artifact from an OpenAI model through the Codex CLI or T3 delegation, judged by the code-review standards, and have Codex fix only the findings you (the orchestrating agent) accept. Use when the user asks for a Codex/GPT review, to "review and approve with Codex", for a second opinion with interactive testing, or "let Codex review and fix until the PRs are mergeable". Works from any agent harness that can run shell commands.
+description: Get an independent review of a branch, PR, plan or artifact from an OpenAI model through the Codex CLI or T3 delegation, judged by the code-review standards, and have Codex fix only the findings you (the orchestrating agent) accept. Use when the user asks for a Codex/GPT review, to "review and approve with Codex", for a second opinion with interactive testing, or "let Codex review and fix until the PRs are mergeable", and implicitly, without being asked, when the code-review gate is reached and the local policy names Codex as the independent reviewer. Works from any agent harness that can run shell commands.
 ---
 
 # Codex review
