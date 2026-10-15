@@ -1,0 +1,70 @@
+rules:
+  - id: silent-catch-default
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      This catch turns every failure into a default value without logging,
+      rethrowing or exposing an error state. Timeouts, 5xx and bugs become
+      indistinguishable from a real empty result (for example "no access").
+      Narrow the catch to the expected error or surface the failure.
+    metadata:
+      lens: contract
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*"]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              try { ... } catch ($E) { return $DEFAULT; }
+          - pattern: |
+              try { ... } catch { return $DEFAULT; }
+          - pattern: $P.catch(($E) => $DEFAULT)
+          - pattern: $P.catch(() => $DEFAULT)
+      - pattern-not: |
+          try { ... } catch ($E) { return <... $E ...>; }
+      - pattern-not: $P.catch(($E) => <... $E ...>)
+      # Parse probes ("is this a valid URL/JSON?") and best-effort error bodies are intended.
+      - pattern-not: $R.json().catch(...)
+      - pattern-not: $R.text().catch(...)
+      - pattern-not: |
+          try { ... new URL(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... new URL(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... JSON.parse(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... JSON.parse(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... decodeURIComponent(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... decodeURIComponent(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... decodeURI(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... decodeURI(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... new RegExp(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... new RegExp(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... BigInt(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... BigInt(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... structuredClone(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... structuredClone(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.access(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.access(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.stat(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.stat(...); ... } catch ($E) { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.lstat(...); ... } catch { return $DEFAULT; }
+      - pattern-not: |
+          try { ... $FS.lstat(...); ... } catch ($E) { return $DEFAULT; }
+      - metavariable-regex:
+          metavariable: $DEFAULT
+          regex: ^\(?(\[[\s\S]*\]|\{[\s\S]*\}|null|undefined|false|true|0|""|''|``|[A-Z][A-Z0-9_]*|(?i:(empty|default|fallback|none|no)[A-Za-z0-9_]*))\)?$

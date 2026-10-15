@@ -1,0 +1,55 @@
+rules:
+  - id: indexof-unchecked
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      indexOf/findIndex returns -1 when nothing matches, and the result is used
+      as a position without a check. slice(-1), splice(-1, 1) and [-1] silently
+      act on the end of the value: a missing marker drops content, or the
+      wrong element is removed. Check for -1 before using the position.
+    metadata:
+      lens: contract
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*"]
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $A.$CUT(<... $B.$IDX(...) ...>, ...)
+              - pattern: $A.$CUT($S, <... $B.$IDX(...) ...>)
+              - pattern: $A[$B.$IDX(...)]
+          - pattern-not: $A.$CUT($B.lastIndexOf(...) + 1, ...)
+          - metavariable-regex:
+              metavariable: $CUT
+              regex: ^(slice|substring|substr|splice)$
+          - metavariable-regex:
+              metavariable: $IDX
+              regex: ^(indexOf|lastIndexOf|findIndex|findLastIndex|search)$
+      - patterns:
+          - pattern-inside: |
+              const $I = $B.$IDX(...);
+              ...
+          - metavariable-regex:
+              metavariable: $IDX
+              regex: ^(indexOf|lastIndexOf|findIndex|findLastIndex|search)$
+          - pattern-either:
+              - pattern: $A.$CUT(<... $I ...>, ...)
+              - pattern: $A.$CUT($S, <... $I ...>)
+              - pattern: $A[$I]
+          - metavariable-regex:
+              metavariable: $CUT
+              regex: ^(slice|substring|substr|splice)$
+          - pattern-not-inside: |
+              if (<... $I ...>) $THEN;
+              ...
+          - pattern-not-inside: |
+              if (<... $I ...>) $THEN; else $ELSE;
+          - pattern-not-inside: |
+              if (<... $I ...>) $THEN;
+          - pattern-not-inside: '$COND ? $X : $Y'
+          - pattern-not-inside: <... $I ...> && $E
+          - pattern-not-inside: |
+              assert(<... $I ...>, ...);
+              ...
+          - pattern-not-inside: |
+              invariant(<... $I ...>, ...);
+              ...

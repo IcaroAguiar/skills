@@ -1,0 +1,21 @@
+rules:
+  - id: race-timeout-without-cleanup
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Promise.race against a timer neither cancels the losing operation nor
+      clears the timer. After the "timeout" the request, query or lock keeps
+      running, and every call leaves a pending timer. Pass an AbortSignal
+      (AbortSignal.timeout or an AbortController) to the operation and clear
+      the timer in finally.
+    metadata:
+      lens: perf
+      t0-suppress-if-file-matches: 'clearTimeout\(|AbortSignal\.timeout\('
+    pattern-either:
+      - pattern: Promise.race([..., new Promise((...) => { ... setTimeout(...); ... }), ...])
+      - pattern: Promise.race([..., new Promise((...) => setTimeout(...)), ...])
+      - patterns:
+          - pattern: Promise.race([..., $HELPER(...), ...])
+          - metavariable-regex:
+              metavariable: $HELPER
+              regex: (?i)^(timeout|delay|sleep|wait|reject)[A-Za-z]*$|[A-Za-z]*(Timeout|Delay|Deadline)$

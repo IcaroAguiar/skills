@@ -1,0 +1,30 @@
+rules:
+  - id: await-in-loop-io
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Awaited query, request or authorization check per loop item (N+1). The
+      latency and database load grow with the list size. Batch it (one query
+      with IN / findMany, one bulk authorization decision) or bound the
+      concurrency explicitly when sequential order is a requirement.
+    metadata:
+      lens: perf
+    paths:
+      exclude: ["*.test.*", "*.spec.*", "**/test/**", "**/tests/**", "**/__tests__/**", "**/e2e/**", "**/fixtures/**", "**/__fixtures__/**", "**/__mocks__/**", "*.stories.*", "**/migrations/**", "**/seed*", "**/scripts/**"]
+    patterns:
+      - pattern-either:
+          - pattern-inside: for (...) { ... }
+          - pattern-inside: for ($X of $Y) { ... }
+          - pattern-inside: for ($X in $Y) { ... }
+      - pattern-not-inside: for await ($X of $Y) { ... }
+      - pattern-either:
+          - patterns:
+              - pattern: await $OBJ.$METHOD(...)
+              - metavariable-regex:
+                  metavariable: $METHOD
+                  regex: ^(find[A-Za-z]*|fetch[A-Za-z]*|load[A-Za-z]*|query[A-Za-z]*|count|aggregate|groupBy|select[A-Za-z]*|update[A-Za-z]*|upsert[A-Za-z]*|create[A-Za-z]*|delete[A-Za-z]*|insert[A-Za-z]*|save[A-Za-z]*|authorize[A-Za-z]*|can[A-Z][A-Za-z]*|check[A-Z][A-Za-z]*|assert[A-Z][A-Za-z]*|has[A-Z][A-Za-z]*|is[A-Z][A-Za-z]*Allowed|request|get|post|put|patch|delete)$
+          - patterns:
+              - pattern: await $FN(...)
+              - metavariable-regex:
+                  metavariable: $FN
+                  regex: ^(fetch|authorize[A-Za-z]*|can[A-Z][A-Za-z]*|check[A-Z][A-Za-z]*Permission[A-Za-z]*|assert[A-Z][A-Za-z]*Access)$
