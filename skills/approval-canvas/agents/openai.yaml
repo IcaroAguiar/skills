@@ -1,0 +1,4 @@
+interface:
+  display_name: "Approval Canvas"
+  short_description: "Rebuild an area's real screens as an approvable prototype"
+  default_prompt: "Use $approval-canvas to rebuild the screens of this area as an interactive canvas with the real design-system components, so I can approve the redesign before implementation."

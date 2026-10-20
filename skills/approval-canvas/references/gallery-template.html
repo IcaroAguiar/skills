@@ -1,0 +1,39 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
+/* Galeria de aprovação: miniaturas 1440 + 390 por tela, bullets "o que muda", filtros por área.
+   Usa variáveis de tema do host quando existirem (ex.: render HTML do T3); funciona sozinha em navegador. */
+body{font-family:var(--font-sans,system-ui);color:var(--foreground,#222);margin:0}
+.wrap{display:grid;gap:14px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--border,#ddd);background:transparent;color:var(--muted-foreground,#666);border-radius:999px;padding:5px 11px;font:500 12px var(--font-sans,system-ui);cursor:pointer}
+.chip[aria-pressed=true]{background:var(--secondary,#eee);color:var(--foreground,#222);border-color:var(--ring,#999)}
+.screen{display:grid;gap:10px;padding:14px 0;border-top:1px solid var(--border,#ddd)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.id{font:600 11px var(--font-mono,monospace);color:var(--muted-foreground,#666)}
+.name{font-weight:600;font-size:15px}
+.states{font-size:11px;color:var(--muted-foreground,#666)}
+ul{margin:0;padding-left:18px;font-size:13px;line-height:1.5;color:var(--muted-foreground,#666)}
+ul b{color:var(--foreground,#222);font-weight:600}
+.shots{display:grid;grid-template-columns:minmax(0,1fr) 120px;gap:10px;align-items:start}
+.shots img{width:100%;border:1px solid var(--border,#ddd);border-radius:6px;display:block;cursor:zoom-in}
+.frame{max-height:340px;overflow:hidden;border-radius:6px}
+.frame.open{max-height:none}
+.cap{font-size:10px;color:var(--muted-foreground,#666);margin-top:4px}
+@media(max-width:520px){.shots{grid-template-columns:1fr 90px}}
+</style></head><body><div class="wrap"><div class="chips" id="chips"></div><div id="list"></div></div><script>
+// Caminhos LITERAIS por tela (algumas ferramentas só embutem imagens escritas como string literal absoluta).
+// Gere miniaturas JPEG pequenas (ex.: Playwright com deviceScaleFactor 0.5, quality 60) para manter a página leve.
+const IMG = {
+  A1: ['/tmp/gallery/A1-1440.jpg', '/tmp/gallery/A1-390.jpg'],
+};
+// [área, id, nome, estados, ["o que muda", ...]]
+const S = [
+  ['Área', 'A1', 'Nome da tela', 'vazio · erro', ['Primeira mudança e o porquê', 'Segunda mudança']],
+];
+const areas = ['Todas', ...new Set(S.map((s) => s[0]))];
+let cur = 'Todas';
+function draw() {
+  document.getElementById('chips').innerHTML = areas.map((a) => `<button class=chip aria-pressed=${a === cur} onclick="cur='${a}';draw()">${a} · ${a === 'Todas' ? S.length : S.filter((s) => s[0] === a).length}</button>`).join('');
+  document.getElementById('list').innerHTML = S.filter((s) => cur === 'Todas' || s[0] === cur).map(([, id, n, st, b]) => `<section class=screen><div class=head><span class=id>${id}</span><span class=name>${n}</span>${st ? `<span class=states>estados: ${st}</span>` : ''}</div><ul>${b.map((x) => `<li>${x}</li>`).join('')}</ul><div class=shots><div><div class=frame><img alt="${n} em 1440 px" src="${IMG[id][0]}" onclick="this.parentNode.classList.toggle('open')"></div><div class=cap>1440 px · clique para expandir</div></div><div><div class=frame><img alt="${n} em 390 px" src="${IMG[id][1]}" onclick="this.parentNode.classList.toggle('open')"></div><div class=cap>390 px</div></div></div></section>`).join('');
+}
+draw();
+</script></body></html>
