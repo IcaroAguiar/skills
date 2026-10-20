@@ -1,0 +1,22 @@
+@import "@acme/ui/styles.css";
+@source "<relative path from this file to the UI package src>";
+@source "./";
+
+:root { --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif; }
+body { margin: 0; }
+.canvas-toolbar { min-height: 68px; }
+.canvas-shell { height: auto; min-height: calc(100svh - 68px); overflow: visible; }
+.canvas-shell main { overflow: visible; }
+.canvas-shell > [data-sidebar="inset"] { overflow: visible; }
+.canvas-shell input, .canvas-shell textarea { min-width: 0; }
+
+/* Tabela essential: só divisórias discretas entre linhas, sem moldura extra. */
+.essential-table tbody tr { border-color: color-mix(in srgb, var(--border) 40%, transparent); }
+.essential-table tbody tr:last-child { border-bottom: 0; }
+.essential-table button { white-space: nowrap; }
+
+@media (max-width: 767px) {
+  .canvas-toolbar { min-height: 104px; }
+  .canvas-shell { min-height: calc(100svh - 104px); }
+  .canvas-shell [data-sidebar="sidebar"] { padding-top: 0; }
+}
