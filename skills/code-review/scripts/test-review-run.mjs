@@ -1,0 +1,451 @@
+#!/usr/bin/env node
+// Contract for review-run, review-ledger and the provider/policy/ledger libraries
+// with fake claude and codex CLIs, so no model is called. Needs git, node, gitleaks
+// and semgrep for the T1 integration: review-t0 runs first.
+
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scripts = dirname(fileURLToPath(import.meta.url));
+const workspace = mkdtempSync(join(tmpdir(), "review-run-fixture-"));
+const bin = join(workspace, "bin");
+const state = join(workspace, "state");
+const logFile = join(workspace, "calls.jsonl");
+const controlFile = join(workspace, "control.json");
+const env = { ...process.env, TMPDIR: workspace, AGENT_REVIEW_STATE: state, AGENT_REVIEW_POLICY: join(workspace, "policy.json"), REVIEW_T1_CLAUDE: "" };
+const claudeBin = join(bin, "fake-claude");
+const codexBin = join(bin, "fake-codex");
+let repo = "";
+
+// One script plays both CLIs (by its file name). Behavior per model comes from
+// control.json: ok, limit, auth, transient, transient-once, error. Every call is logged.
+const FAKE = `#!${process.execPath}
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.dirname(path.dirname(process.argv[1]));
+const name = path.basename(process.argv[1]).replace("fake-", "");
+const argv = process.argv.slice(2);
+const stdin = fs.readFileSync(0, "utf8");
+const model = argv[argv.indexOf(name === "claude" ? "--model" : "-m") + 1];
+fs.appendFileSync(path.join(root, "calls.jsonl"), JSON.stringify({ cli: name, model, argv, stdin }) + "\\n");
+const control = JSON.parse(fs.readFileSync(path.join(root, "control.json"), "utf8"));
+let mode = control[model] ?? "ok";
+if (mode === "transient-once") {
+  const marker = path.join(root, "once-" + model);
+  mode = fs.existsSync(marker) ? "ok" : "transient";
+  fs.writeFileSync(marker, "");
+}
+const answer = control.answer ?? "answer from " + name + "/" + model;
+const epoch = Math.floor(Date.now() / 1000) + 3600;
+const failures = {
+  limit: ["Claude AI usage limit reached|" + epoch, 429, "You've hit your usage limit. Try again in 45 minutes."],
+  auth: ["Not logged in. Please run /login", 401, "unauthorized: please login"],
+  transient: ["overloaded, try later", 529, "stream disconnected before completion"],
+  error: ["boom", undefined, "boom"],
+};
+if (name === "claude") {
+  const out = failures[mode]
+    ? { type: "result", is_error: true, api_error_status: failures[mode][1], result: failures[mode][0] }
+    : { type: "result", is_error: false, result: answer, session_id: "s-1", num_turns: 2, total_cost_usd: 0.01,
+        usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 90, cache_creation_input_tokens: 0 }, modelUsage: { "claude-sonnet-5-5": {} } };
+  console.log(JSON.stringify(out));
+  process.exit(failures[mode] ? 1 : 0);
+}
+console.log(JSON.stringify({ type: "thread.started", thread_id: "t-1" }));
+if (failures[mode]) {
+  console.log(JSON.stringify({ type: "turn.failed", error: { message: failures[mode][2] } }));
+  process.exit(1);
+}
+fs.writeFileSync(argv[argv.indexOf("-o") + 1], answer);
+console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 100, cached_input_tokens: 80, output_tokens: 7 } }));
+`;
+
+function sh(command, args, cwd = repo) {
+  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
+  assert.equal(result.status, 0, `${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
+  return result.stdout;
+}
+
+function write(file, content, root = repo) {
+  mkdirSync(dirname(join(root, file)), { recursive: true });
+  writeFileSync(join(root, file), content);
+}
+
+function newRepo(name, remotes = [], parent = workspace) {
+  repo = join(parent, name);
+  mkdirSync(repo, { recursive: true });
+  sh("git", ["init", "-q", "-b", "main"]);
+  for (const [key, value] of [["user.email", "rr@example.invalid"], ["user.name", "rr fixture"], ["commit.gpgsign", "false"]]) sh("git", ["config", key, value]);
+  remotes.forEach((url, index) => sh("git", ["remote", "add", `r${index}`, url]));
+  write("README.md", "# fixture\n");
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "base"]);
+  return repo;
+}
+
+// Fresh ledger, call log and control for each scenario.
+function reset(control = {}) {
+  rmSync(state, { recursive: true, force: true });
+  rmSync(logFile, { force: true });
+  rmSync(join(workspace, "once-m-flaky"), { force: true });
+  writeFileSync(controlFile, JSON.stringify(control));
+}
+
+const claude = (model, extra = {}) => ({ kind: "claude", bin: claudeBin, model, ...extra });
+const codex = (model, extra = {}) => ({ kind: "codex", bin: codexBin, model, ...extra });
+const front = (name, providers, roles, match = { any: true }) => ({ name, match, providers, roles });
+const setPolicy = (...fronts) => writeFileSync(env.AGENT_REVIEW_POLICY, JSON.stringify({ version: 1, fronts }));
+// The usual policy: a review (and optionally fix) chain over the given providers.
+const chain = (providers, ids, extraRoles = {}) => setPolicy(front("main", providers, { review: ids, ...extraRoles }));
+
+const events = () => (existsSync(join(state, "ledger.jsonl")) ? readFileSync(join(state, "ledger.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+const callEvents = () => events().filter((event) => event.type === "call");
+const calls = () => (existsSync(logFile) ? readFileSync(logFile, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+const invoked = (model) => calls().filter((call) => call.model === model);
+
+const promptFile = join(workspace, "prompt.txt");
+const outFile = join(workspace, "answer.txt");
+const jsonFile = join(workspace, "result.json");
+writeFileSync(promptFile, "REVIEW-PROMPT\n");
+
+function node(script, args, cwd = repo) {
+  const result = spawnSync(process.execPath, [join(scripts, script), ...args], { cwd, encoding: "utf8", env });
+  return { ...result, output: result.stdout + result.stderr };
+}
+
+// review-run in `repo`, role review unless the args say otherwise; `result` is the --json file.
+function rr(args = [], { role = "review", cwd = repo } = {}) {
+  rmSync(jsonFile, { force: true });
+  rmSync(outFile, { force: true });
+  const author = role === "review" && !args.includes("--author-model") ? ["--author-model", "human"] : [];
+  const run = node("review-run.mjs", ["-C", cwd, "--role", role, "--prompt", promptFile, "--out", outFile, "--json", jsonFile, ...author, ...args], cwd);
+  return { ...run, result: existsSync(jsonFile) ? JSON.parse(readFileSync(jsonFile, "utf8")) : null };
+}
+
+const plan = (args = [], role = "review") => {
+  const run = node("review-run.mjs", ["-C", repo, "--plan", "--role", role, ...args]);
+  return { ...run, plan: run.status === 0 ? JSON.parse(run.stdout) : null };
+};
+const ledgerCli = (...args) => node("review-ledger.mjs", args);
+const untilOk = (iso, ms) => assert.ok(Math.abs(Date.parse(iso) - (Date.now() + ms)) < 120_000, `${iso} is not about ${ms} ms ahead`);
+
+try {
+  mkdirSync(bin);
+  for (const path of [claudeBin, codexBin]) {
+    writeFileSync(path, FAKE);
+    chmodSync(path, 0o755);
+  }
+  newRepo("plain");
+
+  // ---- 1. policy validation -----------------------------------------------------
+  reset();
+  const invalid = (providers, roles, pattern) => {
+    setPolicy(front("main", providers, roles));
+    const run = rr();
+    assert.equal(run.status, 2, run.output);
+    assert.match(run.output, pattern);
+  };
+  invalid({ c: { kind: "claude", bin: "claude", model: "m-ok" } }, { review: ["c"] }, /bin must be an absolute path/);
+  invalid({ c: claude("m-ok") }, { review: ["ghost"] }, /unknown provider ghost/);
+  invalid({ a: { kind: "agy", bin: join(bin, "agy"), model: "x" } }, { review: ["a"] }, /agy provider a cannot take this role/);
+  invalid({ c: claude("m-ok") }, { judge: ["c"] }, /unknown role judge/);
+  rmSync(env.AGENT_REVIEW_POLICY);
+  const missing = rr();
+  assert.equal(missing.status, 2, missing.output);
+  assert.match(missing.output, /no review policy/);
+  assert.equal(calls().length, 0, "an invalid policy calls no CLI");
+
+  // ---- 2. front resolution --------------------------------------------------------
+  const pathParent = join(workspace, "pathfront");
+  setPolicy(
+    front("P", { m: claude("m-ok") }, { review: ["m"] }, { paths: [pathParent] }),
+    front("A", { m: claude("m-ok") }, { review: ["m"] }, { remotes: ["github.com/OrgA/"] }),
+    front("B", { m: claude("m-ok") }, { review: ["m"] }, { remotes: ["github.com/OrgB/"] }),
+  );
+  newRepo("ssh-a", ["git@github.com:OrgA/x.git"]);
+  assert.equal(plan().plan.front, "A", "scp-style remote, case-insensitive");
+  newRepo("https-b", ["https://token@github.com/orgb/x"]);
+  assert.equal(plan().plan.front, "B");
+  newRepo("lookalike", ["git@github.com:OrgAB/x.git"]);
+  assert.match(plan().output, /matches no front/, "OrgAB is not OrgA");
+  newRepo("under-path", ["git@github.com:OrgA/x.git"], pathParent);
+  assert.equal(plan().plan.front, "P", "a path rule beats the remote");
+  newRepo("both", ["git@github.com:OrgA/x.git", "https://github.com/OrgB/x.git"]);
+  const several = plan();
+  assert.equal(several.status, 2, several.output);
+  assert.match(several.output, /several fronts \(A, B\)/);
+  assert.equal(plan(["--front", "A"]).plan.front, "A");
+  assert.equal(plan(["--front", "B"]).plan.front, "B");
+  const wrong = plan(["--front", "P"]);
+  assert.equal(wrong.status, 2, wrong.output);
+  assert.match(wrong.output, /--front P does not match/);
+  newRepo("nowhere", ["git@gitlab.com:Other/x.git"]);
+  const none = plan();
+  assert.equal(none.status, 2, none.output);
+  assert.match(none.output, /matches no front/);
+
+  // ---- 3. fallback on a limit -----------------------------------------------------
+  newRepo("work");
+  const limitedThenOk = () => chain({ "claude-limited": claude("m-limited"), "codex-ok": codex("m-ok") }, ["claude-limited", "codex-ok"]);
+  limitedThenOk();
+  reset({ "m-limited": "limit", "m-ok": "ok" });
+  const fell = rr();
+  assert.equal(fell.status, 0, fell.output);
+  assert.match(fell.output, /ok via codex-ok/);
+  assert.equal(readFileSync(outFile, "utf8"), "answer from codex/m-ok");
+  assert.equal(fell.result.provider, "codex-ok");
+  assert.deepEqual(fell.result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["claude-limited", "limit"], ["codex-ok", "ok"]]);
+  const [limited, served] = callEvents();
+  assert.equal(callEvents().length, 2);
+  assert.equal(limited.status, "limit");
+  untilOk(limited.until, 3_600_000);
+  assert.deepEqual([served.status, served.sessionId, served.usage.cacheRead, served.usage.input, served.usage.output], ["ok", "t-1", 80, 20, 7]);
+  assert.equal(served.front, "main");
+  assert.equal(served.role, "review");
+  assert.equal(calls()[0].stdin, "REVIEW-PROMPT\n", "the prompt arrives on stdin");
+
+  // ---- 4. cooldown, limits, clear ---------------------------------------------------
+  writeFileSync(logFile, "");
+  const cooled = rr();
+  assert.equal(cooled.status, 0, cooled.output);
+  assert.equal(invoked("m-limited").length, 0, "a cooling provider is not invoked");
+  assert.deepEqual(cooled.result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["claude-limited", "skipped"], ["codex-ok", "ok"]]);
+  assert.match(cooled.result.attempts[0].reason, /^limit until /);
+  assert.match(ledgerCli("limits").stdout, /^main\/claude-limited {2}limit until /);
+  assert.equal(ledgerCli("clear", "claude-limited", "--front", "main").status, 0);
+  assert.match(ledgerCli("limits").stdout, /no provider is cooling down/);
+  rr();
+  assert.equal(invoked("m-limited").length, 1, "a cleared provider is invoked again");
+  assert.match(ledgerCli("limits").stdout, /claude-limited/, "and cools down again after another limit");
+  // A limit without a stated reset (codex says "in 45 minutes") still sets a cooldown.
+  chain({ "codex-limited": codex("m-limited"), "claude-ok": claude("m-ok") }, ["codex-limited", "claude-ok"]);
+  reset({ "m-limited": "limit" });
+  rr();
+  untilOk(callEvents()[0].until, 45 * 60_000);
+  reset({ "m-limited": "auth" });
+  assert.equal(rr().status, 0);
+  assert.equal(callEvents()[0].status, "auth");
+  assert.equal(rr().status, 0);
+  assert.equal(invoked("m-limited").length, 1, "a logged-out provider also cools down");
+
+  // ---- 5. transient retry, hard errors -----------------------------------------------
+  chain({ "claude-flaky": claude("m-flaky"), "codex-ok": codex("m-ok") }, ["claude-flaky", "codex-ok"]);
+  reset({ "m-flaky": "transient-once" });
+  const flaky = rr();
+  assert.equal(flaky.status, 0, flaky.output);
+  assert.equal(flaky.result.provider, "claude-flaky");
+  assert.deepEqual(callEvents().map((call) => [call.status, call.retry]), [["transient", undefined], ["ok", true]]);
+  assert.equal(invoked("m-ok").length, 0, "a successful retry does not fall back");
+  reset({ "m-flaky": "transient" });
+  assert.equal(rr().result.provider, "codex-ok", "a second transient failure falls back");
+  assert.equal(invoked("m-flaky").length, 2, "retried exactly once");
+  assert.equal(ledgerCli("limits").stdout.includes("claude-flaky"), false, "transient failures cool nothing");
+  reset({ "m-flaky": "error" });
+  const hard = rr();
+  assert.equal(hard.status, 1, hard.output);
+  assert.match(hard.output, /ERROR on claude-flaky/);
+  assert.equal(invoked("m-ok").length, 0, "an error stops the chain");
+  assert.equal(invoked("m-flaky").length, 1, "an error is not retried");
+  assert.equal(hard.result.status, "error");
+
+  // ---- 6. independence from the author -----------------------------------------------
+  chain({ "claude-sonnet": claude("sonnet"), "codex-ok": codex("m-ok") }, ["claude-sonnet", "codex-ok"]);
+  reset();
+  const planned = plan(["--author-model", "claude-sonnet-5-5"]).plan.slots[0];
+  assert.deepEqual(planned.map((entry) => [entry.id, entry.available]), [["claude-sonnet", false], ["codex-ok", true]]);
+  assert.match(planned[0].reason, /same model as the author \(claude-sonnet-5-5\)/);
+  assert.equal(plan().plan.slots[0][0].available, true, "without an author every provider is available");
+  const independent = rr(["--author-model", "claude-sonnet-5-5"]);
+  assert.equal(independent.result.provider, "codex-ok");
+  assert.equal(invoked("sonnet").length, 0);
+  chain({ "claude-sonnet": claude("sonnet") }, ["claude-sonnet"]);
+  const lonely = rr(["--author-model", "claude-sonnet-5-5"]);
+  assert.equal(lonely.status, 1, lonely.output);
+  assert.match(lonely.output, /BLOCKED/);
+  const anonymous = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", promptFile, "--out", outFile]);
+  assert.equal(anonymous.status, 2, "a review without --author-model is refused");
+  assert.match(anonymous.output, /needs --author-model/);
+  // Vendor independence: Opus work skips every Claude model, not only Opus.
+  setPolicy({ ...front("main", { "claude-sonnet": claude("sonnet"), "codex-ok": codex("gpt-6.1-sol") }, { review: ["claude-sonnet", "codex-ok"] }), independence: "vendor" });
+  const byVendor = plan(["--author-model", "claude-opus-5-5"]).plan.slots[0];
+  assert.deepEqual(byVendor.map((entry) => [entry.id, entry.available]), [["claude-sonnet", false], ["codex-ok", true]]);
+  assert.match(byVendor[0].reason, /same vendor as the author/);
+  assert.equal(plan(["--author-model", "gpt-6.1-sol"]).plan.slots[0][1].available, false, "GPT work skips GPT reviewers");
+
+  // ---- 7. A/B split is stable per head ---------------------------------------------------
+  setPolicy(front("main", { a: claude("m-ok"), b: codex("m-ok") }, { review: [{ split: ["a", "b"] }] }));
+  const arms = [plan().plan.slots[0], plan().plan.slots[0]];
+  assert.deepEqual(arms[0], arms[1], "same HEAD, same arm");
+  assert.deepEqual(arms[0].map((entry) => entry.id).sort(), ["a", "b"], "the other arm stays as a fallback");
+  assert.equal(arms[0][0].experiment, "a|b");
+  assert.equal(arms[0][0].arm, arms[0][0].id);
+  reset();
+  assert.equal(rr().result.provider, arms[0][0].id);
+  assert.equal(callEvents()[0].experiment, "a|b");
+
+  // ---- 8. resume ----------------------------------------------------------------------------
+  chain({ "codex-ok": codex("m-ok"), "claude-ok": claude("m-claude") }, ["codex-ok", "claude-ok"]);
+  reset();
+  const first = rr();
+  assert.equal(first.result.provider, "codex-ok");
+  const delta = join(workspace, "delta.txt");
+  const fresh = join(workspace, "fresh.txt");
+  writeFileSync(delta, "DELTA-PROMPT\n");
+  writeFileSync(fresh, "FRESH-FULL-PROMPT\n");
+  const resumed = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--json", jsonFile, "--resume", first.result.call, "--author-model", "human"]);
+  assert.equal(resumed.status, 0, resumed.output);
+  const resumeCall = calls().at(-1);
+  assert.deepEqual(resumeCall.argv.slice(0, 3), ["exec", "resume", "t-1"]);
+  assert.ok(!resumeCall.argv.includes("-s") && !resumeCall.argv.includes("-C"), "exec resume takes neither -s nor -C");
+  assert.ok(resumeCall.argv.includes('sandbox_mode="read-only"'));
+  assert.equal(resumeCall.stdin, "DELTA-PROMPT\n");
+  assert.equal(callEvents().at(-1).resumeOf, first.result.call);
+  const resume = (extra) => {
+    rmSync(jsonFile, { force: true });
+    const run = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--json", jsonFile, "--resume", first.result.call, "--author-model", "human", ...extra]);
+    return { ...run, result: existsSync(jsonFile) ? JSON.parse(readFileSync(jsonFile, "utf8")) : null };
+  };
+  writeFileSync(controlFile, JSON.stringify({ "m-ok": "limit" }));
+  const stranded = resume([]);
+  assert.equal(stranded.status, 3, stranded.output);
+  assert.match(stranded.output, /pass --fresh-prompt/);
+  assert.equal(invoked("m-claude").length, 0, "without a fresh prompt no other provider sees the session");
+  const rescued = resume(["--fresh-prompt", fresh]);
+  assert.equal(rescued.status, 0, rescued.output);
+  assert.equal(rescued.result.provider, "claude-ok");
+  assert.equal(rescued.result.fresh, true);
+  assert.match(rescued.output, /FRESH/);
+  assert.deepEqual([invoked("m-claude")[0].stdin, invoked("m-claude")[0].argv.includes("--resume")], ["FRESH-FULL-PROMPT\n", false]);
+  assert.equal(resume(["--fresh-prompt", fresh]).status, 0, "a cooled session provider is skipped, not retried");
+  const unknown = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--resume", "nope", "--author-model", "human"]);
+  assert.equal(unknown.status, 2, unknown.output);
+  assert.equal(node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--fresh-prompt", fresh]).status, 2, "--fresh-prompt needs --resume");
+
+  // ---- 9. sandbox per role -----------------------------------------------------------------------
+  chain({ "codex-ok": codex("m-ok", { writableRoots: ["/tmp/extra"] }), "claude-ok": claude("m-claude", { allowedTools: ["Bash(npm test:*)"] }) }, ["codex-ok"], { fix: ["codex-ok"] });
+  reset();
+  const flag = (argv, name) => argv[argv.indexOf(name) + 1];
+  rr();
+  rr([], { role: "fix" });
+  const [reviewArgs, fixArgs] = calls().map((call) => call.argv);
+  assert.equal(flag(reviewArgs, "-s"), "read-only");
+  assert.equal(flag(fixArgs, "-s"), "workspace-write");
+  assert.ok(fixArgs.includes('sandbox_workspace_write.writable_roots=["/tmp/extra"]'));
+  assert.ok(!reviewArgs.some((arg) => arg.includes("writable_roots")), "review never widens the sandbox");
+  chain({ "claude-ok": claude("m-claude", { allowedTools: ["Bash(npm test:*)"] }) }, ["claude-ok"], { fix: ["claude-ok"] });
+  writeFileSync(logFile, "");
+  rr();
+  rr([], { role: "fix" });
+  const [claudeReview, claudeFix] = calls().map((call) => call.argv);
+  assert.equal(flag(claudeReview, "--permission-mode"), "dontAsk");
+  assert.ok(!claudeReview.some((arg) => arg.includes("Bash")), "the Claude reviewer has no shell, not even git");
+  assert.equal(flag(claudeReview, "--model"), "m-claude");
+  assert.equal(flag(claudeFix, "--permission-mode"), "acceptEdits");
+  assert.ok(claudeFix.includes("Bash(npm test:*)"), "only the fixer gets the provider's extra tools");
+  const effort = rr(["--effort", "high"]);
+  assert.equal(flag(calls().at(-1).argv, "--effort"), "high");
+  assert.equal(effort.result.effort, "high");
+  assert.equal(rr(["--effort", "turbo"]).status, 2);
+
+  // ---- 10. review-ledger: triage and stats ----------------------------------------------------------
+  chain({ "claude-ok": claude("m-claude") }, ["claude-ok"]);
+  reset();
+  const reviewed = rr(["--label", "pr-1"]);
+  const decisions = join(workspace, "decisions.json");
+  writeFileSync(decisions, JSON.stringify([
+    { severity: "high", title: "real bug", file: "a.ts", line: 3, decision: "fixed" },
+    { severity: "low", title: "nit", decision: "wrong", reason: "the guard is upstream" },
+  ]));
+  const triaged = ledgerCli("triage", "--call", reviewed.result.call, "--decisions", decisions);
+  assert.equal(triaged.status, 0, triaged.output);
+  assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.decision, event.serious, event.provider]), [["fixed", true, "claude-ok"], ["wrong", false, "claude-ok"]]);
+  writeFileSync(decisions, JSON.stringify([{ title: "no reason", decision: "wrong" }]));
+  const noReason = ledgerCli("triage", "--call", reviewed.result.call, "--decisions", decisions);
+  assert.equal(noReason.status, 2, noReason.output);
+  assert.match(noReason.output, /needs a reason/);
+  writeFileSync(decisions, JSON.stringify([{ title: "x", decision: "maybe" }]));
+  assert.equal(ledgerCli("triage", "--call", reviewed.result.call, "--decisions", decisions).status, 2);
+  assert.equal(ledgerCli("triage", "--call", "nope", "--decisions", decisions).status, 2);
+  assert.equal(events().filter((event) => event.type === "triage").length, 2, "rejected decisions record nothing");
+  const stats = JSON.parse(ledgerCli("stats", "--json").stdout);
+  assert.equal(stats.rows.length, 1);
+  const [row] = stats.rows;
+  assert.deepEqual([row.provider, row.role, row.calls, row.ok, row.triaged, row.actedOn, row.wrong], ["claude-ok", "review", 1, 1, 2, 0.5, 0.5]);
+  assert.equal(row.cacheRead, 0.9, "cache reads over all prompt tokens: 90 / (10 + 90 + 0)");
+  assert.equal(row.costPerOk, 0.01);
+  assert.equal(row.seriousFixedPerReview, 1);
+  assert.match(ledgerCli("stats").stdout, /claude-ok\s+m-claude|claude-ok\s+claude-sonnet-5-5/, "table lists the provider");
+  const recorded = ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "limit", "--until", new Date(Date.now() + 3_600_000).toISOString());
+  assert.equal(recorded.status, 0, recorded.output);
+  assert.match(ledgerCli("limits").stdout, /^main\/t3-opus {2}limit until /, "a manually recorded limit cools the provider");
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "limit", "--until", "soon").status, 2, "an unreadable reset is refused");
+  assert.equal(ledgerCli("record", "--role", "review", "--provider", "x", "--status", "ok").status, 2, "record needs the front");
+  // Cooldowns belong to a front: the same id on another account stays available.
+  ledgerCli("record", "--front", "other", "--role", "review", "--provider", "claude-ok", "--status", "limit");
+  assert.equal(plan().plan.slots[0][0].available, true, "another front's limit does not cool this front's claude-ok");
+  // Triage again to correct a decision: the newest one wins, nothing is counted twice.
+  writeFileSync(decisions, JSON.stringify([{ severity: "high", title: "real bug", file: "a.ts", line: 3, decision: "wrong", reason: "misread the guard" }]));
+  assert.equal(ledgerCli("triage", "--call", reviewed.result.call, "--decisions", decisions).status, 0);
+  const corrected = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "claude-ok");
+  assert.deepEqual([corrected.triaged, corrected.actedOn, corrected.wrong], [2, 0, 1]);
+  // A split needs two arms.
+  setPolicy(front("main", { a: claude("m-ok") }, { review: [{ split: [] }] }));
+  assert.match(plan().output, /a split needs at least two provider ids/);
+  // --base puts the fixed diff in the prompt (the Claude reviewer has no shell).
+  chain({ "claude-ok": claude("m-ok") }, ["claude-ok"]);
+  write("src/based.ts", "export const BASED_MARKER = 1;\n");
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "feat: based"]);
+  writeFileSync(logFile, "");
+  assert.equal(rr(["--base", "HEAD~1"]).status, 0);
+  assert.match(calls()[0].stdin, /<fixed_diff range="HEAD~1...HEAD">[\s\S]*feat: based[\s\S]*BASED_MARKER/);
+  // A linked worktree of a repository matched by path belongs to the same front.
+  const owned = newRepo("owned", [], join(workspace, "owned-root"));
+  const linked = join(workspace, "elsewhere", "wt");
+  sh("git", ["worktree", "add", "-q", "--detach", linked], owned);
+  setPolicy(front("owned", { a: claude("m-ok") }, { review: ["a"] }, { paths: [join(workspace, "owned-root")] }));
+  repo = linked;
+  assert.equal(plan().plan?.front, "owned", "the worktree resolves through its main checkout");
+
+  // ---- 11. T1 integration: lenses from the policy front -------------------------------------------------
+  newRepo("t1repo");
+  sh("git", ["checkout", "-q", "-b", "feature"]);
+  write("src/feature.ts", Array.from({ length: 30 }, (_, index) => `export const value${index} = ${index};\n`).join(""));
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "feat: add feature"]);
+  setPolicy(front("main", { "c-limited": claude("c-limited"), "c-ok": claude("c-ok"), "c2-ok": claude("c2-ok") }, { t1: [["c-limited", "c-ok"], ["c2-ok"]] }));
+  const finding = { severity: "P2", lens: "CORRECTNESS", file: "src/feature.ts", line: 3, title: "t", why: "w", preexisting: true };
+  reset({ "c-limited": "limit", answer: JSON.stringify({ findings: [finding] }) });
+  const t0 = node("review-t0.mjs", ["-C", repo, "--no-checks"]);
+  assert.equal(t0.status, 0, t0.output);
+  const t1Json = join(workspace, "t1.json");
+  const t1 = node("review-t1.mjs", ["-C", repo, "--json", t1Json]);
+  assert.equal(t1.status, 0, t1.output);
+  const report = JSON.parse(readFileSync(t1Json, "utf8"));
+  assert.equal(report.front, "main");
+  assert.deepEqual(report.reviewers.map((reviewer) => [reviewer.name, reviewer.status, reviewer.fallbacks.map((f) => `${f.provider}:${f.status}`)]), [["c-ok", "ok", ["c-limited:limit"]], ["c2-ok", "ok", []]]);
+  assert.match(report.reviewers[0].fallbacks[0].until, /^\d{4}-/);
+  assert.equal(report.costUsd, 0.02, "cost of the answering calls is summed");
+  assert.equal(report.findings.length, 1, "both lenses found the same spot");
+  assert.deepEqual([report.findings[0].preexisting, report.findings[0].reviewers], [true, ["c-ok", "c2-ok"]]);
+  assert.equal(invoked("c-limited").length, 1);
+  assert.ok(invoked("c-ok")[0].stdin.includes("<changed_files"), "the prompt carries the changed files");
+  assert.deepEqual(invoked("c-ok")[0].argv.slice(0, 4), ["-p", "--output-format", "json", "--strict-mcp-config"]);
+  assert.equal(callEvents().filter((call) => call.role === "t1").length, 3);
+  const t1Decisions = join(workspace, "t1-decisions.json");
+  writeFileSync(t1Decisions, JSON.stringify([{ spot: 1, decision: "irrelevant", reason: "old code" }]));
+  const t1Triage = ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions);
+  assert.equal(t1Triage.status, 0, t1Triage.output);
+  assert.match(t1Triage.stdout, /2 T1 finding decision\(s\) from 1 spot\(s\)/);
+  assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.source, event.provider, event.preexisting]), [["t1", "c-ok", true], ["t1", "c2-ok", true]]);
+  writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
+  assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
+
+  console.log("PASS review-run contract");
+} finally {
+  rmSync(workspace, { recursive: true, force: true });
+}

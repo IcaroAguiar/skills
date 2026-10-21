@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const scripts = dirname(fileURLToPath(import.meta.url));
 const workspace = mkdtempSync(join(tmpdir(), "review-t1-fixture-"));
 // Default report paths (T1 finds T0's report there) stay inside the workspace.
-const env = { ...process.env, TMPDIR: workspace };
+const env = { ...process.env, TMPDIR: workspace, AGENT_REVIEW_STATE: join(workspace, "state"), AGENT_REVIEW_POLICY: join(workspace, "no-policy.json"), REVIEW_T1_CLAUDE: "" };
 const bin = join(workspace, "bin");
 let repo = "";
 let stubborn = 0;
