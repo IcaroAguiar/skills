@@ -170,6 +170,9 @@ function parseCursor(result) {
     sessionId: envelope.session_id ?? null,
     usage: tokens(u.inputTokens ?? u.input_tokens, u.outputTokens ?? u.output_tokens, u.cacheReadTokens ?? u.cache_read_input_tokens, u.cacheWriteTokens ?? u.cache_creation_input_tokens),
   };
+  if (!envelope.is_error && result.code === 0 && !String(envelope.result ?? "").trim()) {
+    return { ...info, status: "empty", error: "the turn ended with no answer", summary: "empty, exit 0, no answer" };
+  }
   if (envelope.is_error || result.code !== 0 || typeof envelope.result !== "string" || !envelope.result.trim()) {
     return { ...info, ...failure(`${envelope.subtype ?? ""} ${tail(result.output, 20)}`, result.code) };
   }

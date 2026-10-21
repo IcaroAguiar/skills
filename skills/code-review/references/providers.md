@@ -120,7 +120,8 @@ with that reason.
 of the author's model, on any account or CLI (Claude aliases and versions count as
 one: `sonnet` = `claude-sonnet-5-5`, and so does Cursor's
 `claude-sonnet-5-5[effort=high]`). Any other model may review, so Opus work can
-get a Sonnet review when Codex is limited. A review
+get a Sonnet review when Codex is limited. A front that still has the removed
+`independence` key is refused until the key is deleted. A review
 refuses to start without `--author-model` (`human` for a person's change):
 otherwise the first fallback could land on the author's model.
 

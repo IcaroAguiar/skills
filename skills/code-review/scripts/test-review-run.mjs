@@ -57,6 +57,10 @@ const failures = {
   hooked: ["UserPromptSubmit operation blocked by hook", undefined, "hook"],
 };
 if (name === "cursor") {
+  if (mode === "empty") {
+    console.log(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "", session_id: "c-1" }));
+    process.exit(0);
+  }
   if (mode === "auth") {
     console.error("Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
     process.exit(1);
@@ -308,7 +312,9 @@ try {
   assert.deepEqual(plan(["--author-model", "claude-opus-5-5"]).plan.slots[0].map((entry) => entry.available), [true, true, true]);
   assert.deepEqual(plan(["--author-model", "sonnet"]).plan.slots[0].map((entry) => entry.available), [false, false, true]);
   setPolicy({ ...front("main", { "codex-ok": codex("gpt-6.1-sol") }, { review: ["codex-ok"] }), independence: "vendor" });
-  assert.equal(plan().status, 0, "a leftover independence key changes nothing");
+  const leftover = plan();
+  assert.equal(leftover.status, 2, "a leftover independence key is refused, not ignored");
+  assert.match(leftover.output, /independence was removed/);
 
   // ---- 6b. Cursor: read-only ask mode, prompt on argv, auth falls back ---------------------
   chain({ "codex-limited": codex("m-limited"), "cursor-gpt": cursor("gpt-5.6-sol[reasoning=high]", { t3: { providerInstanceId: "cursor", model: "gpt-5.6-sol" } }) }, ["codex-limited", "cursor-gpt"]);
@@ -337,6 +343,11 @@ try {
   assert.equal(oversized.result.provider, "claude-ok", oversized.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "oversize"], ["claude-ok", "ok"]]);
   assert.equal(invoked("gpt-5.6-sol").length, 0, "an oversize prompt never reaches the argv CLI");
+  // An empty answer falls back like Claude's and Codex's.
+  reset({ "gpt-5.6-sol": "empty" });
+  const emptyCursor = rr();
+  assert.equal(emptyCursor.result.provider, "claude-ok", emptyCursor.output);
+  assert.equal(callEvents()[0].status, "empty");
   invalid({ c: cursor("gpt-5.6-sol") }, { fix: ["c"] }, /cursor provider c cannot take this role/);
 
   // ---- 7. A/B split is stable per head ---------------------------------------------------

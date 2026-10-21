@@ -57,6 +57,8 @@ export function validatePolicy(policy) {
     const where = `front ${front?.name ?? "?"}`;
     if (typeof front?.name !== "string" || names.has(front.name)) problems.push(`${where}: needs a unique name`);
     names.add(front?.name);
+    // Removed rather than ignored: a policy that relied on it must see the change.
+    if (front?.independence !== undefined) problems.push(`${where}: independence was removed; every front skips only the author's model, so delete the key`);
     const match = front?.match ?? {};
     if (!match.any && !match.paths?.length && !match.remotes?.length) problems.push(`${where}: match needs paths or remotes`);
     for (const [id, provider] of Object.entries(front?.providers ?? {})) {
