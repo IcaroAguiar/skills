@@ -19,6 +19,8 @@ await tools.mcp__t3_code__delegate_task({
 });
 ```
 
+Take the target from the review policy instead of choosing it by hand: `node <code-review>/scripts/review-run.mjs --plan --role review -C <worktree> --author-model <author's model>` lists the front's candidates in order, each with its `t3` target and whether it is available now (cooldowns are shared with every other session on the machine). Delegate to the first available one. When the task ends, record it so the next session sees the same state: `node <code-review>/scripts/review-ledger.mjs record --front <front from the plan> --role review --provider <id> --model <model> --effort <effort> --status ok|limit|error [--until <reset>] [--duration <s>] [--turns <n>] [--cost <usd>] [--input/--output/--cache-read/--cache-write <tokens>] --session <taskId> --label "<pr> round N"`, with whatever usage `task_status` reports. On a limit, record it and delegate to the next candidate in the plan, with the full-review prompt (the history goes with it, as for any new round).
+
 Verify these IDs against the live catalog and choose effort by the skill's table. A scoped fixer uses `role: "implementation"`. Capture `taskId`, `providerInstanceId`, `model` and `workState`. The review prompt restricts writes; an inherited full-access runtime is not a technical read-only sandbox.
 
 Each new round (review, fix, delta) is a new `delegate_task` call with a distinct, stable `clientRequestId`; a retry of the same dispatch reuses its key. Include the original brief, prior findings, triage, responses and unresolved objections, because the new task starts without the earlier context. Do not send continuation messages to `childThreadId` or create top-level threads for review.
