@@ -99,7 +99,7 @@ function lensFront(root, options) {
     const claude = options.claude || "claude";
     if (!options.reviewers.length) return defaultPolicy(claude).fronts[0];
     const providers = Object.fromEntries(options.reviewers.map(({ name, kind, ...rest }) => [name, kind === "claude" ? { kind, bin: claude, model: rest.model, effort: rest.effort } : { kind, command: rest.command }]));
-    return { name: "explicit", providers, roles: { t1: options.reviewers.map(({ name }) => [name]) } };
+    return { name: `explicit:${claude}`, providers, roles: { t1: options.reviewers.map(({ name }) => [name]) } };
   }
   const policy = loadPolicy() ?? defaultPolicy();
   return resolveFront(policy, root, options.front);

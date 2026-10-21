@@ -81,10 +81,9 @@ function parse(kind, result, outFile) {
   if (kind === "claude") return parseClaude(result);
   if (kind === "codex") return parseCodex(result, outFile);
   if (kind === "agy") return parseAgy(result);
-  // A command's output may echo the prompt or the code, so only its exit code is kept.
   return result.code === 0 && result.stdout.trim()
     ? { status: "ok", text: result.stdout }
-    : { ...failure("", result.code), error: `exit ${result.code}${result.stdout.trim() ? "" : ", no answer"}` };
+    : failure(result.output, result.code);
 }
 
 function parseClaude(result) {
@@ -157,13 +156,22 @@ function addTokens(a, b) {
   return Object.fromEntries(Object.keys(b).map((key) => [key, a[key] + b[key]]));
 }
 
+// `error` is the CLI's own words, for the console and the caller's report only: it
+// can carry part of an answer. `summary` is what may be stored: the status, the HTTP
+// status, the exit code and which known pattern matched, never the text around it.
 export function failure(text, code, httpStatus = null) {
-  const error = tail(String(text ?? "").trim(), 5) || `exit ${code}`;
-  const status = httpStatus === 429 || LIMIT.test(text) ? "limit"
-    : httpStatus === 401 || httpStatus === 403 || AUTH.test(text) ? "auth"
-      : (httpStatus ?? 0) >= 500 || TRANSIENT.test(text) ? "transient"
-        : "error";
-  return { status, error, resetAt: status === "limit" ? resetTime(text) : null };
+  const raw = String(text ?? "");
+  const error = tail(raw.trim(), 5) || `exit ${code}`;
+  const matched = (pattern) => pattern.exec(raw)?.[0]?.toLowerCase().slice(0, 40) ?? null;
+  const [status, cue] = httpStatus === 429 ? ["limit", null]
+    : LIMIT.test(raw) ? ["limit", matched(LIMIT)]
+      : httpStatus === 401 || httpStatus === 403 ? ["auth", null]
+        : AUTH.test(raw) ? ["auth", matched(AUTH)]
+          : (httpStatus ?? 0) >= 500 ? ["transient", null]
+            : TRANSIENT.test(raw) ? ["transient", matched(TRANSIENT)]
+              : ["error", null];
+  const summary = [status, httpStatus ? `HTTP ${httpStatus}` : null, Number.isInteger(code) ? `exit ${code}` : null, cue ? `"${cue}"` : null].filter(Boolean).join(", ");
+  return { status, error, summary, resetAt: status === "limit" ? resetTime(raw) : null };
 }
 
 // When the CLI says when the limit resets: an epoch (`limit reached|1767225600`),

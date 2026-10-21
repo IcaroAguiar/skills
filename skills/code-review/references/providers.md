@@ -13,7 +13,7 @@ questions the same way everywhere:
 
 ```bash
 node scripts/review-run.mjs --role review -C <repo> --base <base-sha> --author-model <model|human> --prompt p.md --out r.md [--effort high]
-node scripts/review-run.mjs --role review -C <repo> --base <old-head> --author-model <model|human> --prompt delta.md --out d.md --resume <call> --fresh-prompt full.md
+node scripts/review-run.mjs --role review -C <repo> --base <old-head> --author-model <model|human> --prompt delta.md --out d.md --resume <call> --fresh-prompt full.md --full-base <base-sha>
 node scripts/review-run.mjs --role fix    -C <repo> --prompt fix.md --out f.md
 node scripts/review-run.mjs --plan --role review -C <repo>        # candidates and availability, calls nothing
 node scripts/review-ledger.mjs triage --t1 <t1-report> --decisions d.json
@@ -28,8 +28,8 @@ node scripts/review-ledger.mjs clear <provider> --front <front>
 
 `~/.config/agent-review/policy.json` (or `$AGENT_REVIEW_POLICY`) is private to
 the machine and never published. Without it, T1 keeps its built-in lenses
-(Sonnet at medium effort and Haiku on the caller's `claude`) and `review-run`
-refuses to run.
+(Sonnet at medium effort and Haiku on the caller's `claude`, with cooldowns
+scoped to that CLI's path) and `review-run` refuses to run.
 
 ```json
 {
@@ -86,7 +86,7 @@ refuses to run.
 | `claude` | t1, review, fix | `claude -p --output-format json`, no MCP, every unapproved permission denied. t1 and review: `Read,Grep,Glob` only, with no shell and not even git, because prefix rules cannot stop `git diff --output=<file>` from writing. Pass `--base`, and the diff comes in the prompt. The review session is kept for deltas. fix: `acceptEdits` plus `allowedTools`. |
 | `codex` | t1, review, fix | `codex exec --json`, sandbox `read-only` (t1 ephemeral) or `workspace-write` for fix; deltas use `exec resume`. The sandbox, not the prompt, keeps a reviewer read-only. |
 | `agy` | t1 | `agy -p --sandbox`, prompt on argv. Headless agy denies every command, so it reviews only what the prompt carries (T1 sends the changed files). |
-| `command` | t1, review | `sh -c`, prompt on stdin, answer on stdout. Make it read-only yourself. |
+| `command` | t1, review | `sh -c`, prompt on stdin, answer on stdout. Make it read-only yourself. As a reviewer it needs `model`, so independence can compare it. |
 
 ## Fallback
 
@@ -107,9 +107,11 @@ account's limit never blocks another account's provider of the same name.
 early (after a login, say).
 
 **`--base`** appends `git diff <base>...HEAD` and its commit list to the prompt
-(over 400 KB, a `--stat` instead). Use it on every review: it saves the round
-trip in which the reviewer would fetch the diff, and a Claude reviewer has no
-other way to see it. For a delta, pass the old head.
+Use it on every review: it saves the round trip in which the reviewer would fetch
+the diff, and a Claude reviewer has no other way to see it. For a delta, pass the
+old head. Over 400 KB the prompt gets a `--stat` instead, and only candidates
+that can run git themselves (Codex) may take the review; the others are skipped
+with that reason.
 
 **Independence.** `--author-model` drops every candidate of the author's model
 (Claude aliases and versions count as one: `sonnet` = `claude-sonnet-5-5`).
@@ -118,11 +120,14 @@ so Claude work always gets a GPT reviewer and the other way round. A review
 refuses to start without `--author-model` (`human` for a person's change):
 otherwise the first fallback could land on the author's model.
 
-**Deltas.** `--resume <call>` continues that call's session on the same provider.
-Sessions never cross providers. If that provider is limited, `review-run` exits
-3, unless `--fresh-prompt` gives a self-contained full-review prompt (the
-original brief, the earlier findings, the triage and the fix). Then the next
-candidate does a fresh full review, and the output says `FRESH`.
+**Deltas.** `--resume <call>` continues that call's session on the same provider,
+for the same role, and only while that provider is still a candidate for the role
+and independent from `--author-model`. Sessions never cross providers. If that
+provider is unavailable, `review-run` exits 3, unless `--fresh-prompt` gives a
+self-contained full-review prompt (the original brief, the earlier findings, the
+triage and the fix) and `--full-base` the original base. Then the next candidate
+does a fresh full review of `git diff <full-base>...HEAD`, and the output says
+`FRESH`.
 
 **T3.** A T3 orchestrator delegates instead of shelling out. Run
 `review-run --plan --role review` for the ordered candidates and their `t3`
@@ -133,11 +138,13 @@ everyone). On a limit, take the next candidate from the plan.
 ## The ledger
 
 `~/.local/state/agent-review/ledger.jsonl` (or `$AGENT_REVIEW_STATE`), mode 600.
-It holds metadata only: repository name, head, provider, model (the requested
-one and, for Claude, the resolved version), effort, status, duration, turns, cost
-in USD (Claude), tokens split into input, output, cache read, cache write and
-reasoning, the session id, and finding titles and locations. Prompts, diffs and
-answers never go in.
+It holds metadata only. A failure is stored as its status, HTTP status, exit code
+and the known pattern that matched (`limit, exit 1, "usage limit"`), never the
+CLI's text, which can hold part of an answer. Otherwise it records the
+repository name, head, provider, model (the requested one and, for Claude, the
+resolved version), effort, status, duration, turns, cost in USD (Claude), tokens
+split into input, output, cache read, cache write and reasoning, the session id,
+and finding titles and locations. Prompts, diffs and answers never go in.
 
 **Triage is the quality signal.** Every finding gets one decision, borrowed from
 Anthropic's review classes:

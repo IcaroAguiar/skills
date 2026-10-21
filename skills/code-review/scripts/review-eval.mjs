@@ -155,7 +155,8 @@ const node = (script, args, options) => run(process.execPath, [join(scripts, scr
 
 // One review of one case: a worktree at the head, T0 against the base, then T1.
 async function review(entry, config, work, keep) {
-  const tree = join(work, entry.id);
+  // One worktree per case and config, so --keep can keep them all.
+  const tree = join(work, `${entry.id}--${config.name.replace(/[^\w.-]/g, "_")}`);
   const tmp = mkdtempSync(join(work, "tmp-"));
   // Replayed calls go to their own ledger: they have no triage and would skew the
   // live acted-on rates, cost and turns that the policy is tuned on.

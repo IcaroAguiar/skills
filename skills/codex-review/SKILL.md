@@ -83,7 +83,8 @@ Extra writable directories (another worktree) go in the fix provider's `writable
 4. **Delta review** with the same reviewer (same CLI session, or a new T3 task carrying the full history). Start a fresh full reviewer only after an account switch. Deltas are not cheap: on this workflow a full review took a median of 7.5 minutes and a delta 6–7, so time is saved by fewer rounds. A fix that arrives with its RED → GREEN test and a green T0 should need one delta at most.
    ```bash
    node <code-review>/scripts/review-run.mjs --role review -C <worktree> --base <old-head> --effort <effort> \
-     --author-model <author's model> --resume <reviewer-call> --fresh-prompt <out>/<pr>.full-with-history.md \
+     --author-model <author's model> --resume <reviewer-call> \
+     --fresh-prompt <out>/<pr>.full-with-history.md --full-base <base-sha> \
      --prompt <out>/<pr>.delta-prompt.md --out <out>/<pr>.delta.md
    ```
    If the reviewer's provider is now limited, `--fresh-prompt` lets the next candidate do a fresh full review (the output says `FRESH`). That prompt carries the original brief, the earlier findings, the triage and the fix. Without it, `review-run` exits 3 and you wait for the reset `review-ledger limits` shows.

@@ -24,7 +24,8 @@ export function defaultPolicy(claude = process.env.REVIEW_T1_CLAUDE || "claude")
     version: 1,
     builtin: true,
     fronts: [{
-      name: "default",
+      // Named after the CLI, so two accounts' wrappers never share a cooldown.
+      name: `default:${claude}`,
       match: { any: true },
       providers: {
         sonnet: { kind: "claude", bin: claude, model: "sonnet", effort: "medium" },
@@ -67,7 +68,8 @@ export function validatePolicy(policy) {
         // A bare `claude` or `codex` inherits whichever account the caller runs as.
         problems.push(`${at}: ${provider.kind === "command" ? "needs a command" : "bin must be an absolute path to the account's CLI or wrapper"}`);
       }
-      if (provider?.kind !== "command" && typeof provider?.model !== "string") problems.push(`${at}: needs a model`);
+      // Independence compares models, so a command reviewer must say which one it runs.
+      if (typeof provider?.model !== "string" && (provider?.kind !== "command" || (front?.roles?.review ?? []).flat().some((entry) => entry === id || entry?.split?.includes(id)))) problems.push(`${at}: needs a model`);
     }
     for (const [role, entries] of Object.entries(front?.roles ?? {})) {
       if (!ROLES.has(role)) {
@@ -199,14 +201,18 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
 // provider goes first with resume.prompt. Sessions never cross providers, so any
 // other candidate gets `prompt`, a self-contained fresh prompt; without one, only
 // the resumed provider is tried.
-export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, onAttempt = () => {} }) {
+//
+// `unfit(provider, resuming)` returns a reason to skip a provider for this call
+// (for example a prompt it cannot read whole), or null.
+export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, unfit = () => null, onAttempt = () => {} }) {
   let list = candidates(front, role, { slot, authorModel, headSha, cooled: cooldowns() });
   if (resume) {
-    const own = list.find((candidate) => candidate.id === resume.provider) ?? { id: resume.provider, provider: front.providers[resume.provider], skip: null };
-    // The author check already passed when this session started.
-    own.skip = cooldowns().has(cooldownKey(front.name, resume.provider)) ? own.skip ?? "cooling down" : null;
+    // The session's provider must still be a candidate for this role and still
+    // independent from the author; otherwise only a fresh reviewer may answer.
+    const own = list.find((candidate) => candidate.id === resume.provider) ?? { id: resume.provider, provider: front.providers[resume.provider], skip: `no longer a ${role} candidate` };
     list = [own, ...(prompt ? list.filter((candidate) => candidate.id !== resume.provider) : [])];
   }
+  list = list.map((candidate) => ({ ...candidate, skip: candidate.skip ?? unfit(candidate.provider, resume?.provider === candidate.id) }));
   const attempts = list.filter((candidate) => candidate.skip).map(({ id, skip }) => ({ provider: id, status: "skipped", reason: skip }));
   const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label };
   for (const candidate of list.filter((entry) => !entry.skip)) {
@@ -219,12 +225,13 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
         type: "call", call, ...meta, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
         resolvedModel: result.resolvedModel ?? null, effort: level, experiment: candidate.experiment, arm: candidate.arm,
         status: result.status, until: result.status === "limit" || result.status === "auth" ? result.resetAt ?? new Date(Date.now() + DEFAULT_COOLDOWN_MS[result.status]).toISOString() : undefined,
-        error: result.status === "ok" ? undefined : redact(result.error), durationMs: result.durationMs, turns: result.turns ?? null,
+        error: result.status === "ok" ? undefined : result.summary ?? result.status, durationMs: result.durationMs, turns: result.turns ?? null,
         toolCalls: result.toolCalls ?? null, costUsd: result.costUsd ?? null, usage: result.usage ?? null, sessionId: result.sessionId ?? null,
         resumeOf: resuming ? resume.call : undefined, fresh: resume && !resuming ? true : undefined, retry: attempt > 1 || undefined,
       };
       appendEvent(record);
-      const entry = { ...record, provider: candidate.id, text: result.text ?? "" };
+      // The caller sees the CLI's words; the ledger above only the summary.
+      const entry = { ...record, error: result.status === "ok" ? undefined : result.error, provider: candidate.id, text: result.text ?? "" };
       attempts.push(entry);
       onAttempt(entry);
       if (result.status === "transient" && attempt === 1) continue;
@@ -233,9 +240,4 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
     }
   }
   return { final: null, attempts };
-}
-
-// CLI errors can echo request headers or keys; keep the gist, never a token.
-function redact(text) {
-  return String(text ?? "").replace(/(sk-[a-z]*-?|Bearer\s+|api[_-]?key["':= ]+)[\w.-]{8,}/gi, "$1[redacted]").slice(0, 400);
 }

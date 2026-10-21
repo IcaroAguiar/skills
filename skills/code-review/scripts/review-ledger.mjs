@@ -12,7 +12,8 @@ const USAGE = `usage: review-ledger triage --t1 <report> --decisions <file|->
        review-ledger triage --call <call-id> --decisions <file|->
        review-ledger record --front <name> --role <role> --provider <id> --status <status> [--model <m>]
                             [--effort <e>] [--repo <name>] [--head <sha>] [--duration <s>] [--until <iso>]
-                            [--session <id>] [--label <text>]
+                            [--session <id>] [--label <text>] [--turns <n>] [--cost <usd>]
+                            [--input <tokens>] [--output <tokens>] [--cache-read <tokens>] [--cache-write <tokens>]
        review-ledger stats [--since <days>] [--role <role>] [--json]
        review-ledger limits
        review-ledger clear <provider-id> --front <name>
@@ -111,13 +112,20 @@ function record(options) {
   for (const key of ["front", "role", "provider", "status"]) if (!options[key]) usage(`record needs --${key}`);
   if (!["ok", "limit", "auth", "transient", "timeout", "error"].includes(options.status)) usage("--status must be ok, limit, auth, transient, timeout or error");
   if (options.until !== undefined && !Number.isFinite(Date.parse(options.until))) usage("--until must be a date and time, such as 2026-10-21T15:00:00Z");
-  if (options.duration !== undefined && !(Number(options.duration) >= 0)) usage("--duration must be a number of seconds");
+  for (const key of ["duration", "turns", "cost", "input", "output", "cache-read", "cache-write"]) {
+    if (options[key] !== undefined && !(Number(options[key]) >= 0)) usage(`--${key} must be a non-negative number`);
+  }
+  const number = (key) => (options[key] === undefined ? null : Number(options[key]));
+  const tokens = ["input", "output", "cache-read", "cache-write"].some((key) => options[key] !== undefined)
+    ? { input: number("input") ?? 0, output: number("output") ?? 0, cacheRead: number("cache-read") ?? 0, cacheWrite: number("cache-write") ?? 0, reasoning: 0 }
+    : null;
   const call = newId();
   appendEvent({
     type: "call", call, source: "manual", role: options.role, provider: options.provider, front: options.front ?? null, repo: options.repo ?? basename(process.cwd()),
     head: options.head ?? null, model: options.model ?? null, effort: options.effort ?? null, status: options.status,
     until: options.until === undefined ? undefined : new Date(Date.parse(options.until)).toISOString(),
     durationMs: options.duration ? Number(options.duration) * 1000 : null, sessionId: options.session ?? null, label: options.label ?? null,
+    turns: number("turns"), costUsd: number("cost"), usage: tokens,
   });
   console.log(`review-ledger: call ${call} recorded`);
 }

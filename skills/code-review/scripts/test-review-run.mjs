@@ -46,6 +46,8 @@ const failures = {
   auth: ["Not logged in. Please run /login", 401, "unauthorized: please login"],
   transient: ["overloaded, try later", 529, "stream disconnected before completion"],
   error: ["boom", undefined, "boom"],
+  // Part of an answer, then a limit: the ledger must keep neither the answer nor its text.
+  leak: ["LEAKED-ANSWER-MARKER partial review, then usage limit reached", undefined, "LEAKED-ANSWER-MARKER partial review, then rate limit"],
 };
 if (name === "claude") {
   const out = failures[mode]
@@ -314,16 +316,51 @@ try {
   assert.equal(stranded.status, 3, stranded.output);
   assert.match(stranded.output, /pass --fresh-prompt/);
   assert.equal(invoked("m-claude").length, 0, "without a fresh prompt no other provider sees the session");
-  const rescued = resume(["--fresh-prompt", fresh]);
+  assert.equal(resume(["--fresh-prompt", fresh]).status, 2, "a fresh fallback needs the full review's base");
+  const rescued = resume(["--fresh-prompt", fresh, "--full-base", "HEAD"]);
   assert.equal(rescued.status, 0, rescued.output);
   assert.equal(rescued.result.provider, "claude-ok");
   assert.equal(rescued.result.fresh, true);
   assert.match(rescued.output, /FRESH/);
-  assert.deepEqual([invoked("m-claude")[0].stdin, invoked("m-claude")[0].argv.includes("--resume")], ["FRESH-FULL-PROMPT\n", false]);
-  assert.equal(resume(["--fresh-prompt", fresh]).status, 0, "a cooled session provider is skipped, not retried");
+  assert.match(invoked("m-claude")[0].stdin, /^FRESH-FULL-PROMPT\n[\s\S]*<fixed_diff range="HEAD\.\.\.HEAD">/, "the fresh reviewer gets the full review's diff");
+  assert.equal(invoked("m-claude")[0].argv.includes("--resume"), false);
+  assert.equal(resume(["--fresh-prompt", fresh, "--full-base", "HEAD"]).status, 0, "a cooled session provider is skipped, not retried");
   const unknown = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--resume", "nope", "--author-model", "human"]);
   assert.equal(unknown.status, 2, unknown.output);
   assert.equal(node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--fresh-prompt", fresh]).status, 2, "--fresh-prompt needs --resume");
+
+  // A session continues only in its role, and only while its provider is still independent.
+  chain({ "codex-ok": codex("m-ok"), "claude-sonnet": claude("sonnet") }, ["claude-sonnet", "codex-ok"], { fix: ["codex-ok"] });
+  reset();
+  const fixCall = rr([], { role: "fix" });
+  const crossRole = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--resume", fixCall.result.call, "--author-model", "human"]);
+  assert.equal(crossRole.status, 2, crossRole.output);
+  assert.match(crossRole.output, /was a fix, not a review/);
+  const bySonnet = rr();
+  assert.equal(bySonnet.result.provider, "claude-sonnet");
+  const sameAuthor = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", delta, "--out", outFile, "--resume", bySonnet.result.call, "--author-model", "claude-sonnet-5-5"]);
+  assert.equal(sameAuthor.status, 3, `the author's own model is not resumed\n${sameAuthor.output}`);
+
+  // ---- 8b. failures keep answers out of the ledger, and command reviewers fall back --------------
+  chain({ "claude-leak": claude("m-leak"), "cmd": { kind: "command", model: "cmd-model", command: "echo 'LEAKED-ANSWER-MARKER 429 Too Many Requests' >&2; exit 1" }, "codex-ok": codex("m-ok") }, ["claude-leak", "cmd", "codex-ok"]);
+  reset({ "m-leak": "leak" });
+  const leaky = rr();
+  assert.equal(leaky.status, 0, leaky.output);
+  assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["claude-leak", "limit"], ["cmd", "limit"], ["codex-ok", "ok"]]);
+  assert.ok(!readFileSync(join(state, "ledger.jsonl"), "utf8").includes("LEAKED-ANSWER-MARKER"), "no answer text in the ledger");
+  assert.match(callEvents()[1].error, /^limit, exit 1, "(429|too many requests)"$/);
+  setPolicy(front("main", { cmd: { kind: "command", command: "true" } }, { review: ["cmd"] }));
+  assert.match(plan().output, /provider cmd: needs a model/, "a command reviewer must name its model");
+  // Too large to include: only a reviewer with a shell may take it.
+  chain({ "claude-ok": claude("m-claude"), "codex-ok": codex("m-ok") }, ["claude-ok", "codex-ok"]);
+  write("big.txt", "x".repeat(420 * 1024) + "\n");
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "big"]);
+  reset();
+  const big = rr(["--base", "HEAD~1"]);
+  assert.equal(big.result.provider, "codex-ok", big.output);
+  assert.match(big.result.attempts[0].reason, /too large to include/);
+  sh("git", ["reset", "-q", "--hard", "HEAD~1"]);
 
   // ---- 9. sandbox per role -----------------------------------------------------------------------
   chain({ "codex-ok": codex("m-ok", { writableRoots: ["/tmp/extra"] }), "claude-ok": claude("m-claude", { allowedTools: ["Bash(npm test:*)"] }) }, ["codex-ok"], { fix: ["codex-ok"] });
@@ -382,6 +419,9 @@ try {
   const recorded = ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "limit", "--until", new Date(Date.now() + 3_600_000).toISOString());
   assert.equal(recorded.status, 0, recorded.output);
   assert.match(ledgerCli("limits").stdout, /^main\/t3-opus {2}limit until /, "a manually recorded limit cools the provider");
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "300", "--turns", "4", "--cost", "0.5", "--input", "100", "--cache-read", "300").status, 0);
+  const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-sol");
+  assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-6.1-sol", "high", 300_000, 4, 0.5, 0.75]);
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "limit", "--until", "soon").status, 2, "an unreadable reset is refused");
   assert.equal(ledgerCli("record", "--role", "review", "--provider", "x", "--status", "ok").status, 2, "record needs the front");
   // Cooldowns belong to a front: the same id on another account stays available.

@@ -91,6 +91,13 @@ try {
   assert.equal(broken.status, 1, broken.output);
   assert.equal(sh("git", ["worktree", "list", "--porcelain"]).split("\n").filter((line) => line.startsWith("worktree ")).length, 1, "failed runs remove their worktrees");
 
+  // --keep with two configs of the same case keeps two worktrees, and both runs complete.
+  const kept = evalTool(["run", "--cases", cases, "--only", "quiet", "--keep", "--config", `a=--reviewer-cmd 'stub=${stub}'`, "--config", `b=--reviewer-cmd 'stub=${stub}'`]);
+  assert.equal(kept.status, 0, kept.output);
+  const keptPaths = [...kept.stdout.matchAll(/^kept (.+)$/gm)].map((match) => match[1]);
+  assert.equal(new Set(keptPaths).size, 2, kept.output);
+  for (const path of keptPaths) sh("git", ["worktree", "remove", "--force", path]);
+
   console.log("PASS review-eval contract");
 } finally {
   rmSync(workspace, { recursive: true, force: true });

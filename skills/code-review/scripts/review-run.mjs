@@ -14,7 +14,7 @@ import { defaultReportPath, git, readJson, stopGroups, treeFingerprint, writePri
 
 const USAGE = `usage: review-run --role review|fix --prompt <file> --out <file> [-C <dir>]
                   [--effort <level>] [--author-model <model>] [--front <name>]
-                  [--base <ref>] [--resume <call-id> [--fresh-prompt <file>]] [--label <text>]
+                  [--base <ref>] [--resume <call-id> [--fresh-prompt <file> --full-base <ref>]] [--label <text>]
                   [--timeout <seconds>] [--json <file>]
        review-run --plan --role t1|review|fix [-C <dir>] [--author-model <model>] [--front <name>]
 
@@ -35,13 +35,14 @@ candidate when one is rate-limited, logged out or briefly unavailable.
   --resume <call-id>       continue the session of an earlier call (a delta review)
   --fresh-prompt <file>    self-contained prompt for a different provider if that session's
                            provider is unavailable; without it, exit 3 instead
+  --full-base <ref>        the original base: the fresh reviewer gets \`git diff <ref>...HEAD\`
   --label <text>           free text kept in the ledger (PR, round)
   --timeout <s>            per call (default 2400)
   --json <file>            machine-readable result
   --plan                   print the candidates and their availability as JSON, call nothing`;
 
 function parseArgs(argv) {
-  const options = { cwd: process.cwd(), role: null, prompt: null, out: null, base: null, effort: null, authorModel: null, front: null, resume: null, freshPrompt: null, label: null, timeout: 2400, json: null, plan: false };
+  const options = { cwd: process.cwd(), role: null, prompt: null, out: null, base: null, fullBase: null, effort: null, authorModel: null, front: null, resume: null, freshPrompt: null, label: null, timeout: 2400, json: null, plan: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => {
@@ -56,6 +57,7 @@ function parseArgs(argv) {
     else if (arg === "--out") options.out = resolve(value());
     else if (arg === "--effort") options.effort = value();
     else if (arg === "--base") options.base = value();
+    else if (arg === "--full-base") options.fullBase = value();
     else if (arg === "--author-model") options.authorModel = value();
     else if (arg === "--front") options.front = value();
     else if (arg === "--resume") options.resume = value();
@@ -75,6 +77,9 @@ function parseArgs(argv) {
   if (options.effort && !/^(low|medium|high|xhigh|max)$/.test(options.effort)) usage("--effort must be low, medium, high, xhigh or max");
   if (!Number.isFinite(options.timeout) || options.timeout <= 0) usage("--timeout must be a positive number");
   if (options.freshPrompt && !options.resume) usage("--fresh-prompt only goes with --resume");
+  // A fresh reviewer must see the whole change, not the delta's old-head...HEAD.
+  if (options.freshPrompt && !options.fullBase) usage("--fresh-prompt needs --full-base, the base of the full review");
+  if (options.fullBase && !options.freshPrompt) usage("--full-base only goes with --fresh-prompt");
   if (options.role === "review" && !options.plan && !options.authorModel) usage('a review needs --author-model (the model that wrote the change, or "human")');
   if (options.authorModel === "human") options.authorModel = null;
   return options;
@@ -107,17 +112,19 @@ function routeEffort(root, headSha, { role, resuming }) {
 }
 
 // The fixed diff rides in the prompt: one less round trip, and the only way a
-// reviewer without a shell sees it.
+// reviewer without a shell sees it. Too large to include, only reviewers that can
+// run git themselves (Codex) may take the review: see `needsShell`.
 function withDiff(prompt, root, base) {
   const range = `${base}...HEAD`;
   const diff = git(root, ["diff", "-M", "--no-color", "--no-ext-diff", range], { allowFailure: true });
   if (diff === null) stop(`cannot diff ${range}`);
   const log = git(root, ["log", "--oneline", `${base}..HEAD`]).trim();
-  const body = Buffer.byteLength(diff) > MAX_INLINE_DIFF
-    ? `(The diff is ${Math.round(Buffer.byteLength(diff) / 1024)} KB, too large to include; read the changed files.)\n${git(root, ["diff", "--stat", range])}`
-    : diff;
-  return `${prompt.trimEnd()}\n\n<fixed_diff range="${range}">\n<commits>\n${log}\n</commits>\n${body}</fixed_diff>\n`;
+  const whole = Buffer.byteLength(diff) <= MAX_INLINE_DIFF;
+  const body = whole ? diff : `(The diff is ${Math.round(Buffer.byteLength(diff) / 1024)} KB, too large to include; run \`git diff ${range}\` yourself.)\n${git(root, ["diff", "--stat", range])}`;
+  return { text: `${prompt.trimEnd()}\n\n<fixed_diff range="${range}">\n<commits>\n${log}\n</commits>\n${body}</fixed_diff>\n`, whole };
 }
+
+const SHELL_KINDS = new Set(["codex"]);
 
 function plan(front, options, headSha) {
   const cooled = cooldowns();
@@ -153,18 +160,22 @@ async function main() {
       return stop(`cannot read ${path}: ${error.message}`);
     }
   };
-  const prompt = options.base ? withDiff(read(options.prompt), root, options.base) : read(options.prompt);
+  const main = options.base ? withDiff(read(options.prompt), root, options.base) : { text: read(options.prompt), whole: true };
+  const fresh = options.freshPrompt ? withDiff(read(options.freshPrompt), root, options.fullBase) : null;
+  const prompt = main.text;
   let resume = null;
   if (options.resume) {
     const earlier = findCall(options.resume, readEvents());
     if (!earlier || earlier.status !== "ok" || !earlier.sessionId) stop(`no successful call ${options.resume} with a session in the ledger`);
+    if (earlier.role !== options.role) stop(`call ${options.resume} was a ${earlier.role}, not a ${options.role}; a session continues only in its own role`);
     if (earlier.front !== front.name || !front.providers[earlier.provider]) stop(`call ${options.resume} ran on ${earlier.front}/${earlier.provider}, which this front does not have; start a fresh review`);
     resume = { call: earlier.call, provider: earlier.provider, sessionId: earlier.sessionId, prompt };
   }
   const effort = options.effort ?? routeEffort(root, headSha, { role: options.role, resuming: Boolean(resume) });
   const started = Date.now();
   const { final, attempts } = await dispatch({
-    front, role: options.role, prompt: resume ? (options.freshPrompt ? (options.base ? withDiff(read(options.freshPrompt), root, options.base) : read(options.freshPrompt)) : null) : prompt, root, effort,
+    front, role: options.role, prompt: resume ? fresh?.text ?? null : prompt, root, effort,
+    unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
     authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume,
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),
   });
