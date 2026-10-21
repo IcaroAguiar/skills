@@ -32,9 +32,12 @@ const AUTH = /not logged in|unauthori[sz]ed|\b40[13]\b|invalid (api key|x-api-ke
 const TRANSIENT = /overloaded|\b5(0[0-4]|29)\b|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|stream (disconnected|error)|temporarily unavailable|internal server error/i;
 
 // Statuses that let the next candidate run: the provider could not serve the call.
-// `error` and `timeout` stop the chain: the next account would most likely fail the
-// same way, and a slow reviewer is not a capacity problem.
-export const FALLBACK_STATUSES = new Set(["limit", "auth", "transient"]);
+// `empty` is a turn that ended with no answer and no tokens: Codex does that, exit
+// 0, when its provider silently drops the input (a credential-shaped string in a
+// diff is enough), and another provider may accept it. `error` and `timeout` stop
+// the chain: the next account would most likely fail the same way, and a slow
+// reviewer is not a capacity problem.
+export const FALLBACK_STATUSES = new Set(["limit", "auth", "transient", "empty"]);
 
 export function commandFor(provider, { role, root, effort, resume, outFile, timeoutMs }) {
   const level = effort ?? provider.effort ?? null;
@@ -98,6 +101,12 @@ function parseClaude(result) {
     costUsd: typeof envelope.total_cost_usd === "number" ? envelope.total_cost_usd : null,
     usage: tokens(usage.input_tokens, usage.output_tokens, usage.cache_read_input_tokens, usage.cache_creation_input_tokens),
   };
+  // No model turn means the text is not an answer: a UserPromptSubmit hook that
+  // blocks the prompt (one that finds a credential-shaped string, say) still exits 0
+  // with its own message as the result.
+  if (!envelope.is_error && result.code === 0 && envelope.num_turns === 0 && !info.usage.output) {
+    return { ...info, status: "empty", error: "no model turn: the prompt was blocked before the model (a hook?)", summary: "empty, exit 0, no model turn" };
+  }
   if (envelope.is_error || result.code !== 0 || typeof envelope.result !== "string" || !envelope.result.trim()) {
     const status = envelope.api_error_status;
     const text = `${status ?? ""} ${envelope.result ?? ""} ${tail(result.output, 20)}`;
@@ -131,6 +140,9 @@ function parseCodex(result, outFile) {
   // Only the CLI's own error events and non-JSON (stderr) lines: the JSONL stream
   // carries the model's messages and command output, which must not reach the ledger.
   const stderr = result.output.split("\n").filter((line) => line.trim() && !line.startsWith("{")).join("\n");
+  if (result.code === 0 && !errors.length && !text.trim() && !info.usage?.output) {
+    return { ...info, status: "empty", error: "the turn ended with no answer and no output tokens (input dropped by the provider?)", summary: "empty, exit 0, no output tokens" };
+  }
   if (result.code !== 0 || errors.length || !text.trim()) return { ...info, ...failure(`${errors.join("\n")}\n${tail(stderr, 10)}`, result.code) };
   return { ...info, status: "ok", text };
 }
@@ -156,12 +168,13 @@ function addTokens(a, b) {
   return Object.fromEntries(Object.keys(b).map((key) => [key, a[key] + b[key]]));
 }
 
-// `error` is the CLI's own words, for the console and the caller's report only: it
-// can carry part of an answer. `summary` is what may be stored: the status, the HTTP
-// status, the exit code and which known pattern matched, never the text around it.
+// `error` is the CLI's own words, credentials masked, for the console and the
+// caller's report only: it can carry part of an answer. `summary` is what may be
+// stored: the status, the HTTP status, the exit code and which known pattern
+// matched, never the text around it.
 export function failure(text, code, httpStatus = null) {
   const raw = String(text ?? "");
-  const error = tail(raw.trim(), 5) || `exit ${code}`;
+  const error = redact(tail(raw.trim(), 5)) || `exit ${code}`;
   const matched = (pattern) => pattern.exec(raw)?.[0]?.toLowerCase().slice(0, 40) ?? null;
   const [status, cue] = httpStatus === 429 ? ["limit", null]
     : LIMIT.test(raw) ? ["limit", matched(LIMIT)]
@@ -172,6 +185,13 @@ export function failure(text, code, httpStatus = null) {
               : ["error", null];
   const summary = [status, httpStatus ? `HTTP ${httpStatus}` : null, Number.isInteger(code) ? `exit ${code}` : null, cue ? `"${cue}"` : null].filter(Boolean).join(", ");
   return { status, error, summary, resetAt: status === "limit" ? resetTime(raw) : null };
+}
+
+// CLI diagnostics can echo request headers or keys: keep the gist, never a token.
+export function redact(text) {
+  return String(text ?? "")
+    .replace(/(sk-[a-z]*-?|Bearer\s+|(api[_-]?key|token|authorization|x-api-key)["':= ]+)[\w.~+/=-]{8,}/gi, "$1[redacted]")
+    .slice(0, 1000);
 }
 
 // When the CLI says when the limit resets: an epoch (`limit reached|1767225600`),

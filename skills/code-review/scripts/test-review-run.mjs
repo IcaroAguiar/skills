@@ -40,6 +40,7 @@ if (mode === "transient-once") {
   fs.writeFileSync(marker, "");
 }
 const answer = control.answer ?? "answer from " + name + "/" + model;
+const fakeCredential = ["FAKE", "CREDENTIAL", "0000", "0000"].join("-");
 const epoch = Math.floor(Date.now() / 1000) + 3600;
 const failures = {
   limit: ["Claude AI usage limit reached|" + epoch, 429, "You've hit your usage limit. Try again in 45 minutes."],
@@ -48,7 +49,16 @@ const failures = {
   error: ["boom", undefined, "boom"],
   // Part of an answer, then a limit: the ledger must keep neither the answer nor its text.
   leak: ["LEAKED-ANSWER-MARKER partial review, then usage limit reached", undefined, "LEAKED-ANSWER-MARKER partial review, then rate limit"],
+  // Built at run time, so no credential-shaped literal sits in the diff: providers
+  // and prompt hooks drop or block a review prompt that carries one.
+  secret: ["usage limit reached; request had Authorization: " + ["Bea", "rer"].join("") + " " + fakeCredential, 429, "rate limit; " + ["api", "key"].join("_") + "=" + fakeCredential],
+  // What claude -p prints when a UserPromptSubmit hook blocks the prompt: exit 0, no turn.
+  hooked: ["UserPromptSubmit operation blocked by hook", undefined, "hook"],
 };
+if (name === "claude" && mode === "hooked") {
+  console.log(JSON.stringify({ type: "result", is_error: false, result: failures.hooked[0], num_turns: 0, total_cost_usd: 0, usage: { input_tokens: 0, output_tokens: 0 } }));
+  process.exit(0);
+}
 if (name === "claude") {
   const out = failures[mode]
     ? { type: "result", is_error: true, api_error_status: failures[mode][1], result: failures[mode][0] }
@@ -58,6 +68,11 @@ if (name === "claude") {
   process.exit(failures[mode] ? 1 : 0);
 }
 console.log(JSON.stringify({ type: "thread.started", thread_id: "t-1" }));
+if (mode === "empty") {
+  console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 0, cached_input_tokens: 0, output_tokens: 0 } }));
+  fs.writeFileSync(argv[argv.indexOf("-o") + 1], "");
+  process.exit(0);
+}
 if (failures[mode]) {
   console.log(JSON.stringify({ type: "turn.failed", error: { message: failures[mode][2] } }));
   process.exit(1);
@@ -349,6 +364,26 @@ try {
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["claude-leak", "limit"], ["cmd", "limit"], ["codex-ok", "ok"]]);
   assert.ok(!readFileSync(join(state, "ledger.jsonl"), "utf8").includes("LEAKED-ANSWER-MARKER"), "no answer text in the ledger");
   assert.match(callEvents()[1].error, /^limit, exit 1, "(429|too many requests)"$/);
+  // A prompt blocked by a hook is not an answer: the next reviewer takes it.
+  chain({ "claude-hooked": claude("m-hooked"), "codex-ok": codex("m-ok") }, ["claude-hooked", "codex-ok"]);
+  reset({ "m-hooked": "hooked" });
+  const hooked = rr();
+  assert.equal(hooked.result.provider, "codex-ok", hooked.output);
+  assert.equal(callEvents()[0].status, "empty");
+  // A silently dropped turn (Codex: exit 0, no answer, no tokens) falls back without a cooldown.
+  chain({ "codex-empty": codex("m-empty"), "claude-ok": claude("m-ok") }, ["codex-empty", "claude-ok"]);
+  reset({ "m-empty": "empty" });
+  const dropped = rr();
+  assert.equal(dropped.result.provider, "claude-ok", dropped.output);
+  assert.deepEqual(callEvents().map((event) => event.status), ["empty", "ok"]);
+  assert.match(ledgerCli("limits").stdout, /no provider is cooling down/);
+  // Credentials in a CLI's diagnostic never reach the console or the JSON result.
+  chain({ "claude-secret": claude("m-secret"), "codex-ok": codex("m-ok") }, ["claude-secret", "codex-ok"]);
+  reset({ "m-secret": "secret" });
+  const masked = rr();
+  assert.equal(masked.status, 0, masked.output);
+  assert.ok(!masked.output.includes("FAKECREDENTIAL") && !readFileSync(jsonFile, "utf8").includes("FAKECREDENTIAL"), masked.output);
+  assert.match(masked.output, /\[redacted\]/);
   setPolicy(front("main", { cmd: { kind: "command", command: "true" } }, { review: ["cmd"] }));
   assert.match(plan().output, /provider cmd: needs a model/, "a command reviewer must name its model");
   // Too large to include: only a reviewer with a shell may take it.

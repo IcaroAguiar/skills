@@ -110,7 +110,7 @@ function triageCall(options) {
 // and a limit, feed the same cooldowns and statistics.
 function record(options) {
   for (const key of ["front", "role", "provider", "status"]) if (!options[key]) usage(`record needs --${key}`);
-  if (!["ok", "limit", "auth", "transient", "timeout", "error"].includes(options.status)) usage("--status must be ok, limit, auth, transient, timeout or error");
+  if (!["ok", "limit", "auth", "transient", "empty", "timeout", "error"].includes(options.status)) usage("--status must be ok, limit, auth, transient, empty, timeout or error");
   if (options.until !== undefined && !Number.isFinite(Date.parse(options.until))) usage("--until must be a date and time, such as 2026-10-21T15:00:00Z");
   for (const key of ["duration", "turns", "cost", "input", "output", "cache-read", "cache-write"]) {
     if (options[key] !== undefined && !(Number(options[key]) >= 0)) usage(`--${key} must be a non-negative number`);

@@ -96,6 +96,7 @@ scoped to that CLI's path) and `review-run` refuses to run.
 | `limit` | rate or usage limit (HTTP 429, "usage limit", quota) | next candidate; this provider cools down until the reset the CLI states, else 30 min |
 | `auth` | logged out or rejected credentials | next candidate; cools down 10 min |
 | `transient` | overloaded, 5xx, dropped connection | retry once, then next candidate |
+| `empty` | the turn ended with no answer and no model output | next candidate, no cooldown. Codex does this (exit 0) when its provider silently drops the input; `claude -p` does it when a `UserPromptSubmit` hook blocks the prompt, printing the hook's message as if it were the answer. A string shaped like a credential in the diff is enough for either, and a dropped message stays in the Codex session, so later resumes of that session come back empty too: start a fresh review. Build fake credentials in tests at run time instead of writing them as literals. |
 | `timeout`, `error` | the call itself failed | stop: another account would most likely fail the same way, and a slow reviewer is not a capacity problem |
 
 Fallback never leaves the front, so it can never move code to another account.
