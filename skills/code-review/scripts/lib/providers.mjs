@@ -8,11 +8,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readJson, run, tail } from "./repo.mjs";
 
-export const KINDS = new Set(["claude", "codex", "agy", "command"]);
+export const KINDS = new Set(["claude", "codex", "cursor", "agy", "command"]);
 export const ROLES = new Set(["t1", "review", "fix"]);
 // agy cannot read files headless (every command is denied), so it only reviews
 // what the prompt carries; a command provider's access is whatever it has.
-export const KIND_ROLES = { claude: ["t1", "review", "fix"], codex: ["t1", "review", "fix"], agy: ["t1"], command: ["t1", "review"] };
+// cursor runs in ask mode, which never edits, so it reviews but does not fix.
+export const KIND_ROLES = { claude: ["t1", "review", "fix"], codex: ["t1", "review", "fix"], cursor: ["t1", "review"], agy: ["t1"], command: ["t1", "review"] };
+// Kinds whose CLI takes an effort flag. A Cursor model carries its effort in the
+// id (`claude-sonnet-5-5[effort=high]`), and a command provider has none.
+export function takesEffort(kind) {
+  return ["claude", "codex", "agy"].includes(kind);
+}
 
 // Read-only for every reviewer: file tools only, no MCP servers, every permission
 // prompt denied. No shell, not even git: prefix rules cannot stop `git diff
@@ -28,7 +34,7 @@ const MAX_ARGV_PROMPT = 700 * 1024;
 
 // Only a failed call is classified, so a review that discusses rate limits is not one.
 const LIMIT = /usage[ _-]?limit|rate[ _-]?limit|quota|too many requests|\b429\b|hit your (usage )?limit|limit reached|out of (credits|usage)|insufficient[_ ]quota|resource[_ ]exhausted|credit balance/i;
-const AUTH = /not logged in|unauthori[sz]ed|\b40[13]\b|invalid (api key|x-api-key)|authentication (failed|error)|please (run )?\/?login|token (has )?expired|re-?authenticate/i;
+const AUTH = /not logged in|authentication required|unauthori[sz]ed|\b40[13]\b|invalid (api key|x-api-key)|authentication (failed|error)|please (run )?\/?login|token (has )?expired|re-?authenticate/i;
 const TRANSIENT = /overloaded|\b5(0[0-4]|29)\b|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|stream (disconnected|error)|temporarily unavailable|internal server error/i;
 
 // Statuses that let the next candidate run: the provider could not serve the call.
@@ -36,8 +42,9 @@ const TRANSIENT = /overloaded|\b5(0[0-4]|29)\b|ECONNRESET|ETIMEDOUT|EAI_AGAIN|so
 // 0, when its provider silently drops the input (a credential-shaped string in a
 // diff is enough), and another provider may accept it. `error` and `timeout` stop
 // the chain: the next account would most likely fail the same way, and a slow
-// reviewer is not a capacity problem.
-export const FALLBACK_STATUSES = new Set(["limit", "auth", "transient", "empty"]);
+// reviewer is not a capacity problem. `oversize` is a prompt too long for a CLI
+// that takes it on argv; a CLI that reads stdin can still take it.
+export const FALLBACK_STATUSES = new Set(["limit", "auth", "transient", "empty", "oversize"]);
 
 export function commandFor(provider, { role, root, effort, resume, outFile, timeoutMs }) {
   const level = effort ?? provider.effort ?? null;
@@ -57,6 +64,12 @@ export function commandFor(provider, { role, root, effort, resume, outFile, time
       : ["exec", "--json", "--skip-git-repo-check", "-m", provider.model, ...config, "-s", sandbox, "-C", root, ...(role === "t1" ? ["--ephemeral"] : []), "-o", outFile, "-"];
     return { command: provider.bin, args, stdin: true };
   }
+  if (provider.kind === "cursor") {
+    // Ask mode is read-only; the sandbox and --trust keep a headless run from
+    // prompting. The prompt goes on argv after `--`, so a leading dash is text.
+    const args = ["-p", "--output-format", "json", "--mode", "ask", "--sandbox", "enabled", "--trust", "--model", provider.model, ...(resume ? ["--resume", resume] : [])];
+    return { command: provider.bin, args, stdin: false, promptFlag: "--" };
+  }
   if (provider.kind === "agy") {
     const args = ["--print-timeout", `${Math.ceil(timeoutMs / 1000)}s`, "--output-format", "json", "--model", provider.model, "--sandbox", "--disable-slash-commands", ...(level ? ["--effort", level] : [])];
     return { command: provider.bin, args, stdin: false, promptFlag: "-p" };
@@ -70,7 +83,7 @@ export async function callProvider(provider, { role, prompt, root, effort = null
   const outFile = join(scratch, "last-message.md");
   try {
     const { command, args, stdin, promptFlag } = commandFor(provider, { role, root, effort, resume, outFile, timeoutMs });
-    if (promptFlag && Buffer.byteLength(prompt) > MAX_ARGV_PROMPT) return { status: "error", error: `prompt over ${MAX_ARGV_PROMPT / 1024} KB for ${provider.kind}`, durationMs: 0 };
+    if (promptFlag && Buffer.byteLength(prompt) > MAX_ARGV_PROMPT) return { status: "oversize", error: `prompt over ${MAX_ARGV_PROMPT / 1024} KB for ${provider.kind}`, summary: "oversize, prompt on argv", durationMs: 0 };
     const result = await run(command, promptFlag ? [...args, promptFlag, prompt] : args, { cwd: root, input: stdin ? prompt : undefined, timeoutMs });
     const parsed = { durationMs: result.durationMs, ...parse(provider.kind, result, outFile) };
     if (result.timedOut) return { ...parsed, status: "timeout", text: "" };
@@ -83,6 +96,7 @@ export async function callProvider(provider, { role, prompt, root, effort = null
 function parse(kind, result, outFile) {
   if (kind === "claude") return parseClaude(result);
   if (kind === "codex") return parseCodex(result, outFile);
+  if (kind === "cursor") return parseCursor(result);
   if (kind === "agy") return parseAgy(result);
   return result.code === 0 && result.stdout.trim()
     ? { status: "ok", text: result.stdout }
@@ -145,6 +159,21 @@ function parseCodex(result, outFile) {
   }
   if (result.code !== 0 || errors.length || !text.trim()) return { ...info, ...failure(`${errors.join("\n")}\n${tail(stderr, 10)}`, result.code) };
   return { ...info, status: "ok", text };
+}
+
+// `cursor-agent -p --output-format json` prints one result envelope, like Claude's.
+function parseCursor(result) {
+  const envelope = readJson(() => result.stdout);
+  if (!envelope) return failure(result.output, result.code);
+  const u = envelope.usage ?? {};
+  const info = {
+    sessionId: envelope.session_id ?? null,
+    usage: tokens(u.inputTokens ?? u.input_tokens, u.outputTokens ?? u.output_tokens, u.cacheReadTokens ?? u.cache_read_input_tokens, u.cacheWriteTokens ?? u.cache_creation_input_tokens),
+  };
+  if (envelope.is_error || result.code !== 0 || typeof envelope.result !== "string" || !envelope.result.trim()) {
+    return { ...info, ...failure(`${envelope.subtype ?? ""} ${tail(result.output, 20)}`, result.code) };
+  }
+  return { ...info, status: "ok", text: envelope.result };
 }
 
 function parseAgy(result) {

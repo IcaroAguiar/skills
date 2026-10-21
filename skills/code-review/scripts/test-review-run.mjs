@@ -19,6 +19,7 @@ const controlFile = join(workspace, "control.json");
 const env = { ...process.env, TMPDIR: workspace, AGENT_REVIEW_STATE: state, AGENT_REVIEW_POLICY: join(workspace, "policy.json"), REVIEW_T1_CLAUDE: "" };
 const claudeBin = join(bin, "fake-claude");
 const codexBin = join(bin, "fake-codex");
+const cursorBin = join(bin, "fake-cursor");
 let repo = "";
 
 // One script plays both CLIs (by its file name). Behavior per model comes from
@@ -30,7 +31,7 @@ const root = path.dirname(path.dirname(process.argv[1]));
 const name = path.basename(process.argv[1]).replace("fake-", "");
 const argv = process.argv.slice(2);
 const stdin = fs.readFileSync(0, "utf8");
-const model = argv[argv.indexOf(name === "claude" ? "--model" : "-m") + 1];
+const model = argv[argv.indexOf(name === "codex" ? "-m" : "--model") + 1];
 fs.appendFileSync(path.join(root, "calls.jsonl"), JSON.stringify({ cli: name, model, argv, stdin }) + "\\n");
 const control = JSON.parse(fs.readFileSync(path.join(root, "control.json"), "utf8"));
 let mode = control[model] ?? "ok";
@@ -55,6 +56,18 @@ const failures = {
   // What claude -p prints when a UserPromptSubmit hook blocks the prompt: exit 0, no turn.
   hooked: ["UserPromptSubmit operation blocked by hook", undefined, "hook"],
 };
+if (name === "cursor") {
+  if (mode === "auth") {
+    console.error("Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
+    process.exit(1);
+  }
+  const prompt = argv[argv.indexOf("--") + 1];
+  const out = failures[mode]
+    ? { type: "result", subtype: "error", is_error: true, result: failures[mode][0] }
+    : { type: "result", subtype: "success", is_error: false, result: answer + " [" + prompt.trim() + "]", session_id: "c-1", usage: { inputTokens: 30, outputTokens: 4, cacheReadTokens: 60, cacheWriteTokens: 0 } };
+  console.log(JSON.stringify(out));
+  process.exit(failures[mode] ? 1 : 0);
+}
 if (name === "claude" && mode === "hooked") {
   console.log(JSON.stringify({ type: "result", is_error: false, result: failures.hooked[0], num_turns: 0, total_cost_usd: 0, usage: { input_tokens: 0, output_tokens: 0 } }));
   process.exit(0);
@@ -114,6 +127,7 @@ function reset(control = {}) {
 
 const claude = (model, extra = {}) => ({ kind: "claude", bin: claudeBin, model, ...extra });
 const codex = (model, extra = {}) => ({ kind: "codex", bin: codexBin, model, ...extra });
+const cursor = (model, extra = {}) => ({ kind: "cursor", bin: cursorBin, model, ...extra });
 const front = (name, providers, roles, match = { any: true }) => ({ name, match, providers, roles });
 const setPolicy = (...fronts) => writeFileSync(env.AGENT_REVIEW_POLICY, JSON.stringify({ version: 1, fronts }));
 // The usual policy: a review (and optionally fix) chain over the given providers.
@@ -153,7 +167,7 @@ const untilOk = (iso, ms) => assert.ok(Math.abs(Date.parse(iso) - (Date.now() + 
 
 try {
   mkdirSync(bin);
-  for (const path of [claudeBin, codexBin]) {
+  for (const path of [claudeBin, codexBin, cursorBin]) {
     writeFileSync(path, FAKE);
     chmodSync(path, 0o755);
   }
@@ -288,12 +302,42 @@ try {
   assert.equal(anonymous.status, 2, "a review without --author-model is refused");
   assert.match(anonymous.output, /needs --author-model/);
   assert.equal(node("review-run.mjs", ["-C", repo, "--plan", "--role", "review"]).status, 2, "the T3 plan needs the author too");
-  // Vendor independence: Opus work skips every Claude model, not only Opus.
-  setPolicy({ ...front("main", { "claude-sonnet": claude("sonnet"), "codex-ok": codex("gpt-6.1-sol") }, { review: ["claude-sonnet", "codex-ok"] }), independence: "vendor" });
-  const byVendor = plan(["--author-model", "claude-opus-5-5"]).plan.slots[0];
-  assert.deepEqual(byVendor.map((entry) => [entry.id, entry.available]), [["claude-sonnet", false], ["codex-ok", true]]);
-  assert.match(byVendor[0].reason, /same vendor as the author/);
-  assert.equal(plan(["--author-model", "gpt-6.1-sol"]).plan.slots[0][1].available, false, "GPT work skips GPT reviewers");
+  // One rule everywhere: only the author's own model is skipped. Opus work may get
+  // a Sonnet review, and a Cursor id with parameters is still that model.
+  setPolicy(front("main", { "claude-sonnet": claude("sonnet"), "cursor-sonnet": cursor("claude-sonnet-5-5[effort=high]"), "codex-ok": codex("gpt-6.1-sol") }, { review: ["claude-sonnet", "cursor-sonnet", "codex-ok"] }));
+  assert.deepEqual(plan(["--author-model", "claude-opus-5-5"]).plan.slots[0].map((entry) => entry.available), [true, true, true]);
+  assert.deepEqual(plan(["--author-model", "sonnet"]).plan.slots[0].map((entry) => entry.available), [false, false, true]);
+  setPolicy({ ...front("main", { "codex-ok": codex("gpt-6.1-sol") }, { review: ["codex-ok"] }), independence: "vendor" });
+  assert.equal(plan().status, 0, "a leftover independence key changes nothing");
+
+  // ---- 6b. Cursor: read-only ask mode, prompt on argv, auth falls back ---------------------
+  chain({ "codex-limited": codex("m-limited"), "cursor-gpt": cursor("gpt-5.6-sol[reasoning=high]", { t3: { providerInstanceId: "cursor", model: "gpt-5.6-sol" } }) }, ["codex-limited", "cursor-gpt"]);
+  reset({ "m-limited": "limit" });
+  const viaCursor = rr(["--effort", "high"]);
+  assert.equal(viaCursor.status, 0, viaCursor.output);
+  assert.equal(readFileSync(outFile, "utf8"), "answer from cursor/gpt-5.6-sol[reasoning=high] [REVIEW-PROMPT]");
+  const cursorCall = calls().find((call) => call.cli === "cursor");
+  for (const flag of ["-p", "--trust"]) assert.ok(cursorCall.argv.includes(flag), flag);
+  assert.deepEqual([cursorCall.argv[cursorCall.argv.indexOf("--mode") + 1], cursorCall.argv[cursorCall.argv.indexOf("--sandbox") + 1]], ["ask", "enabled"]);
+  assert.equal(cursorCall.argv.includes("--effort"), false, "Cursor's effort lives in the model id");
+  const cursorEvent = callEvents().find((event) => event.provider === "cursor-gpt");
+  assert.deepEqual([cursorEvent.status, cursorEvent.effort, cursorEvent.sessionId, cursorEvent.usage.cacheRead], ["ok", null, "c-1", 60]);
+  assert.equal(plan().plan.slots[0][1].t3.providerInstanceId, "cursor", "inside T3 the plan names the cursor instance");
+  // Not logged in outside T3: auth, cooled down, and the next candidate answers.
+  chain({ "cursor-gpt": cursor("gpt-5.6-sol"), "claude-ok": claude("m-ok") }, ["cursor-gpt", "claude-ok"]);
+  reset({ "gpt-5.6-sol": "auth" });
+  const loggedOut = rr();
+  assert.equal(loggedOut.result.provider, "claude-ok", loggedOut.output);
+  assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "auth"], ["claude-ok", "ok"]]);
+  // A prompt too long for argv goes to a candidate that reads stdin.
+  const bigPrompt = join(workspace, "big-prompt.txt");
+  writeFileSync(bigPrompt, "x".repeat(720 * 1024));
+  reset();
+  const oversized = rr(["--prompt", bigPrompt]);
+  assert.equal(oversized.result.provider, "claude-ok", oversized.output);
+  assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "oversize"], ["claude-ok", "ok"]]);
+  assert.equal(invoked("gpt-5.6-sol").length, 0, "an oversize prompt never reaches the argv CLI");
+  invalid({ c: cursor("gpt-5.6-sol") }, { fix: ["c"] }, /cursor provider c cannot take this role/);
 
   // ---- 7. A/B split is stable per head ---------------------------------------------------
   setPolicy(front("main", { a: claude("m-ok"), b: codex("m-ok") }, { review: [{ split: ["a", "b"] }] }));

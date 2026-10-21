@@ -10,7 +10,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { appendEvent, cooldownKey, cooldowns, DEFAULT_COOLDOWN_MS, newId } from "./ledger.mjs";
-import { callProvider, FALLBACK_STATUSES, KIND_ROLES, KINDS, ROLES } from "./providers.mjs";
+import { callProvider, FALLBACK_STATUSES, KIND_ROLES, KINDS, ROLES, takesEffort } from "./providers.mjs";
 import { git } from "./repo.mjs";
 
 export function policyPath() {
@@ -57,7 +57,6 @@ export function validatePolicy(policy) {
     const where = `front ${front?.name ?? "?"}`;
     if (typeof front?.name !== "string" || names.has(front.name)) problems.push(`${where}: needs a unique name`);
     names.add(front?.name);
-    if (front?.independence !== undefined && !["model", "vendor"].includes(front.independence)) problems.push(`${where}: independence must be model or vendor`);
     const match = front?.match ?? {};
     if (!match.any && !match.paths?.length && !match.remotes?.length) problems.push(`${where}: match needs paths or remotes`);
     for (const [id, provider] of Object.entries(front?.providers ?? {})) {
@@ -149,21 +148,12 @@ export function normalizeRemote(url) {
 }
 
 // Claude aliases name a family (`sonnet`), full ids a version; both count as the
-// same model for independence. Other ids compare exactly, without an effort suffix.
+// same model for independence. Other ids compare exactly, without an effort
+// suffix or Cursor's bracketed parameters (`gpt-5.6-sol[reasoning=high]`).
 export function modelFamily(model) {
-  const id = String(model ?? "").toLowerCase().replace(/-(low|medium|high|xhigh|max)$/, "");
+  const id = String(model ?? "").toLowerCase().replace(/\[[^\]]*\]$/, "").replace(/-(low|medium|high|xhigh|max)$/, "");
   const claude = /(?:^|claude-)(opus|sonnet|haiku|fable)\b/.exec(id);
   return claude ? `claude-${claude[1]}` : id;
-}
-
-// Who made the model: a front with "independence": "vendor" never lets a model
-// review the work of the same vendor's models (Claude work gets a GPT reviewer).
-export function modelVendor(model) {
-  const family = modelFamily(model);
-  if (family.startsWith("claude-")) return "anthropic";
-  if (/^(gpt|o\d|codex)/.test(family)) return "openai";
-  if (family.startsWith("gemini")) return "google";
-  return family;
 }
 
 // Ordered candidates for one slot. A split entry picks one arm per head (stable, so
@@ -184,9 +174,8 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
   return list.filter(({ id }) => !seen.has(id) && seen.add(id)).map((candidate) => {
     const provider = front.providers[candidate.id];
     const cool = cooled.get(cooldownKey(front.name, candidate.id));
-    const vendor = front.independence === "vendor";
-    const same = authorModel && role !== "fix" && (vendor ? modelVendor(provider.model) === modelVendor(authorModel) : modelFamily(provider.model) === modelFamily(authorModel));
-    const skip = same ? `same ${vendor ? "vendor" : "model"} as the author (${authorModel})`
+    const same = authorModel && role !== "fix" && modelFamily(provider.model) === modelFamily(authorModel);
+    const skip = same ? `same model as the author (${authorModel})`
       : cool ? `${cool.status} until ${cool.until}`
         : null;
     return { ...candidate, provider, skip };
@@ -219,7 +208,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
     const resuming = resume?.provider === candidate.id;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const call = newId();
-      const level = role === "t1" ? candidate.provider.effort ?? null : effort ?? candidate.provider.effort ?? null;
+      const level = !takesEffort(candidate.provider.kind) ? null : role === "t1" ? candidate.provider.effort ?? null : effort ?? candidate.provider.effort ?? null;
       const result = await callProvider(candidate.provider, { role, prompt: resuming ? resume.prompt : prompt, root, effort: level, resume: resuming ? resume.sessionId : null, timeoutMs });
       const record = {
         type: "call", call, ...meta, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,

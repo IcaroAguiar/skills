@@ -85,6 +85,7 @@ scoped to that CLI's path) and `review-run` refuses to run.
 | --- | --- | --- |
 | `claude` | t1, review, fix | `claude -p --output-format json`, no MCP, every unapproved permission denied. t1 and review: `Read,Grep,Glob` only, with no shell and not even git, because prefix rules cannot stop `git diff --output=<file>` from writing. Pass `--base`, and the diff comes in the prompt. The review session is kept for deltas. fix: `acceptEdits` plus `allowedTools`. |
 | `codex` | t1, review, fix | `codex exec --json`, sandbox `read-only` (t1 ephemeral) or `workspace-write` for fix; deltas use `exec resume`. The sandbox, not the prompt, keeps a reviewer read-only. |
+| `cursor` | t1, review | `cursor-agent -p --output-format json --mode ask --sandbox enabled --trust`, prompt on argv. Ask mode never edits, so it does not fix; it has no shell for review either, so pass `--base`. Its effort goes in the model id (`claude-sonnet-5-5[effort=high]`), which independence reads as the plain model. Outside T3 the CLI needs one `cursor-agent login`; until then each call is `auth` and falls back. Inside T3, set `t3` to the `cursor` instance. |
 | `agy` | t1 | `agy -p --sandbox`, prompt on argv. Headless agy denies every command, so it reviews only what the prompt carries (T1 sends the changed files). |
 | `command` | t1, review | `sh -c`, prompt on stdin, answer on stdout. Make it read-only yourself. As a reviewer it needs `model`, so independence can compare it. |
 
@@ -97,6 +98,7 @@ scoped to that CLI's path) and `review-run` refuses to run.
 | `auth` | logged out or rejected credentials | next candidate; cools down 10 min |
 | `transient` | overloaded, 5xx, dropped connection | retry once, then next candidate |
 | `empty` | the turn ended with no answer and no model output | next candidate, no cooldown. Codex does this (exit 0) when its provider silently drops the input; `claude -p` does it when a `UserPromptSubmit` hook blocks the prompt, printing the hook's message as if it were the answer. A string shaped like a credential in the diff is enough for either, and a dropped message stays in the Codex session, so later resumes of that session come back empty too: start a fresh review. Build fake credentials in tests at run time instead of writing them as literals. |
+| `oversize` | the prompt is over 700 KB and this CLI takes it on argv (agy, cursor) | next candidate, no cooldown |
 | `timeout`, `error` | the call itself failed | stop: another account would most likely fail the same way, and a slow reviewer is not a capacity problem |
 
 Fallback never leaves the front, so it can never move code to another account.
@@ -114,10 +116,11 @@ old head. Over 400 KB the prompt gets a `--stat` instead, and only candidates
 that can run git themselves (Codex) may take the review; the others are skipped
 with that reason.
 
-**Independence.** `--author-model` drops every candidate of the author's model
-(Claude aliases and versions count as one: `sonnet` = `claude-sonnet-5-5`).
-A front with `"independence": "vendor"` drops the author's whole vendor instead,
-so Claude work always gets a GPT reviewer and the other way round. A review
+**Independence.** One rule on every front: `--author-model` drops every candidate
+of the author's model, on any account or CLI (Claude aliases and versions count as
+one: `sonnet` = `claude-sonnet-5-5`, and so does Cursor's
+`claude-sonnet-5-5[effort=high]`). Any other model may review, so Opus work can
+get a Sonnet review when Codex is limited. A review
 refuses to start without `--author-model` (`human` for a person's change):
 otherwise the first fallback could land on the author's model.
 
