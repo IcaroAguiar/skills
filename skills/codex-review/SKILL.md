@@ -35,7 +35,7 @@ Pick reasoning by risk, not by habit. Start from T0's `route.effort`, which appl
 | Delta review | one level below the full review, unless the fix crosses the `xhigh` areas |
 | Fix | `high`; `medium` for the UI/tests/docs row. `xhigh` only when the fix touches migrations or auth and the direction is still open: triage already did the hard thinking |
 
-State the role, account, model and effort before dispatch. `review-run --plan --role review -C <worktree>` shows which candidate will answer and which are cooling down.
+State the role, account, model and effort before dispatch. `review-run --plan --role review -C <worktree> --author-model <author's model>` shows which candidate will answer and which are cooling down.
 
 **In T3**, prefer delegated tasks: [references/t3-workflow.md](references/t3-workflow.md). **Outside T3**, code-only review runs read-only, all PRs in parallel:
 

@@ -15,7 +15,7 @@ questions the same way everywhere:
 node scripts/review-run.mjs --role review -C <repo> --base <base-sha> --author-model <model|human> --prompt p.md --out r.md [--effort high]
 node scripts/review-run.mjs --role review -C <repo> --base <old-head> --author-model <model|human> --prompt delta.md --out d.md --resume <call> --fresh-prompt full.md --full-base <base-sha>
 node scripts/review-run.mjs --role fix    -C <repo> --prompt fix.md --out f.md
-node scripts/review-run.mjs --plan --role review -C <repo>        # candidates and availability, calls nothing
+node scripts/review-run.mjs --plan --role review -C <repo> --author-model <model|human>   # candidates, calls nothing
 node scripts/review-ledger.mjs triage --t1 <t1-report> --decisions d.json
 node scripts/review-ledger.mjs triage --call <call> --decisions d.json
 node scripts/review-ledger.mjs record --front <front> --role review --provider <id> --status limit --until <iso>   # T3 calls
@@ -131,7 +131,7 @@ does a fresh full review of `git diff <full-base>...HEAD`, and the output says
 `FRESH`.
 
 **T3.** A T3 orchestrator delegates instead of shelling out. Run
-`review-run --plan --role review` for the ordered candidates and their `t3`
+`review-run --plan --role review --author-model <model>` for the ordered candidates and their `t3`
 targets, delegate to the first available one, and record the outcome with
 `review-ledger record` (a `limit` with `--until` cools the provider for
 everyone). On a limit, take the next candidate from the plan.

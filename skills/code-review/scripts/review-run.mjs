@@ -17,6 +17,7 @@ const USAGE = `usage: review-run --role review|fix --prompt <file> --out <file> 
                   [--base <ref>] [--resume <call-id> [--fresh-prompt <file> --full-base <ref>]] [--label <text>]
                   [--timeout <seconds>] [--json <file>]
        review-run --plan --role t1|review|fix [-C <dir>] [--author-model <model>] [--front <name>]
+                  (a review plan needs --author-model too)
 
 Calls the first available reviewer or fixer that the review policy
 (${policyPath()}) allows for this repository, falling back to the next
@@ -80,7 +81,8 @@ function parseArgs(argv) {
   // A fresh reviewer must see the whole change, not the delta's old-head...HEAD.
   if (options.freshPrompt && !options.fullBase) usage("--fresh-prompt needs --full-base, the base of the full review");
   if (options.fullBase && !options.freshPrompt) usage("--full-base only goes with --fresh-prompt");
-  if (options.role === "review" && !options.plan && !options.authorModel) usage('a review needs --author-model (the model that wrote the change, or "human")');
+  // The plan is what a T3 orchestrator delegates from, so it needs the author too.
+  if (options.role === "review" && !options.authorModel) usage('a review needs --author-model (the model that wrote the change, or "human")');
   if (options.authorModel === "human") options.authorModel = null;
   return options;
 }

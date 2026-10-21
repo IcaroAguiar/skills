@@ -61,7 +61,7 @@ if (name === "claude" && mode === "hooked") {
 }
 if (name === "claude") {
   const out = failures[mode]
-    ? { type: "result", is_error: true, api_error_status: failures[mode][1], result: failures[mode][0] }
+    ? { type: "result", is_error: true, api_error_status: failures[mode][1], result: failures[mode][0], total_cost_usd: 0.005 }
     : { type: "result", is_error: false, result: answer, session_id: "s-1", num_turns: 2, total_cost_usd: 0.01,
         usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 90, cache_creation_input_tokens: 0 }, modelUsage: { "claude-sonnet-5-5": {} } };
   console.log(JSON.stringify(out));
@@ -144,7 +144,8 @@ function rr(args = [], { role = "review", cwd = repo } = {}) {
 }
 
 const plan = (args = [], role = "review") => {
-  const run = node("review-run.mjs", ["-C", repo, "--plan", "--role", role, ...args]);
+  const author = role === "review" && !args.includes("--author-model") ? ["--author-model", "human"] : [];
+  const run = node("review-run.mjs", ["-C", repo, "--plan", "--role", role, ...author, ...args]);
   return { ...run, plan: run.status === 0 ? JSON.parse(run.stdout) : null };
 };
 const ledgerCli = (...args) => node("review-ledger.mjs", args);
@@ -286,6 +287,7 @@ try {
   const anonymous = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", promptFile, "--out", outFile]);
   assert.equal(anonymous.status, 2, "a review without --author-model is refused");
   assert.match(anonymous.output, /needs --author-model/);
+  assert.equal(node("review-run.mjs", ["-C", repo, "--plan", "--role", "review"]).status, 2, "the T3 plan needs the author too");
   // Vendor independence: Opus work skips every Claude model, not only Opus.
   setPolicy({ ...front("main", { "claude-sonnet": claude("sonnet"), "codex-ok": codex("gpt-6.1-sol") }, { review: ["claude-sonnet", "codex-ok"] }), independence: "vendor" });
   const byVendor = plan(["--author-model", "claude-opus-5-5"]).plan.slots[0];
@@ -504,7 +506,8 @@ try {
   assert.equal(report.front, "main");
   assert.deepEqual(report.reviewers.map((reviewer) => [reviewer.name, reviewer.status, reviewer.fallbacks.map((f) => `${f.provider}:${f.status}`)]), [["c-ok", "ok", ["c-limited:limit"]], ["c2-ok", "ok", []]]);
   assert.match(report.reviewers[0].fallbacks[0].until, /^\d{4}-/);
-  assert.equal(report.costUsd, 0.02, "cost of the answering calls is summed");
+  assert.equal(report.costUsd, 0.025, "every attempt's cost is summed, the failed one included");
+  assert.equal(report.reviewers[0].costUsd, 0.015, "a lens counts its failed attempts' cost");
   assert.equal(report.findings.length, 1, "both lenses found the same spot");
   assert.deepEqual([report.findings[0].preexisting, report.findings[0].reviewers], [true, ["c-ok", "c2-ok"]]);
   assert.equal(invoked("c-limited").length, 1);

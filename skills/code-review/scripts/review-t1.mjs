@@ -294,7 +294,8 @@ async function review(front, slot, prompt, root, head, options) {
     arm: used.arm,
     durationMs: attempts.reduce((sum, attempt) => sum + (attempt.durationMs ?? 0), 0),
     turns: used.turns ?? null,
-    costUsd: used.costUsd ?? null,
+    // Everything this lens spent, failed attempts included, like the ledger's stats.
+    costUsd: attempts.some((attempt) => Number.isFinite(attempt.costUsd)) ? attempts.reduce((sum, attempt) => sum + (attempt.costUsd ?? 0), 0) : null,
     usage: used.usage ?? null,
     fallbacks: attempts.filter((attempt) => attempt !== final).map(({ provider: id, status, until, reason }) => ({ provider: id, status, until, reason })),
   };
