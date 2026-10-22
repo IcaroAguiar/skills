@@ -88,7 +88,7 @@ function triageT1(options) {
         call: reviewer.call ?? null, provider: reviewer.provider ?? finding.reviewer, model: reviewer.resolvedModel ?? reviewer.model ?? null,
         effort: reviewer.effort ?? null, arm: reviewer.arm, severity: finding.severity, serious: SERIOUS.has(finding.severity), lens: finding.lens,
         preexisting: Boolean(finding.preexisting), file: spot.file, line: finding.line ?? spot.line ?? null, title: finding.title, agreed: spot.reviewers.length,
-        decision: item.decision, reason: item.reason ?? null,
+        decision: item.decision, reason: item.reason ?? null, partial: open > 0 || undefined,
       });
       count += 1;
     }
@@ -142,7 +142,8 @@ function untriaged(options) {
   const days = Number(options.since ?? 14);
   if (!(days > 0)) usage("--since must be a positive number of days");
   const events = readEvents({ since: Date.now() - days * 86_400_000 });
-  const done = new Set(events.filter((event) => event.type === "triaged" || event.type === "triage").map((event) => event.call));
+  // A partial T1 triage does not count; triage events from before the triaged marker do.
+  const done = new Set(events.filter((event) => event.type === "triaged" || (event.type === "triage" && !event.partial)).map((event) => event.call));
   const open = events.filter((event) => event.type === "call" && event.status === "ok" && ["t1", "review"].includes(event.role) && !done.has(event.call) && (!options.repo || event.repo === options.repo));
   for (const event of open) console.log(`${event.call}  ${String(event.ts ?? "").slice(0, 16)}  ${event.repo ?? "-"}  ${event.role}  ${event.provider}${event.label ? `  ${event.label}` : ""}`);
   console.log(`review-ledger: ${open.length} answered call(s) without triage${open.length ? "; triage each with --call (or the T1 report with --t1), [] when it found nothing" : ""}`);

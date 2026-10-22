@@ -14,6 +14,7 @@ import { readJson, run } from "./repo.mjs";
 export const PROMPT_HASH_ENV = "AGENT_REVIEW_PROMPT_SHA256";
 const GITLEAKS = process.env.AGENT_REVIEW_GITLEAKS || "gitleaks";
 const verdicts = new Map();
+// --ignore-gitleaks-allow: the prompt is untrusted input; a `gitleaks:allow` comment in it must not clear itself.
 
 // The guard hashes the prompt it receives, stripped, the same way.
 export function promptHash(prompt) {
@@ -23,7 +24,8 @@ export function promptHash(prompt) {
 // { status: "clean" } or { status: "secret", error } (a leak, or no scanner to prove there is none).
 export async function scanPrompt(prompt) {
   const hash = promptHash(prompt);
-  if (!verdicts.has(hash)) verdicts.set(hash, await gitleaks(prompt));
+  // The promise is cached, so T1's parallel lenses share one scan.
+  if (!verdicts.has(hash)) verdicts.set(hash, gitleaks(prompt));
   return verdicts.get(hash);
 }
 
@@ -31,7 +33,7 @@ async function gitleaks(prompt) {
   const scratch = mkdtempSync(join(tmpdir(), "review-scan-"));
   const report = join(scratch, "report.json");
   try {
-    const result = await run(GITLEAKS, ["stdin", "--no-banner", "--redact", "--report-format", "json", "--report-path", report, "--exit-code", "0"], { input: prompt, timeoutMs: 60_000 });
+    const result = await run(GITLEAKS, ["stdin", "--no-banner", "--redact", "--ignore-gitleaks-allow", "--report-format", "json", "--report-path", report, "--exit-code", "0"], { input: prompt, timeoutMs: 60_000 });
     const leaks = result.code === 0 ? readJson(() => readFileSync(report, "utf8")) : null;
     if (!Array.isArray(leaks)) return { status: "secret", error: `gitleaks could not scan the prompt (exit ${result.code}); nothing was sent. Install gitleaks (or set AGENT_REVIEW_GITLEAKS) and retry` };
     if (!leaks.length) return { status: "clean" };

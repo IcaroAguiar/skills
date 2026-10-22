@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash, generateKeyPairSync } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -579,11 +579,20 @@ try {
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
   assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
   assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage of every spot covers every lens's call");
+  // Two spots, both lenses on each, calls in the ledger: deciding one spot leaves both calls open.
+  const lensCall = (provider) => ledgerCli("record", "--front", "main", "--role", "t1", "--provider", provider, "--status", "ok").stdout.match(/call (\w+) recorded/)[1];
+  const lensCalls = report.reviewers.map((reviewer) => lensCall(reviewer.provider));
   const partialJson = join(workspace, "t1-partial.json");
-  writeFileSync(partialJson, JSON.stringify({ ...report, findings: [...report.findings, { ...report.findings[0], line: 30 }], reviewers: report.reviewers.map((reviewer) => ({ ...reviewer, call: `${reviewer.call}-p` })) }));
+  writeFileSync(partialJson, JSON.stringify({ ...report, findings: [...report.findings, { ...report.findings[0], line: 30 }], reviewers: report.reviewers.map((reviewer, index) => ({ ...reviewer, call: lensCalls[index] })) }));
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 1, decision: "fixed" }]));
   const partial = ledgerCli("triage", "--t1", partialJson, "--decisions", t1Decisions);
   assert.match(partial.stdout, /1 spot\(s\) still have none/);
+  const stillOpen = ledgerCli("untriaged");
+  assert.equal(stillOpen.status, 1, "a partial T1 triage leaves its calls open");
+  for (const call of lensCalls) assert.match(stillOpen.stdout, new RegExp(call));
+  writeFileSync(t1Decisions, JSON.stringify([{ spot: 1, decision: "fixed" }, { spot: 2, decision: "wrong", reason: "dup" }]));
+  assert.equal(ledgerCli("triage", "--t1", partialJson, "--decisions", t1Decisions).status, 0);
+  assert.equal(ledgerCli("untriaged").status, 0, "every spot decided closes both calls");
 
   // ---- 12. prompt scan: gitleaks clears every prompt before any provider sees it -------------
   chain({ a: claude("m-ok"), b: cursor("cur-ok") }, ["a", "b"]);
@@ -610,6 +619,15 @@ try {
   assert.doesNotMatch(leaked.output + JSON.stringify(events()), /MII[A-Za-z0-9+/]{20}/, "the value never reaches the output or the ledger");
   assert.equal(calls().length, 0, "no provider, not even a fallback, sees a prompt with a secret");
   assert.deepEqual(events().map((event) => [event.type, event.provider, event.status]), [["scan", "gitleaks", "secret"]]);
+  // A `gitleaks:allow` comment inside the prompt must not clear its own secret.
+  const token = "ghp_" + Array.from(randomBytes(36), (byte) => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[byte % 62]).join("");
+  reset();
+  writeFileSync(promptFile, `REVIEW-PROMPT\nconst t = "${token}"; // gitleaks:allow\n`);
+  const allowed = rr();
+  assert.equal(allowed.status, 1, allowed.output);
+  assert.match(allowed.output, /SECRET on gitleaks/);
+  assert.ok(!allowed.output.includes(token) && !JSON.stringify(events()).includes(token), "the value never reaches the output or the ledger");
+  assert.equal(calls().length, 0);
   reset();
   const blind = spawnSync(process.execPath, [join(scripts, "review-run.mjs"), "-C", repo, "--role", "review", "--author-model", "human", "--prompt", promptFile, "--out", outFile], { cwd: repo, encoding: "utf8", env: { ...env, AGENT_REVIEW_GITLEAKS: join(bin, "no-gitleaks") } });
   assert.equal(blind.status, 1);
