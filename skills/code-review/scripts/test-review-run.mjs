@@ -345,6 +345,7 @@ try {
   const outOfPlan = rr();
   assert.equal(outOfPlan.result.provider, "claude-ok", outOfPlan.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "limit"], ["claude-ok", "ok"]]);
+  untilOk(callEvents()[0].until, 30 * 60_000); // no reset time in the message: the default limit cooldown
   // A prompt too long for argv goes to a candidate that reads stdin.
   const bigPrompt = join(workspace, "big-prompt.txt");
   writeFileSync(bigPrompt, "x".repeat(720 * 1024));
