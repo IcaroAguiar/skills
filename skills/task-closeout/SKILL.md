@@ -37,7 +37,7 @@ Siga somente as etapas que pertencem ao pedido e à autorização existente:
 
 | Ponto de parada | Confirmação necessária |
 | --- | --- |
-| Código pronto | Commit focado da tarefa e verificações relevantes; se o pedido exigir manter um diff sem commit, deixe esse estado explícito. |
+| Código pronto | Commit focado da tarefa e verificações relevantes; se o pedido exigir manter um diff sem commit, deixe esse estado explícito. Se houve code review, `review-ledger untriaged --repo <repo>` (skill `code-review`) não lista nenhuma chamada. |
 | PR solicitada | Commit publicado, base/head corretos e PR aberta verificada. |
 | Merge solicitado | Revisão e checks aplicáveis, head conferido e merge confirmado remotamente. |
 | Deploy previsto | Gatilho conhecido, resultado do pipeline, versão no ambiente e fronteira afetada verificados. |

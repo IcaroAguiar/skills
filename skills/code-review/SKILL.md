@@ -123,7 +123,9 @@ Use `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
 The author decides every finding from T1 and from the reviewer: `fixed`,
 `wrong`, `intentional`, `irrelevant` or `deferred`, with a reason for all but
 `fixed`. Record the decisions with `scripts/review-ledger.mjs triage` (T1 spots
-by number, review findings by call id). Those decisions are the acted-on rate
+by number, review findings by call id; `[]` when a review found nothing).
+Before the final report, `scripts/review-ledger.mjs untriaged --repo <repo>` must
+print no call: it exits 1 while an answered T1 or review call has no decisions. Those decisions are the acted-on rate
 that tells which model and effort are worth their cost; `review-ledger stats`
 reads it back. When the same kind of finding keeps coming back, move it into
 `REVIEW.md`, a T0 rule or a check instead of finding it again. When a bug

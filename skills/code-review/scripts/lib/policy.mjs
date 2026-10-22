@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { appendEvent, cooldownKey, cooldowns, DEFAULT_COOLDOWN_MS, newId } from "./ledger.mjs";
 import { callProvider, FALLBACK_STATUSES, KIND_ROLES, KINDS, ROLES, takesEffort } from "./providers.mjs";
+import { PROMPT_HASH_ENV, promptHash, scanPrompt } from "./prompt-scan.mjs";
 import { git } from "./repo.mjs";
 
 export function policyPath() {
@@ -206,12 +207,24 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
   list = list.map((candidate) => ({ ...candidate, skip: candidate.skip ?? unfit(candidate.provider, resume?.provider === candidate.id) }));
   const attempts = list.filter((candidate) => candidate.skip).map(({ id, skip }) => ({ provider: id, status: "skipped", reason: skip }));
   const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label };
+  // No provider sees a prompt gitleaks has not cleared; see lib/prompt-scan.mjs.
+  for (const text of [prompt, resume?.prompt].filter(Boolean)) {
+    const scan = await scanPrompt(text);
+    if (scan.status === "clean") continue;
+    const record = { type: "scan", call: newId(), ...meta, provider: "gitleaks", status: scan.status, error: scan.error };
+    appendEvent(record);
+    const entry = { ...record, text: "" };
+    onAttempt(entry);
+    return { final: entry, attempts: [...attempts, entry] };
+  }
   for (const candidate of list.filter((entry) => !entry.skip)) {
     const resuming = resume?.provider === candidate.id;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const call = newId();
       const level = !takesEffort(candidate.provider.kind) ? null : role === "t1" ? candidate.provider.effort ?? null : effort ?? candidate.provider.effort ?? null;
-      const result = await callProvider(candidate.provider, { role, prompt: resuming ? resume.prompt : prompt, root, effort: level, resume: resuming ? resume.sessionId : null, timeoutMs });
+      const sent = resuming ? resume.prompt : prompt;
+      const env = { ...process.env, [PROMPT_HASH_ENV]: promptHash(sent) };
+      const result = await callProvider(candidate.provider, { role, prompt: sent, root, effort: level, resume: resuming ? resume.sessionId : null, timeoutMs, env });
       const record = {
         type: "call", call, ...meta, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
         resolvedModel: result.resolvedModel ?? null, effort: level, experiment: candidate.experiment, arm: candidate.arm,

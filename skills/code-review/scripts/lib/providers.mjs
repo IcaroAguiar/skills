@@ -78,13 +78,13 @@ export function commandFor(provider, { role, root, effort, resume, outFile, time
 }
 
 // Runs one call. Never throws for a provider failure: the status says what happened.
-export async function callProvider(provider, { role, prompt, root, effort = null, resume = null, timeoutMs = 420_000 }) {
+export async function callProvider(provider, { role, prompt, root, effort = null, resume = null, timeoutMs = 420_000, env = process.env }) {
   const scratch = mkdtempSync(join(tmpdir(), "review-call-"));
   const outFile = join(scratch, "last-message.md");
   try {
     const { command, args, stdin, promptFlag } = commandFor(provider, { role, root, effort, resume, outFile, timeoutMs });
     if (promptFlag && Buffer.byteLength(prompt) > MAX_ARGV_PROMPT) return { status: "oversize", error: `prompt over ${MAX_ARGV_PROMPT / 1024} KB for ${provider.kind}`, summary: "oversize, prompt on argv", durationMs: 0 };
-    const result = await run(command, promptFlag ? [...args, promptFlag, prompt] : args, { cwd: root, input: stdin ? prompt : undefined, timeoutMs });
+    const result = await run(command, promptFlag ? [...args, promptFlag, prompt] : args, { cwd: root, env, input: stdin ? prompt : undefined, timeoutMs });
     const parsed = { durationMs: result.durationMs, ...parse(provider.kind, result, outFile) };
     if (result.timedOut) return { ...parsed, status: "timeout", text: "" };
     return parsed;
