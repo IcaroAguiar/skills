@@ -33,7 +33,7 @@ const CLAUDE_ROLE = {
 const MAX_ARGV_PROMPT = 700 * 1024;
 
 // Only a failed call is classified, so a review that discusses rate limits is not one.
-const LIMIT = /usage[ _-]?limit|rate[ _-]?limit|quota|too many requests|\b429\b|hit your (usage )?limit|limit reached|out of (credits|usage)|insufficient[_ ]quota|resource[_ ]exhausted|credit balance/i;
+const LIMIT = /usage[ _-]?limit|rate[ _-]?limit|quota|too many requests|\b429\b|hit your (usage )?limit|limit reached|out of (credits|usage)|insufficient[_ ]quota|resource[_ ]exhausted|credit balance|not included in your (weekly |monthly )?usage/i;
 const AUTH = /not logged in|authentication required|unauthori[sz]ed|\b40[13]\b|invalid (api key|x-api-key)|authentication (failed|error)|please (run )?\/?login|token (has )?expired|re-?authenticate/i;
 const TRANSIENT = /overloaded|\b5(0[0-4]|29)\b|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|stream (disconnected|error)|temporarily unavailable|internal server error/i;
 

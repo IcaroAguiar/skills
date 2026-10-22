@@ -66,6 +66,10 @@ if (name === "cursor") {
     console.error("Error: Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.");
     process.exit(1);
   }
+  if (mode === "plan-usage") {
+    console.error("ActionRequiredError: " + model + " is not included in your weekly usage Buy credits or switch to a Grok model to continue.");
+    process.exit(1);
+  }
   const prompt = argv[argv.indexOf("--") + 1];
   const out = failures[mode]
     ? { type: "result", subtype: "error", is_error: true, result: failures[mode][0] }
@@ -336,6 +340,12 @@ try {
   const loggedOut = rr();
   assert.equal(loggedOut.result.provider, "claude-ok", loggedOut.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "auth"], ["claude-ok", "ok"]]);
+  // The plan's weekly usage ran out for this model: a limit, so the next candidate answers.
+  reset({ "gpt-5.6-sol": "plan-usage" });
+  const outOfPlan = rr();
+  assert.equal(outOfPlan.result.provider, "claude-ok", outOfPlan.output);
+  assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "limit"], ["claude-ok", "ok"]]);
+  untilOk(callEvents()[0].until, 30 * 60_000); // no reset time in the message: the default limit cooldown
   // A prompt too long for argv goes to a candidate that reads stdin.
   const bigPrompt = join(workspace, "big-prompt.txt");
   writeFileSync(bigPrompt, "x".repeat(720 * 1024));
