@@ -15,6 +15,7 @@ const USAGE = `usage: review-ledger triage --t1 <report> --decisions <file|->
                             [--session <id>] [--label <text>] [--turns <n>] [--cost <usd>]
                             [--input <tokens>] [--output <tokens>] [--cache-read <tokens>] [--cache-write <tokens>]
        review-ledger stats [--since <days>] [--role <role>] [--json]
+       review-ledger untriaged [--since <days>] [--repo <name>]
        review-ledger limits
        review-ledger clear <provider-id> --front <name>
 
@@ -23,7 +24,9 @@ Decisions are a JSON array. For --t1, each item is
 For --call (a deep review), each item is one finding:
   {"severity": "high", "title": "...", "file": "...", "line": 1, "decision": "...", "reason": "...", "preexisting": false}
 decision is one of: ${[...DECISIONS].join(", ")}. Triage again to correct a decision:
-the newest decision for the same finding replaces the earlier one in stats.
+the newest decision for the same finding replaces the earlier one in stats. A review
+that found nothing is triaged too, with an empty array. untriaged lists the answered
+T1 and review calls (default: last 14 days) nobody triaged yet, and exits 1 when there is one.
 Ledger: ${ledgerPath()}`;
 
 function usage(message) {
@@ -72,6 +75,7 @@ function triageT1(options) {
     if (!spot) usage(`spot ${item.spot} is not in the report (it has ${report.findings.length})`);
     return spot;
   });
+  for (const reviewer of report.reviewers) if (reviewer.call) appendEvent({ type: "triaged", call: reviewer.call, repo: report.repo, findings: decisions.length });
   let count = 0;
   for (const [index, item] of decisions.entries()) {
     const spot = spots[index];
@@ -94,6 +98,7 @@ function triageCall(options) {
   const call = findCall(options.call);
   if (!call) usage(`no call ${options.call} in the ledger`);
   const decisions = readDecisions(options.decisions);
+  appendEvent({ type: "triaged", call: call.call, repo: call.repo, findings: decisions.length });
   for (const item of decisions) {
     const severity = String(item.severity ?? "").toLowerCase() || null;
     appendEvent({
@@ -128,6 +133,18 @@ function record(options) {
     turns: number("turns"), costUsd: number("cost"), usage: tokens,
   });
   console.log(`review-ledger: call ${call} recorded`);
+}
+
+// Answered calls whose findings nobody decided: they count in no acted-on rate.
+function untriaged(options) {
+  const days = Number(options.since ?? 14);
+  if (!(days > 0)) usage("--since must be a positive number of days");
+  const events = readEvents({ since: Date.now() - days * 86_400_000 });
+  const done = new Set(events.filter((event) => event.type === "triaged" || event.type === "triage").map((event) => event.call));
+  const open = events.filter((event) => event.type === "call" && event.status === "ok" && ["t1", "review"].includes(event.role) && !done.has(event.call) && (!options.repo || event.repo === options.repo));
+  for (const event of open) console.log(`${event.call}  ${String(event.ts ?? "").slice(0, 16)}  ${event.repo ?? "-"}  ${event.role}  ${event.provider}${event.label ? `  ${event.label}` : ""}`);
+  console.log(`review-ledger: ${open.length} answered call(s) without triage${open.length ? "; triage each with --call (or the T1 report with --t1), [] when it found nothing" : ""}`);
+  if (open.length) process.exitCode = 1;
 }
 
 const percentile = (values, p) => {
@@ -223,6 +240,7 @@ if (command === "clear") {
     else triageCall(options);
   } else if (command === "record") record(options);
   else if (command === "stats") stats(options);
+  else if (command === "untriaged") untriaged(options);
   else if (command === "limits") limits();
   else usage(`unknown command ${command}`);
 }

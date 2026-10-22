@@ -58,7 +58,7 @@ For each finding, check the code yourself:
 
 Show the user a table with finding, decision and one-line reason. Pass along facts you verified that the fixer will need (e.g. "the guard does not check session revocation").
 
-Record the decisions against the reviewer's call: `review-ledger triage --call <call> --decisions <file>`, with Accept → `fixed` once the fix lands, Reject → `wrong`, Defer → `deferred`, and `intentional` or `irrelevant` when the finding is true but the behaviour is deliberate or not worth acting on. This is the acted-on rate that decides which model and effort stay in the policy.
+Record the decisions against the reviewer's call: `review-ledger triage --call <call> --decisions <file>`, with Accept → `fixed` once the fix lands, Reject → `wrong`, Defer → `deferred`, and `intentional` or `irrelevant` when the finding is true but the behaviour is deliberate or not worth acting on. Triage every round, the deltas too, with `[]` when a round found nothing: `review-ledger untriaged --repo <repo>` must be empty before the report. This is the acted-on rate that decides which model and effort stay in the policy.
 
 ## 3. Fix round — Codex fixes
 

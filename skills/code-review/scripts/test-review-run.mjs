@@ -5,6 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -32,7 +33,7 @@ const name = path.basename(process.argv[1]).replace("fake-", "");
 const argv = process.argv.slice(2);
 const stdin = fs.readFileSync(0, "utf8");
 const model = argv[argv.indexOf(name === "codex" ? "-m" : "--model") + 1];
-fs.appendFileSync(path.join(root, "calls.jsonl"), JSON.stringify({ cli: name, model, argv, stdin }) + "\\n");
+fs.appendFileSync(path.join(root, "calls.jsonl"), JSON.stringify({ cli: name, model, argv, stdin, hash: process.env.AGENT_REVIEW_PROMPT_SHA256 ?? null }) + "\\n");
 const control = JSON.parse(fs.readFileSync(path.join(root, "control.json"), "utf8"));
 let mode = control[model] ?? "ok";
 if (mode === "transient-once") {
@@ -577,6 +578,39 @@ try {
   assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.source, event.provider, event.preexisting]), [["t1", "c-ok", true], ["t1", "c2-ok", true]]);
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
   assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
+  assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage covers every lens's call");
+
+  // ---- 12. prompt scan: gitleaks clears every prompt before any provider sees it -------------
+  chain({ a: claude("m-ok"), b: cursor("cur-ok") }, ["a", "b"]);
+  reset();
+  const cleanPrompt = "REVIEW-PROMPT\n  password: credentials.password,\n";
+  writeFileSync(promptFile, cleanPrompt);
+  assert.equal(rr().status, 0);
+  assert.equal(invoked("m-ok")[0].hash, createHash("sha256").update(cleanPrompt.trim()).digest("hex"), "the provider gets the hash of the prompt it was sent");
+  const open = ledgerCli("untriaged");
+  assert.equal(open.status, 1, open.output);
+  assert.match(open.stdout, /1 answered call\(s\) without triage/);
+  const reviewCall = callEvents()[0].call;
+  assert.equal(ledgerCli("triage", "--call", reviewCall, "--decisions", "-").status, 2, "no decisions file content is a usage error");
+  writeFileSync(join(workspace, "none.json"), "[]");
+  assert.equal(ledgerCli("triage", "--call", reviewCall, "--decisions", join(workspace, "none.json")).status, 0);
+  assert.equal(ledgerCli("untriaged").status, 0, "a review that found nothing is triaged with []");
+  reset({ "m-ok": "hooked" });
+  // Built at run time: a key literal in this file would trip the scanners that guard it.
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs1", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
+  writeFileSync(promptFile, `REVIEW-PROMPT\n${privateKey}`);
+  const leaked = rr();
+  assert.equal(leaked.status, 1, leaked.output);
+  assert.match(leaked.output, /SECRET on gitleaks: gitleaks found 1 possible secret/);
+  assert.doesNotMatch(leaked.output + JSON.stringify(events()), /MII[A-Za-z0-9+/]{20}/, "the value never reaches the output or the ledger");
+  assert.equal(calls().length, 0, "no provider, not even a fallback, sees a prompt with a secret");
+  assert.deepEqual(events().map((event) => [event.type, event.provider, event.status]), [["scan", "gitleaks", "secret"]]);
+  reset();
+  const blind = spawnSync(process.execPath, [join(scripts, "review-run.mjs"), "-C", repo, "--role", "review", "--author-model", "human", "--prompt", promptFile, "--out", outFile], { cwd: repo, encoding: "utf8", env: { ...env, AGENT_REVIEW_GITLEAKS: join(bin, "no-gitleaks") } });
+  assert.equal(blind.status, 1);
+  assert.match(blind.stdout, /gitleaks could not scan the prompt/);
+  assert.equal(calls().length, 0, "without a scanner nothing is sent");
+  writeFileSync(promptFile, "REVIEW-PROMPT\n");
 
   console.log("PASS review-run contract");
 } finally {

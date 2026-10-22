@@ -99,7 +99,18 @@ scoped to that CLI's path) and `review-run` refuses to run.
 | `transient` | overloaded, 5xx, dropped connection | retry once, then next candidate |
 | `empty` | the turn ended with no answer and no model output | next candidate, no cooldown. Codex does this (exit 0) when its provider silently drops the input; `claude -p` does it when a `UserPromptSubmit` hook blocks the prompt, printing the hook's message as if it were the answer. A string shaped like a credential in the diff is enough for either, and a dropped message stays in the Codex session, so later resumes of that session come back empty too: start a fresh review. Build fake credentials in tests at run time instead of writing them as literals. |
 | `oversize` | the prompt is over 700 KB and this CLI takes it on argv (agy, cursor) | next candidate, no cooldown |
+| `secret` | gitleaks found a possible secret in the prompt, or could not scan it | stop before any call: no candidate sees the prompt |
 | `timeout`, `error` | the call itself failed | stop: another account would most likely fail the same way, and a slow reviewer is not a capacity problem |
+
+Every prompt passes through `gitleaks stdin` once before the first candidate
+(`lib/prompt-scan.mjs`; `AGENT_REVIEW_GITLEAKS` names another binary). A finding,
+or a missing scanner, stops the dispatch with `secret` and a `scan` event in the
+ledger, so no fallback can carry a credential to a provider the harness guard
+does not watch (agy, Cursor). A clean prompt's SHA-256 (of the trimmed text) goes
+to each CLI as `AGENT_REVIEW_PROMPT_SHA256`; the harness guard's `UserPromptSubmit`
+check skips its name heuristic for that exact prompt, which otherwise blocks code
+such as `password: credentials.password` and returns `empty` from Claude and Codex.
+Private keys and provider tokens are still blocked by the guard.
 
 Fallback never leaves the front, so it can never move code to another account.
 Cooldowns live in the ledger and are shared by every harness on the machine:
