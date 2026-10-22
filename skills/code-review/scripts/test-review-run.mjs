@@ -578,7 +578,12 @@ try {
   assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.source, event.provider, event.preexisting]), [["t1", "c-ok", true], ["t1", "c2-ok", true]]);
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
   assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
-  assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage covers every lens's call");
+  assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage of every spot covers every lens's call");
+  const partialJson = join(workspace, "t1-partial.json");
+  writeFileSync(partialJson, JSON.stringify({ ...report, findings: [...report.findings, { ...report.findings[0], line: 30 }], reviewers: report.reviewers.map((reviewer) => ({ ...reviewer, call: `${reviewer.call}-p` })) }));
+  writeFileSync(t1Decisions, JSON.stringify([{ spot: 1, decision: "fixed" }]));
+  const partial = ledgerCli("triage", "--t1", partialJson, "--decisions", t1Decisions);
+  assert.match(partial.stdout, /1 spot\(s\) still have none/);
 
   // ---- 12. prompt scan: gitleaks clears every prompt before any provider sees it -------------
   chain({ a: claude("m-ok"), b: cursor("cur-ok") }, ["a", "b"]);

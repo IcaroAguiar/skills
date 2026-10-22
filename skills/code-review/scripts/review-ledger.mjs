@@ -75,7 +75,9 @@ function triageT1(options) {
     if (!spot) usage(`spot ${item.spot} is not in the report (it has ${report.findings.length})`);
     return spot;
   });
-  for (const reviewer of report.reviewers) if (reviewer.call) appendEvent({ type: "triaged", call: reviewer.call, repo: report.repo, findings: decisions.length });
+  // The lens calls count as triaged only once every spot has a decision.
+  const open = report.findings.length - new Set(decisions.map((item) => item.spot)).size;
+  if (!open) for (const reviewer of report.reviewers) if (reviewer.call) appendEvent({ type: "triaged", call: reviewer.call, repo: report.repo, findings: decisions.length });
   let count = 0;
   for (const [index, item] of decisions.entries()) {
     const spot = spots[index];
@@ -91,7 +93,7 @@ function triageT1(options) {
       count += 1;
     }
   }
-  console.log(`review-ledger: ${count} T1 finding decision(s) from ${decisions.length} spot(s) recorded`);
+  console.log(`review-ledger: ${count} T1 finding decision(s) from ${decisions.length} spot(s) recorded${open ? `; ${open} spot(s) still have none, so untriaged keeps listing this report's calls` : ""}`);
 }
 
 function triageCall(options) {
