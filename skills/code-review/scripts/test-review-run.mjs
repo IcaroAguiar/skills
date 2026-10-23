@@ -531,8 +531,8 @@ try {
   ledgerCli("record", "--front", "other", "--role", "review", "--provider", "claude-ok", "--status", "limit");
   assert.equal(plan().plan.slots[0][0].available, true, "another front's limit does not cool this front's claude-ok");
   // findings lists what was fixed, for spotting repeats; --decision widens it.
-  assert.match(ledgerCli("findings").stdout, /high {2}fixed {2}a\.ts:3 {2}real bug\nreview-ledger: 1 finding\(s\)/);
-  assert.deepEqual(JSON.parse(ledgerCli("findings", "--decision", "fixed,wrong", "--json").stdout).map((item) => [item.title, item.decision]), [["real bug", "fixed"], ["nit", "wrong"]]);
+  assert.match(ledgerCli("findings").stdout, /review {2}high {2}fixed {2}a\.ts:3 {2}real bug\nreview-ledger: 1 finding\(s\)/);
+  assert.deepEqual(JSON.parse(ledgerCli("findings", "--decision", "fixed,wrong", "--json").stdout).map((item) => [item.title, item.decision, item.source]), [["real bug", "fixed", "review"], ["nit", "wrong", "review"]], "one call's findings stay apart");
   assert.equal(JSON.parse(ledgerCli("findings", "--repo", "nope", "--json").stdout).length, 0);
   assert.equal(ledgerCli("findings", "--decision", "maybe").status, 2);
   // Triage again to correct a decision: the newest one wins, nothing is counted twice.
@@ -592,6 +592,8 @@ try {
   assert.equal(t1Triage.status, 0, t1Triage.output);
   assert.match(t1Triage.stdout, /2 T1 finding decision\(s\) from 1 spot\(s\)/);
   assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.source, event.provider, event.preexisting]), [["t1", "c-ok", true], ["t1", "c2-ok", true]]);
+  const t1Finding = JSON.parse(ledgerCli("findings", "--decision", "irrelevant", "--json").stdout);
+  assert.deepEqual(t1Finding.map((item) => [item.source, item.reporters]), [["t1", ["c-ok", "c2-ok"]]], "a spot both lenses reported is one finding");
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
   assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
   assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage of every spot covers every lens's call");
