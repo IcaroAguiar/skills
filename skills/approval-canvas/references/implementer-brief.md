@@ -35,9 +35,10 @@ O orquestrador passa, para cada tela sua: trabalho, composição, metáfora, tr�
 ```
 cd <CAMINHO DO CANVAS>
 UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> node $UI_ROOT/$WEB_APP/node_modules/vite/bin/vite.js build -c vite.config.mjs
-UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> PORT=<PORT> SHOTS=<SHOTS> node shoot.mjs <IDs separados por vírgula>
+UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> PORT=<PORT> SHOTS=<SHOTS> THEMES=claro,escuro node shoot.mjs <IDs separados por vírgula>
 ```
 (Use o wrapper de comandos pesados do projeto, se houver.)
+Em `THEMES`, ponha o tema padrão do produto primeiro (`escuro,claro` se for escuro); o valor padrão da variável é `claro`. A captura cobre todos os estados em cada tema pedido. Os nomes seguem `<ID>[-<estado>][-escuro]-<largura>.png`. O legado `DARK=IDs`, sem `THEMES`, continua aceito e agora inclui todos os estados das telas listadas; `THEMES` explícito tem precedência.
 O build compila todos os arquivos; se outro agente deixar um arquivo quebrado momentaneamente, espere e tente de novo (não edite o arquivo dele). Abra (Read) TODAS as suas capturas PNG em 1440 e 390 e corrija o que estiver feio, desalinhado, cortado, denso, vazio ou inconsistente com a tela de referência. Itere até ficar com qualidade de produto. O shoot reporta erros JS e overflow — devem ser zero.
 
 ## Relatório final (curto)
