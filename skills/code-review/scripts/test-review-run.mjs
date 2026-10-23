@@ -530,11 +530,17 @@ try {
   // Cooldowns belong to a front: the same id on another account stays available.
   ledgerCli("record", "--front", "other", "--role", "review", "--provider", "claude-ok", "--status", "limit");
   assert.equal(plan().plan.slots[0][0].available, true, "another front's limit does not cool this front's claude-ok");
+  // findings lists what was fixed, for spotting repeats; --decision widens it.
+  assert.match(ledgerCli("findings").stdout, /high {2}fixed {2}a\.ts:3 {2}real bug\nreview-ledger: 1 finding\(s\)/);
+  assert.deepEqual(JSON.parse(ledgerCli("findings", "--decision", "fixed,wrong", "--json").stdout).map((item) => [item.title, item.decision]), [["real bug", "fixed"], ["nit", "wrong"]]);
+  assert.equal(JSON.parse(ledgerCli("findings", "--repo", "nope", "--json").stdout).length, 0);
+  assert.equal(ledgerCli("findings", "--decision", "maybe").status, 2);
   // Triage again to correct a decision: the newest one wins, nothing is counted twice.
   writeFileSync(decisions, JSON.stringify([{ severity: "high", title: "real bug", file: "a.ts", line: 3, decision: "wrong", reason: "misread the guard" }]));
   assert.equal(ledgerCli("triage", "--call", reviewed.result.call, "--decisions", decisions).status, 0);
   const corrected = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "claude-ok");
   assert.deepEqual([corrected.triaged, corrected.actedOn, corrected.wrong], [2, 0, 1]);
+  assert.match(ledgerCli("findings").stdout, /^review-ledger: 0 finding\(s\)/, "a corrected decision leaves the fixed list");
   // A split needs two arms.
   setPolicy(front("main", { a: claude("m-ok") }, { review: [{ split: [] }] }));
   assert.match(plan().output, /a split needs at least two provider ids/);
