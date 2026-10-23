@@ -50,7 +50,7 @@ try {
 const skillText = await readFile(join(skill, "SKILL.md"), "utf8");
 requireText(
   skillText,
-  ["The canvas starts from the product's baseline", "font links", "The canvas never restyles the UI package", "check-fidelity.mjs", "product's default theme", "THEMES=claro,escuro", "embedded `<style>`", "Parity gate before the PR", "pairs.mjs", "references/handoff-brief.md"],
+  ["The canvas starts from the product's baseline", "font links", "Propose freely, declare every difference", "Fidelity constrains the implementation, not the proposal", "src/proposed.css", "check-fidelity.mjs", "product's default theme", "THEMES=claro,escuro", "an embedded `<style>`", "Parity gate before the PR", "pairs.mjs", "references/handoff-brief.md"],
   "approval-canvas SKILL.md",
 );
 const handoff = await readFile(join(skill, "references/handoff-brief.md"), "utf8");
@@ -86,6 +86,120 @@ for (const { name, css, status, diagnostic } of [
     }
   });
 }
+
+async function withProposals({ proposedCss, components = [], readme }, run) {
+  const directory = await mkdtemp(join(tmpdir(), "approval-canvas-proposals-"));
+  try {
+    await cp(template, directory, { recursive: true });
+    if (proposedCss !== undefined) await writeFile(join(directory, "src/proposed.css"), proposedCss);
+    if (components.length) {
+      await mkdir(join(directory, "src/proposed"), { recursive: true });
+      for (const name of components) {
+        await writeFile(join(directory, "src/proposed", `${name}.tsx`), `export function ${name}() { return null; }\n`);
+      }
+    }
+    if (readme !== undefined) await writeFile(join(directory, "README.md"), readme);
+    await run(checkFidelity(directory));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+const listed = (...names) =>
+  `# Área\n\n## Mudanças no pacote de UI\n\n| Proposta |\n| --- |\n${names.map((name) => `| ${name} |`).join("\n")}\n\n## Desvios aprovados\n`;
+
+test("proposals: a declared and listed new look passes", async () => {
+  await withProposals(
+    { proposedCss: "/* proposta: Divisória leve */\n.lista tr { border-color: red; }\n", components: ["CartaoPassaporte"], readme: listed("Divisória leve", "CartaoPassaporte") },
+    (result) => {
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /2 proposta\(s\) declarada\(s\)/);
+    },
+  );
+});
+
+test("proposals: a rule without a proposta marker fails", async () => {
+  await withProposals({ proposedCss: ".lista tr { border-color: red; }\n", readme: listed() }, (result) => {
+    assert.equal(result.status, 1);
+    assert.ok(result.stderr.includes("regra antes do primeiro"), result.stderr);
+  });
+});
+
+test("proposals: a proposal missing from the README fails", async () => {
+  await withProposals(
+    { proposedCss: "/* proposta: Divisória leve */\n.lista tr { border-color: red; }\n", readme: listed("Outra coisa") },
+    (result) => {
+      assert.equal(result.status, 1);
+      assert.ok(result.stderr.includes('proposta "Divisória leve" não está no README'), result.stderr);
+    },
+  );
+});
+
+test("proposals: a new component missing from the README fails, even without a README", async () => {
+  await withProposals({ components: ["CartaoPassaporte"] }, (result) => {
+    assert.equal(result.status, 1);
+    assert.ok(result.stderr.includes('proposta "CartaoPassaporte"'), result.stderr);
+  });
+});
+
+test("proposals: listing a name outside the UI-changes section does not count", async () => {
+  await withProposals(
+    { proposedCss: "/* proposta: Divisória leve */\n.x { color: red; }\n", readme: "# Área\n\n## Desvios aprovados\n\nDivisória leve\n\n## Mudanças no pacote de UI\n\n| Proposta |\n" },
+    (result) => assert.equal(result.status, 1, "the name must be in the UI-changes section"),
+  );
+});
+
+test("proposals: an @import in proposed.css is a hidden difference and fails", async () => {
+  await withProposals({ proposedCss: '@import "./retoques.css";\n', readme: listed() }, (result) => {
+    assert.equal(result.status, 1);
+    assert.ok(result.stderr.includes("@import"), result.stderr);
+  });
+});
+
+test("proposals: names match whole first-column cells under the exact heading", async () => {
+  const css = "/* proposta: Cartao */\n.cartao { color: red; }\n";
+  await withProposals({ proposedCss: css, readme: listed("CartaoPassaporte") }, (result) =>
+    assert.equal(result.status, 1, "a longer name must not satisfy a shorter one"));
+  await withProposals(
+    { proposedCss: css, readme: "## Mudanças no pacote de UI\n\nCartao aparece só no texto.\n\n| Proposta |\n| --- |\n| Outra |\n" },
+    (result) => assert.equal(result.status, 1, "a mention outside the first column does not count"));
+  await withProposals(
+    { proposedCss: css, readme: "## Mudanças no pacote de UI (rascunho)\n\n| Proposta |\n| --- |\n| Cartao |\n" },
+    (result) => assert.equal(result.status, 1, "a heading with a suffix is not the section"));
+  await withProposals({ proposedCss: "/* proposta: Divisória da lista */\n.x { color: red; }\n", readme: listed("Divisória da lista") }, (result) =>
+    assert.equal(result.status, 0, result.stderr));
+});
+
+test("proposals: valid CSS at-rules are accepted and broken CSS is rejected", async () => {
+  const ok = [
+    "/* proposta: Pulso */\n@keyframes pulso { from { opacity: 0; } to { opacity: 1; } }\n.x { animation: pulso 1s; }\n",
+    "/* proposta: Grade */\n@supports (display: grid) { .x { display: grid; } }\n",
+    "/* proposta: Fonte */\n@font-face { font-family: X; src: url(\"x.woff2\"); }\n",
+  ];
+  for (const proposedCss of ok) {
+    const name = proposedCss.match(/proposta: (\w+)/)[1];
+    await withProposals({ proposedCss, readme: listed(name) }, (result) => assert.equal(result.status, 0, `${name}: ${result.stderr}`));
+  }
+  for (const proposedCss of ["/* proposta: A */\n.x { color: red;\n", "/* proposta: A */\n.x { content: \"aberta; }\n", "/* proposta: A */\n/* sem fim\n.x {}\n"]) {
+    await withProposals({ proposedCss, readme: listed("A") }, (result) => assert.equal(result.status, 1, proposedCss));
+  }
+});
+
+test("proposals: @import is caught in any case and through CSS escapes, before or after a marker", async () => {
+  for (const imp of ['@IMPORT "./x.css";', '@\\69mport "./x.css";', '@\\69 mport "./x.css";', '@\\69\r\nmport "./x.css";', '@\\69\fmport "./x.css";', '@Im\\port "./x.css";']) {
+    for (const proposedCss of [`${imp}\n/* proposta: A */\n.x { color: red; }\n`, `/* proposta: A */\n${imp}\n.x { color: red; }\n`]) {
+      await withProposals({ proposedCss, readme: listed("A") }, (result) => {
+        assert.equal(result.status, 1, proposedCss);
+        assert.ok(result.stderr.includes("@import"), `${proposedCss}\n${result.stderr}`);
+      });
+    }
+  }
+});
+
+test("proposals: escaped braces in selectors are valid CSS", async () => {
+  await withProposals({ proposedCss: "/* proposta: A */\n.\\{ { color: red; }\n.\\7b x { color: blue; }\n", readme: listed("A") }, (result) =>
+    assert.equal(result.status, 0, result.stderr));
+});
 
 test("D: capture jobs cover each requested state, theme and width with stable names", async () => {
   const { captureJobs } = await import(pathToFileURL(join(template, "capture-jobs.mjs")));

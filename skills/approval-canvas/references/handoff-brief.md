@@ -8,7 +8,7 @@ The user approved what the canvas shows: composition, copy, and also borders, di
 
 - **Same component, same look.** Use the UI package piece the canvas used. If the product already has a different component for the same job, and it looks different (a bordered badge where the canvas shows a filled pill, a wider sidebar, another table header style), that is a **deviation**, not a free choice.
 - **Deviations need the user.** When reproducing the canvas exactly is impossible or would break something, stop and report it with both screenshots. Do not substitute silently. The orchestrator decides with the user and records the outcome in the README.
-- **The canvas's "Mudanças no pacote de UI" list is part of the scope.** Each item there (a divider weight, a header style, a font) is implemented in the UI package itself, so every consumer gets it, not only the redesigned screens.
+- **The canvas's "Mudanças no pacote de UI" list is part of the scope.** Each approved proposal there (a new look in `src/proposed.css`, a new variant or component in `src/proposed/`) is built in the UI package as a typed, named variant or component, so every consumer can use it. Do not copy it as a local style in the app.
 - **Product labels that the canvas changed are approved changes.** Labels the canvas copied from production stay unless a decision says otherwise.
 
 ## Parity gate (before review and before the PR)

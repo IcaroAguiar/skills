@@ -1,9 +1,9 @@
 // Primitivas do canvas na receita do design system vigente. Toda tela usa só estas peças
 // e os componentes reais de @acme/ui; nenhuma variante nova de packages/ui.
 // Quando o pacote de UI já tem a peça da receita (uma lista, uma seção, um painel),
-// a primitiva só repassa props para ela. Nada aqui muda borda, divisória, fonte,
-// espaçamento ou cor de um componente real: o que o usuário aprova no canvas é o
-// que o produto vai mostrar.
+// a primitiva só repassa props para ela. Um visual novo é bem-vindo, mas vai para
+// src/proposed.css ou src/proposed/ e entra no README, nunca escondido aqui: o
+// usuário aprova sabendo o que é novo, e a implementação constrói no pacote de UI.
 import {
   Button,
   Input,

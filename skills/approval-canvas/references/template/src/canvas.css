@@ -6,12 +6,10 @@
 
 /*
  * Only the canvas frame lives here: toolbar height and shell sizing.
- * Never restyle a design-system component (borders, dividers, fonts, spacing,
- * colors) in this file or in kit.tsx. The user approves what they see, so a
- * canvas-only tweak becomes an approved look the product does not have.
- * When a screen needs a visual change the UI package lacks, make it in the UI
- * package, or list it in the README under "Mudanças no pacote de UI" and
- * show it to the user. `node check-fidelity.mjs` enforces this file.
+ * New looks are welcome, but they go to src/proposed.css (or new components to
+ * src/proposed/) and are listed in the README under "Mudanças no pacote de UI",
+ * so the user approves them knowingly and the implementation carries them.
+ * `node check-fidelity.mjs` enforces this.
  */
 body { margin: 0; }
 .canvas-toolbar { min-height: 68px; }
