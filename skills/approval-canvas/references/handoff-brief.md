@@ -15,7 +15,7 @@ The user approved what the canvas shows: composition, copy, and also borders, di
 
 1. Capture the canvas and the running app **in the same conditions**: same theme (the product's default, plus the other theme when it exists), same shell variant, same widths (1440 and 390), same screen and state. Name the files identically in two folders (`<ID>-<width>.png`).
 2. Run `node pairs.mjs` from the canvas folder with `CANVAS`, `APP`, `PAIRS` and `UI_ROOT` set. It renders one side-by-side image per pair.
-3. Open **every** pair and list each difference: frames and borders, dividers, fonts and case, sizes and widths, spacing, colors, icons, copy. Data differences (fake versus real records) are not deviations; everything else is.
+3. Open **every** pair and list each difference, including the rendered fonts (check the computed `font-family` when text looks different): frames and borders, dividers, fonts and case, sizes and widths, spacing, colors, icons, copy. Data differences (fake versus real records) are not deviations; everything else is.
 4. Fix each difference, or report it as a deviation with the reason. Repeat until the list is empty or every remaining item is approved by the user.
 
 ## Report

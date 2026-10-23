@@ -1,4 +1,6 @@
-@import "@acme/ui/styles.css";
+/* Same baseline as the product: import the app's entry stylesheet (it brings the UI
+   package styles plus the app's global overrides), not only the UI package. */
+@import "<relative path to the product app's entry stylesheet, e.g. ../../apps/web/src/index.css>";
 @source "<relative path from this file to the UI package src>";
 @source "./";
 

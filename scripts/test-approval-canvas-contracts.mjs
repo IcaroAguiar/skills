@@ -50,7 +50,7 @@ try {
 const skillText = await readFile(join(skill, "SKILL.md"), "utf8");
 requireText(
   skillText,
-  ["The canvas never restyles the UI package", "check-fidelity.mjs", "product's default theme", "THEMES=claro,escuro", "embedded `<style>`", "Parity gate before the PR", "pairs.mjs", "references/handoff-brief.md"],
+  ["The canvas starts from the product's baseline", "font links", "The canvas never restyles the UI package", "check-fidelity.mjs", "product's default theme", "THEMES=claro,escuro", "embedded `<style>`", "Parity gate before the PR", "pairs.mjs", "references/handoff-brief.md"],
   "approval-canvas SKILL.md",
 );
 const handoff = await readFile(join(skill, "references/handoff-brief.md"), "utf8");
