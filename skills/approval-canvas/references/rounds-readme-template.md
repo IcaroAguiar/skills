@@ -37,10 +37,26 @@ A tela e o estado vêm do hash: `#P4`, `#P4~rascunho`. Use `?tema=escuro` para o
 
 1. …
 
+## Mudanças no pacote de UI
+
+Aparências que a tela aprovada usa e que o pacote de UI ainda não produz. Cada item é implementado no próprio pacote e vale para todos os consumidores. O usuário aprova a lista junto com as telas.
+
+| Componente | Hoje | Proposto | Telas afetadas |
+| --- | --- | --- | --- |
+| … | … | … | … |
+
+## Desvios aprovados
+
+Diferenças entre o canvas aprovado e o produto implementado que o usuário aceitou depois do portão de paridade. Sem aprovação, a diferença é defeito.
+
+| Tela | Diferença | Motivo | Aprovado em |
+| --- | --- | --- | --- |
+| … | … | … | … |
+
 ## Pontos em aberto
 
 - …
 
 ## Limites
 
-O canvas prova composição e textos, não persistência, permissão, auditoria ou transações. Diálogos e painéis laterais funcionam, mas não aparecem nas capturas automáticas. As capturas ficam em `/tmp/<area>-canvas-shots/`, fora do Git.
+O canvas prova composição, textos e aparência (com os componentes reais, sem retoques locais), não persistência, permissão, auditoria ou transações. Diálogos e painéis laterais funcionam, mas não aparecem nas capturas automáticas. As capturas ficam em `/tmp/<area>-canvas-shots/`, fora do Git.

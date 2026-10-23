@@ -30,6 +30,11 @@ without discipline reads as noise. The user has rejected both.
 - **Language.** Sentence case, the product's own vocabulary, active voice. A
   jargon term (D0, CEUA) carries its plain-language label at the point of use,
   not in a distant legend.
+- **Fidelity to what was approved.** The approved artifact is the spec down to
+  borders, dividers, fonts, sizes, and theme. One extra frame line, a bordered
+  badge where a filled pill was approved, or a fallback font reads as a
+  different design. Compare in the same theme and shell, side by side, before
+  calling the work done; any substitution goes back to the user.
 - **Same idea on mobile.** At 390 px the composition adapts (columns stack,
   rails become indented trees, timelines go under the item) without horizontal
   scroll and without a separate card design.
@@ -63,3 +68,4 @@ a screen, and update the rules above when a pattern repeats.
 | 2026-10-22 | Home "Hoje": greeting plus one "Precisa de você" list | Preferred over "Áreas vivas" and "Retomar" | Daily usefulness and lightness beat visual density |
 | 2026-10-23 | Researcher validation queue, organizations, lab pipeline, and animal requests redone as framed tables | Rejected: "área genérica com tabela e lista", "pouco criativo", "ruidoso" | One layout for every screen is the failure mode; it erased an existing passport metaphor |
 | 2026-10-23 | Same screens redone as passport queue with checklist strip, org chart, stage pipeline, delivery timeline with the breeding cycle | "Excelente" / "Muito bom e criativo" | Task → metaphor → precedents → one signature element produces the house style; keep complexity in check |
+| 2026-10-23 | Platform redesign as implemented, compared with the approved canvas | "Uma borda a mais"; "por que não conseguimos perfeição nos detalhes?" | Detail parity is part of the approval: a shared empty state and a decision tile drew boxes the canvas did not have, the app's global CSS (which the canvas never loaded) restyled table headers and badges, a reused badge added a border, and fonts differed. Start the canvas from the product's baseline and check side by side in the same conditions |

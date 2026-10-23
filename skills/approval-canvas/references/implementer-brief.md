@@ -22,10 +22,11 @@ Seu arquivo exporta `export const screens: Screen[] = [...]` (tipo em kit.tsx): 
 6. Ações: rótulos verbais e canônicos, um primário por tela. Ações de linha com `RowAction` (ícone + rótulo; no celular só ícone). Ações destrutivas/irreversíveis confirmam em `Dialog`.
 7. Detalhes em `Sheet` à direita (via `detail`), seções planas. Leitura longa em `Dialog variant="reading"`.
 8. Formulários: campos agrupados por assunto com `Field`/`ProjectFlowField`; controles só de <PACOTE UI> (Input, Textarea, Select via Pick, Checkbox, DatePicker, ChoiceCards, Switch, SearchableSelect...). Nunca `<input>`/`<select>` nativos visíveis.
-9. Tokens: nada de hex; use classes semânticas (text-muted-foreground, bg-muted/20, border-border...). JetBrains Mono (`Mono`) só para protocolo/código/hash/versão. Ícones só Phosphor. Status nunca só por cor.
-10. Copy no idioma do produto, correto, curto, concreto, voz ativa. Corrija termos obscuros das telas atuais (explique ou renomeie).
-11. Celular (390 px): sem rolagem horizontal da página; ações empilham; nada cortado.
-12. Interações devem funcionar no canvas (filtros, abas, abrir Sheet/Dialog, toasts, navegação go()) com estado em memória.
+9. Fidelidade: nunca restilize um componente do pacote de UI (borda, divisória, fonte, caixa do texto, espaçamento, cor) no seu arquivo, em `kit.tsx` ou em `canvas.css`. Se a tela precisa de uma aparência que o pacote não tem, use o componente como está e reporte o item como "Mudança no pacote de UI". `node check-fidelity.mjs` precisa passar.
+10. Tokens: nada de hex; use classes semânticas (text-muted-foreground, bg-muted/20, border-border...). JetBrains Mono (`Mono`) só para protocolo/código/hash/versão. Ícones só Phosphor. Status nunca só por cor.
+11. Copy no idioma do produto, correto, curto, concreto, voz ativa. Corrija termos obscuros das telas atuais (explique ou renomeie).
+12. Celular (390 px): sem rolagem horizontal da página; ações empilham; nada cortado.
+13. Interações devem funcionar no canvas (filtros, abas, abrir Sheet/Dialog, toasts, navegação go()) com estado em memória.
 
 ## Forma de cada tela (obrigatória)
 O orquestrador passa, para cada tela sua: trabalho, composição, metáfora, três precedentes, elemento de assinatura e o que o produto já tem e deve ser mantido. Antes de codar, confirme ou ajuste essas seis linhas no seu relatório. Comece pelo que já é criativo no produto atual. A tela tem **um** elemento memorável nascido do domínio, e o resto fica quieto. Ao revisar as capturas, pergunte: "isto parece uma tabela genérica ou um template?". Se parecer, refaça.
@@ -34,9 +35,10 @@ O orquestrador passa, para cada tela sua: trabalho, composição, metáfora, tr�
 ```
 cd <CAMINHO DO CANVAS>
 UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> node $UI_ROOT/$WEB_APP/node_modules/vite/bin/vite.js build -c vite.config.mjs
-UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> PORT=<PORT> SHOTS=<SHOTS> node shoot.mjs <IDs separados por vírgula>
+UI_ROOT=<UI_ROOT> WEB_APP=<APP> OUT=<OUT> PORT=<PORT> SHOTS=<SHOTS> THEMES=claro,escuro node shoot.mjs <IDs separados por vírgula>
 ```
 (Use o wrapper de comandos pesados do projeto, se houver.)
+Em `THEMES`, ponha o tema padrão do produto primeiro (`escuro,claro` se for escuro); o valor padrão da variável é `claro`. A captura cobre todos os estados em cada tema pedido. Os nomes seguem `<ID>[-<estado>][-escuro]-<largura>.png`. O legado `DARK=IDs`, sem `THEMES`, continua aceito e agora inclui todos os estados das telas listadas; `THEMES` explícito tem precedência.
 O build compila todos os arquivos; se outro agente deixar um arquivo quebrado momentaneamente, espere e tente de novo (não edite o arquivo dele). Abra (Read) TODAS as suas capturas PNG em 1440 e 390 e corrija o que estiver feio, desalinhado, cortado, denso, vazio ou inconsistente com a tela de referência. Itere até ficar com qualidade de produto. O shoot reporta erros JS e overflow — devem ser zero.
 
 ## Relatório final (curto)

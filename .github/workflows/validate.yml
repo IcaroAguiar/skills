@@ -30,4 +30,5 @@ jobs:
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-validate-skills.mjs
       - run: node scripts/test-design-direction-contracts.mjs
+      - run: node scripts/test-approval-canvas-contracts.mjs
       - run: python3 skills/task-closeout/scripts/test_inspect_checkout.py
