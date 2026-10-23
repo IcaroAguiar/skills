@@ -152,18 +152,50 @@ const exists = (path) => access(path).then(() => true, () => false);
 const proposals = [];
 
 // src/proposed.css: visuais novos, cada bloco sob um marcador /* proposta: Nome */.
+// A proposta pode usar qualquer CSS válido (@keyframes, @supports, @font-face…);
+// aqui só se confere a estrutura e que nada fique fora de um marcador ou escondido
+// num @import.
+function proposalStructure(text) {
+  let depth = 0;
+  let outside = '';
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '/' && text[i + 1] === '*') {
+      const end = text.indexOf('*/', i + 2);
+      if (end < 0) throw new Error('comentário não terminado');
+      i = end + 1;
+    } else if (char === '"' || char === "'") {
+      let j = i + 1;
+      while (j < text.length && text[j] !== char) j += text[j] === '\\' ? 2 : 1;
+      if (j >= text.length) throw new Error('string não terminada');
+      i = j;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      if (--depth < 0) throw new Error('chave fechada sem abertura');
+    } else if (depth === 0) {
+      outside += char;
+    }
+  }
+  if (depth !== 0) throw new Error('bloco não terminado');
+  return outside;
+}
+
 const proposedCss = `${here}src/proposed.css`;
 if (await exists(proposedCss)) {
   const text = await readFile(proposedCss, 'utf8');
   const markers = [...text.matchAll(/\/\*\s*proposta:\s*([^*]+?)\s*\*\//g)];
-  const beforeFirst = markers.length ? text.slice(0, markers[0].index) : text;
   try {
-    if (selectorsOf(beforeFirst).length) {
+    proposalStructure(text);
+    if (/@import\b/.test(proposalStructure(text))) {
+      problems.push('src/proposed.css: @import esconde estilos sem declarar; escreva a proposta aqui, sob o marcador');
+    }
+    const beforeFirst = markers.length ? text.slice(0, markers[0].index) : text;
+    if (proposalStructure(beforeFirst).trim()) {
       problems.push('src/proposed.css: regra antes do primeiro /* proposta: Nome */; marque cada bloco com o nome da proposta');
     }
-    selectorsOf(text);
   } catch (error) {
-    problems.push(`src/proposed.css: ${error.message}`);
+    problems.push(`src/proposed.css: CSS inválido: ${error.message}`);
   }
   proposals.push(...markers.map((marker) => marker[1].trim()));
 }
@@ -180,9 +212,17 @@ if (await exists(proposedDir)) {
 if (proposals.length) {
   const readmePath = `${here}README.md`;
   const readme = (await exists(readmePath)) ? await readFile(readmePath, 'utf8') : '';
-  const section = readme.split(/^## /m).find((part) => part.startsWith('Mudanças no pacote de UI')) ?? '';
+  // Só a primeira coluna da tabela sob o título exato conta, com o nome inteiro.
+  const heading = readme.match(/^## Mudanças no pacote de UI[ \t]*$/m);
+  const section = heading ? readme.slice(heading.index + heading[0].length).split(/^## /m)[0] : '';
+  const rows = section.split('\n').filter((line) => line.trim().startsWith('|'));
+  const listed = new Set(
+    rows
+      .slice(2)
+      .map((line) => line.trim().replace(/^\|/, '').split('|')[0].trim()),
+  );
   for (const name of proposals) {
-    if (!section.includes(name)) {
+    if (!listed.has(name)) {
       problems.push(`proposta "${name}" não está no README em "Mudanças no pacote de UI"`);
     }
   }

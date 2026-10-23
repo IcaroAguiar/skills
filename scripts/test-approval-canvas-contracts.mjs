@@ -149,6 +149,42 @@ test("proposals: listing a name outside the UI-changes section does not count", 
   );
 });
 
+test("proposals: an @import in proposed.css is a hidden difference and fails", async () => {
+  await withProposals({ proposedCss: '@import "./retoques.css";\n', readme: listed() }, (result) => {
+    assert.equal(result.status, 1);
+    assert.ok(result.stderr.includes("@import"), result.stderr);
+  });
+});
+
+test("proposals: names match whole first-column cells under the exact heading", async () => {
+  const css = "/* proposta: Cartao */\n.cartao { color: red; }\n";
+  await withProposals({ proposedCss: css, readme: listed("CartaoPassaporte") }, (result) =>
+    assert.equal(result.status, 1, "a longer name must not satisfy a shorter one"));
+  await withProposals(
+    { proposedCss: css, readme: "## Mudanças no pacote de UI\n\nCartao aparece só no texto.\n\n| Proposta |\n| --- |\n| Outra |\n" },
+    (result) => assert.equal(result.status, 1, "a mention outside the first column does not count"));
+  await withProposals(
+    { proposedCss: css, readme: "## Mudanças no pacote de UI (rascunho)\n\n| Proposta |\n| --- |\n| Cartao |\n" },
+    (result) => assert.equal(result.status, 1, "a heading with a suffix is not the section"));
+  await withProposals({ proposedCss: "/* proposta: Divisória da lista */\n.x { color: red; }\n", readme: listed("Divisória da lista") }, (result) =>
+    assert.equal(result.status, 0, result.stderr));
+});
+
+test("proposals: valid CSS at-rules are accepted and broken CSS is rejected", async () => {
+  const ok = [
+    "/* proposta: Pulso */\n@keyframes pulso { from { opacity: 0; } to { opacity: 1; } }\n.x { animation: pulso 1s; }\n",
+    "/* proposta: Grade */\n@supports (display: grid) { .x { display: grid; } }\n",
+    "/* proposta: Fonte */\n@font-face { font-family: X; src: url(\"x.woff2\"); }\n",
+  ];
+  for (const proposedCss of ok) {
+    const name = proposedCss.match(/proposta: (\w+)/)[1];
+    await withProposals({ proposedCss, readme: listed(name) }, (result) => assert.equal(result.status, 0, `${name}: ${result.stderr}`));
+  }
+  for (const proposedCss of ["/* proposta: A */\n.x { color: red;\n", "/* proposta: A */\n.x { content: \"aberta; }\n", "/* proposta: A */\n/* sem fim\n.x {}\n"]) {
+    await withProposals({ proposedCss, readme: listed("A") }, (result) => assert.equal(result.status, 1, proposedCss));
+  }
+});
+
 test("D: capture jobs cover each requested state, theme and width with stable names", async () => {
   const { captureJobs } = await import(pathToFileURL(join(template, "capture-jobs.mjs")));
   const screens = [{ id: "A1", states: ["vazio"] }, { id: "B1", states: [] }];
