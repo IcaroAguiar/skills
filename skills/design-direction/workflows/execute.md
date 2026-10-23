@@ -29,6 +29,18 @@ What is the sober fallback?
 Reconsider a new decision that cannot answer the first four. Do not reopen
 approved choices that the task preserves.
 
+## Approved artifact parity
+
+When the direction is an approved artifact (canvas, mockup, prototype), the
+artifact is the specification for appearance as well as structure. Implement
+with the components the artifact used. Capture the implementation in the same
+theme, shell, widths, and states as the approved captures, compare each pair
+side by side, and list every non-data difference: frames, dividers, fonts and
+case, sizes, spacing, colors, icons, copy. Fix each one or bring it to the user
+as a deviation with both images. A substitution the implementer chose is not
+covered by the approval. With `$approval-canvas`, this is its parity gate
+(`pairs.mjs`).
+
 ## Complete when
 
 - the requested change expresses the approved thesis under realistic content
@@ -41,5 +53,6 @@ approved choices that the task preserves.
   decisions and evidence;
 - equivalent before/after evidence is present when a trustworthy baseline
   exists, with authorship scores when scoring is in scope;
+- for an approved artifact, the parity comparison shows no unapproved difference;
 - revalidation passes or names exact blockers;
 - the quality claim does not exceed the evidence.

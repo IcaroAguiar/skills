@@ -1,5 +1,9 @@
 // Primitivas do canvas na receita do design system vigente. Toda tela usa só estas peças
 // e os componentes reais de @acme/ui; nenhuma variante nova de packages/ui.
+// Quando o pacote de UI já tem a peça da receita (uma lista, uma seção, um painel),
+// a primitiva só repassa props para ela. Nada aqui muda borda, divisória, fonte,
+// espaçamento ou cor de um componente real: o que o usuário aprova no canvas é o
+// que o produto vai mostrar.
 import {
   Button,
   Input,
@@ -262,7 +266,7 @@ export function List({
   const hasActions = rows.some((row) => row.actions);
   return (
     <OperationalListSurface>
-      <OperationalTable className="essential-table w-full min-w-0 table-fixed" viewportAriaLabel={label}>
+      <OperationalTable className="w-full min-w-0 table-fixed" viewportAriaLabel={label}>
         <OperationalTableHeader>
           <OperationalTableHeaderRow>
             {columns.map((column, index) => (
