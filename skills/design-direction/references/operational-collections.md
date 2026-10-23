@@ -133,6 +133,8 @@ Use cards for a small number of independent, heterogeneous, discoverable or sele
 
 Different representations of one entity require genuinely different tasks.
 
+When the work is deciding cases, moving items through stages, understanding a structure, or planning in time, the collection takes another shape; see [collection shapes](composition-models.md#collections-have-more-than-one-shape).
+
 ## Operational checklist
 
 ### Actions

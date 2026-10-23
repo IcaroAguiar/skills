@@ -45,23 +45,39 @@ async function assertLocalLinks(skillRoot) {
   }
 }
 
-const design = await read("skills/design-direction/SKILL.md");
-const designWorkflows = await read("skills/design-direction/references/workflows.md");
-const designPortability = await read("skills/design-direction/references/portability.md");
-const antiPatterns = await read("skills/design-direction/references/antipattern-index.md");
+const root = "skills/design-direction";
+const design = await read(`${root}/SKILL.md`);
+const designWorkflows = await read(`${root}/references/workflows.md`);
+const designPortability = await read(`${root}/references/portability.md`);
+const antiPatterns = await read(`${root}/references/antipattern-index.md`);
+const taste = await read(`${root}/references/taste-profile.md`);
+const compositions = await read(`${root}/references/composition-models.md`);
+const explore = await read(`${root}/workflows/explore.md`);
+const refine = await read(`${root}/workflows/refine.md`);
+const execute = await read(`${root}/workflows/execute.md`);
+const translate = await read(`${root}/workflows/translate-reference.md`);
+const authorship = await read(`${root}/references/authorship-evaluation.md`);
+const decision = await read(`${root}/templates/direction-decision.md`);
 
 requireText(
   design,
   [
     "**Create**",
-    "**Review**",
     "**Redesign**",
+    "**Review**",
     "**Implement**",
+    "**Refine**",
+    "**Explore**",
+    "**Translate reference**",
     "**Capture preference**",
-    "Enter\n`Implement` only when",
+    "Enter Implement only when",
     "request authorization before editing",
     "before/after pair",
-    "same state, viewport, theme, data condition",
+    "same state, viewport, theme, and data",
+    "taste-profile.md",
+    "## 4. Choose the expression",
+    "Signature element:",
+    "## 7. Pass the anti-generic gate",
   ],
   "design-direction routing",
 );
@@ -71,6 +87,7 @@ requireText(
     "## Review",
     "## Redesign",
     "## Implement",
+    "Choose the expression (SKILL.md step 4)",
     "ask whether to accept, refine, or revert",
     "Do not mutate the skill before explicit approval",
   ],
@@ -82,30 +99,8 @@ requireText(
   "anti-pattern evidence contract",
 );
 requireText(designPortability, ["## Codex", "## Claude Code", "## Cursor", "## Generic agent", "## Parity test"], "design portability");
-
-const art = await read("skills/art-direction/SKILL.md");
-const explore = await read("skills/art-direction/workflows/explore.md");
-const refine = await read("skills/art-direction/workflows/refine.md");
-const execute = await read("skills/art-direction/workflows/execute.md");
-const translate = await read("skills/art-direction/workflows/translate-reference.md");
-const authorship = await read("skills/art-direction/references/authorship-evaluation.md");
-const artPortability = await read("skills/art-direction/references/portability.md");
-const decision = await read("skills/art-direction/templates/direction-decision.md");
-
-requireText(
-  art,
-  [
-    "**explore**",
-    "**refine**",
-    "**translate-reference**",
-    "**execute**",
-    "**audit**",
-    "passing context lock from `design-direction`",
-    "before/after pair",
-    "ask the user to accept, refine, or reject",
-  ],
-  "art-direction routing",
-);
+requireText(taste, ["## Discipline", "## Expression", "## Verdict log", "One primary action per screen"], "taste profile");
+requireText(compositions, ["## Collections have more than one shape", "framed table is the generic fallback"], "collection shapes");
 requireText(
   explore,
   [
@@ -171,14 +166,12 @@ requireText(
   ],
   "direction decision artifact",
 );
-requireText(artPortability, ["**Codex:**", "**Claude Code:**", "**Cursor:**", "**Generic agent:**", "## Parity test"], "art portability");
 
-const allSources = `${design}\n${designWorkflows}\n${antiPatterns}\n${art}\n${explore}\n${refine}\n${execute}\n${translate}\n${authorship}`;
+const allSources = `${design}\n${designWorkflows}\n${antiPatterns}\n${taste}\n${explore}\n${refine}\n${execute}\n${translate}\n${authorship}`;
 for (const forbidden of [/round-\d+/i, /seed-\d+/i, /candidate-knowledge/i, /controlled-runs/i, /blind-three-stage/i]) {
   assert.ok(!forbidden.test(allSources), `laboratory mechanic leaked into published contracts: ${forbidden}`);
 }
 
-await assertLocalLinks("skills/design-direction");
-await assertLocalLinks("skills/art-direction");
+await assertLocalLinks(root);
 
-console.log("Validated design-direction and art-direction routing, approval, comparison, scoring, portability, and local-link contracts.");
+console.log("Validated design-direction routing, expression, taste profile, approval, comparison, scoring, portability, and local-link contracts.");

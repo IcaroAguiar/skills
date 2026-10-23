@@ -24,7 +24,7 @@ try {
   cpSync(join(sourceRoot, "scripts"), join(fixtureRoot, "scripts"), { recursive: true });
   cpSync(join(sourceRoot, ".github"), join(fixtureRoot, ".github"), { recursive: true });
   mkdirSync(join(fixtureRoot, "skills"));
-  for (const name of ["antigravity-executor", "art-direction", "design-direction", "record-real-dev-e2e", "summarize"]) {
+  for (const name of ["antigravity-executor", "design-direction", "record-real-dev-e2e", "summarize"]) {
     cpSync(join(sourceRoot, "skills", name), join(fixtureRoot, "skills", name), { recursive: true });
   }
   for (const name of ["README.md", "GLOSSARY.md", "AGENTS.md"]) {
