@@ -16,7 +16,7 @@ Every adapter must:
 
 ## Codex
 
-Keep `SKILL.md`, `agents/openai.yaml`, and `references/`. Invoke as `$design-direction`. Use code, browser, image, or Figma capabilities only when the task needs them.
+Keep the whole skill directory: `SKILL.md`, `agents/openai.yaml`, `references/`, `workflows/`, `templates/`, and `contexts/`. Invoke as `$design-direction`. Use code, browser, image, or Figma capabilities only when the task needs them.
 
 ## Claude Code
 

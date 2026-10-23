@@ -1,7 +1,7 @@
 # Foundations and Handoff
 
-`art-direction` is complementary to `design-direction`. It is not a replacement,
-style preset, or final decoration pass.
+The expression layer (SKILL.md step 4 and the direction sequence) works on top
+of a passing context lock. It is not a style preset or a final decoration pass.
 
 ## Required handoff
 

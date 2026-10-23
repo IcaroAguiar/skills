@@ -129,9 +129,11 @@ Containment is not elevation. Use a subtle outline, small or moderate radius, no
 
 ## Choose the representation
 
-Use cards for a small number of independent, heterogeneous, discoverable or selectable entities where visual comparison matters. Use lists or tables for numerous homogeneous records that users sort, filter, compare, select, or operate repeatedly.
+Let the work choose the composition and the volume choose the mechanics. Volume decides filtering, sorting, pagination, selection, and batch actions; the work decides the shape. Use a table when users compare records across the same attributes. Use cards for a small number of independent, heterogeneous, discoverable or selectable entities where visual comparison matters.
 
 Different representations of one entity require genuinely different tasks.
+
+When the work is deciding cases, moving items through stages, understanding a structure, or planning in time, the collection takes another shape; see [collection shapes](composition-models.md#collections-have-more-than-one-shape).
 
 ## Operational checklist
 

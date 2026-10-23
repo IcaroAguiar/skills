@@ -6,7 +6,7 @@
 2. Establish the context lock.
 3. Map content, actions, states, scopes, collections, dependencies, and priorities.
 4. Define information architecture and flow. Use sequence only where dependency is real.
-5. Choose PageHeader, layout grammar, surfaces, representation, and table mode by function.
+5. Choose the expression (SKILL.md step 4), then PageHeader, layout grammar, surfaces, and representation by function.
 6. Plan accessibility, responsive behavior, and applicable states.
    For native mobile, also define task topology, navigation, scroll ownership,
    persistent chrome, keyboard behavior, adaptation, interruption recovery,
@@ -48,18 +48,19 @@ If the primary artifact cannot be inspected, return `No verdict — evidence blo
 
 1. Freeze the context lock, requirements, content, actions, and states.
 2. Define the composition or interaction problem.
-3. Remove functionless framing, scale, and decoration.
-4. Restore PageHeader identity, content grouping, action geography, and state hierarchy.
-5. Choose a layout grammar that matches relationships and surface mode.
-6. Describe behavior, states, and responsive reorganization.
+3. Choose the expression (SKILL.md step 4). Keep the product's existing signatures unless the diagnosis rejects them.
+4. Remove functionless framing, scale, and decoration.
+5. Restore PageHeader identity, content grouping, action geography, and state hierarchy.
+6. Choose a layout grammar that matches relationships and surface mode.
+7. Describe behavior, states, and responsive reorganization.
    On mobile, describe presentation changes across compact and expanded windows
    instead of scaling one handset artboard.
-7. For mobile refinement, replace component stacking with a dominant
+8. For mobile refinement, replace component stacking with a dominant
    composition and specify rhythm, typography, material, component, motion,
    and feedback decisions.
-8. Produce a complete structure and an ASCII wireframe only when spatial relationships need it.
-9. Map each change to the finding it resolves.
-10. Apply the same evaluation used in review.
+9. Produce a complete structure and an ASCII wireframe only when spatial relationships need it.
+10. Map each change to the finding it resolves.
+11. Apply the same evaluation used in review.
 
 **Complete when:** every proposed change resolves a finding, every preserved
 function remains available, the proposed surface passes the same criteria that

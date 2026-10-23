@@ -57,5 +57,10 @@ Prefer first-party design writing, system documentation, or directly inspected
 runtime. Search-result thumbnails, moodboards without provenance, and generic
 prompts such as `premium dashboard` are weak evidence.
 
-**Complete when:** every used precedent has a verified artifact, functional
-translation, dependency, non-copy boundary, and destination-specific result.
+A precedent may enter from memory for the relationship it shows (how the work
+is organized), labeled as unverified. A claim about how the product looks or
+behaves today requires a verified artifact.
+
+**Complete when:** every used precedent has a functional translation,
+dependency, non-copy boundary, and destination-specific result, and every claim
+about its current appearance or behavior has a verified artifact.

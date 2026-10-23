@@ -5,10 +5,9 @@ high-end, native-feeling, or less generic mobile interface, or when a correct
 mobile result still looks assembled from generic components.
 
 This module defines the craft evaluation contract inside `design-direction`.
-When the complementary `art-direction` skill is available, use it to generate
-the thesis, composition, and expressive direction only after this skill passes
-the foundations; then return here for revalidation. Do not duplicate the
-generative art-direction workflow inside this module.
+Generate the thesis, composition, and expressive direction through SKILL.md
+step 4 and [direction-sequence.md](../workflows/direction-sequence.md); this
+module evaluates the result.
 
 ## Contents
 
