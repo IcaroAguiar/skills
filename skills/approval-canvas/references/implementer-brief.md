@@ -16,7 +16,7 @@ Seu arquivo exporta `export const screens: Screen[] = [...]` (tipo em kit.tsx): 
 ## Receita (obrigatória — ajuste ao design system do projeto)
 1. Anatomia: `Page` (voltar opcional acima, kicker curto só quando dá contexto real, título, UMA frase de descrição, ações à direita). Sem faixas de métricas em cartões no topo; metadados vão na prop `meta` como texto.
 2. Seções: toda seção de conteúdo é `Section` (ProjectFlowGroup h2) com ícone Phosphor, título e contagem em coleções (`Título · 3`). Nada de Card/PagePanel/caixas aninhadas. Uma seção nunca repete o título da aba/página.
-3. Listas: sempre `List` (uma tabela, mesma em todas as larguras; colunas secundárias somem no celular e reaparecem via `mobileMeta`). 2–4 colunas visíveis; o resto vai para um Sheet via `detail({...})`. Sem cartões alternativos no mobile.
+3. Coleções: a forma vem da expressão da tela (seção "Forma de cada tela" abaixo). `List` (tabela emoldurada, mesma em todas as larguras, colunas secundárias via `mobileMeta`) é a forma certa só quando o trabalho é comparar registros. Em qualquer forma, cada item mostra identidade, situação e no máximo uma linha de apoio; o resto vai para o Sheet via `detail({...})`. A mesma ideia vale no celular, adaptada, sem um desenho alternativo de cartões.
 4. Situação: `Status` com texto (tom de StatusBadge). No máximo UM selo por linha. Omita o selo quando a seção já diz a situação (ex.: seção "Convites pendentes" não precisa de selo "Pendente"). Status em sentence case ("Data proposta", não "Data Proposta").
 5. Vazios: `Empty` (uma frase + próximo passo). Erros/sucessos transitórios: `toast` (sonner) — nunca alertas inline vermelhos. Bloqueios persistentes: uma `Section` com frase clara e a ação que resolve.
 6. Ações: rótulos verbais e canônicos, um primário por tela. Ações de linha com `RowAction` (ícone + rótulo; no celular só ícone). Ações destrutivas/irreversíveis confirmam em `Dialog`.
@@ -26,6 +26,9 @@ Seu arquivo exporta `export const screens: Screen[] = [...]` (tipo em kit.tsx): 
 10. Copy no idioma do produto, correto, curto, concreto, voz ativa. Corrija termos obscuros das telas atuais (explique ou renomeie).
 11. Celular (390 px): sem rolagem horizontal da página; ações empilham; nada cortado.
 12. Interações devem funcionar no canvas (filtros, abas, abrir Sheet/Dialog, toasts, navegação go()) com estado em memória.
+
+## Forma de cada tela (obrigatória)
+O orquestrador passa, para cada tela sua: trabalho, composição, metáfora, três precedentes, elemento de assinatura e o que o produto já tem e deve ser mantido. Antes de codar, confirme ou ajuste essas seis linhas no seu relatório. Comece pelo que já é criativo no produto atual. A tela tem **um** elemento memorável nascido do domínio, e o resto fica quieto. Ao revisar as capturas, pergunte: "isto parece uma tabela genérica ou um template?". Se parecer, refaça.
 
 ## Validar (obrigatório, use seus valores únicos de OUT/PORT/SHOTS abaixo)
 ```
