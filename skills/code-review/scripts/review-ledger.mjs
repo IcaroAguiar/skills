@@ -81,6 +81,8 @@ function triageT1(options) {
   // The lens calls count as triaged only once every spot has a decision.
   const open = report.findings.length - new Set(decisions.map((item) => item.spot)).size;
   if (!open) for (const reviewer of report.reviewers) if (reviewer.call) appendEvent({ type: "triaged", call: reviewer.call, repo: report.repo, findings: decisions.length });
+  // Shared by every lens of this report and by a later re-triage of it.
+  const group = report.reviewers.map((reviewer) => reviewer.call).filter(Boolean).sort()[0] ?? newId();
   let count = 0;
   for (const [index, item] of decisions.entries()) {
     const spot = spots[index];
@@ -91,7 +93,7 @@ function triageT1(options) {
         call: reviewer.call ?? null, provider: reviewer.provider ?? finding.reviewer, model: reviewer.resolvedModel ?? reviewer.model ?? null,
         effort: reviewer.effort ?? null, arm: reviewer.arm, severity: finding.severity, serious: SERIOUS.has(finding.severity), lens: finding.lens,
         preexisting: Boolean(finding.preexisting), file: spot.file, line: finding.line ?? spot.line ?? null, title: finding.title, agreed: spot.reviewers.length,
-        decision: item.decision, reason: item.reason ?? null, spot: item.spot, partial: open > 0 || undefined,
+        decision: item.decision, reason: item.reason ?? null, report: group, spot: item.spot, partial: open > 0 || undefined,
       });
       count += 1;
     }
@@ -172,16 +174,15 @@ function findingRows(options) {
   if (!(days > 0)) usage("--since must be a positive number of days");
   const wanted = new Set(String(options.decision ?? "fixed").split(","));
   for (const decision of wanted) if (!DECISIONS.has(decision)) usage(`--decision takes ${[...DECISIONS].join(", ")}`);
-  // One T1 spot is one finding, however many lenses reported it (older events have no spot number).
-  const rows = new Map();
-  for (const event of latestTriage(readEvents({ since: Date.now() - days * 86_400_000 }))) {
-    if (!wanted.has(event.decision) || (options.front && event.front !== options.front) || (options.repo && event.repo !== options.repo)) continue;
-    const id = (event.source === "t1" ? ["t1", event.head, event.spot ?? `${event.file}:${event.line}`] : [event.call ?? event.provider, event.file, event.line, event.title]).join("\u0000");
-    const row = rows.get(id);
-    if (row) row.reporters.push(event.provider);
-    else rows.set(id, { ts: event.ts, front: event.front ?? null, repo: event.repo ?? null, source: event.source ?? "review", call: event.call ?? null, reporters: [event.provider], severity: event.severity ?? null, decision: event.decision, file: event.file ?? null, line: event.line ?? null, title: event.title ?? null, reason: event.reason ?? null });
-  }
-  return [...rows.values()];
+  // One row per reported finding. Lenses that reported the same T1 spot share a group,
+  // so the weekly pass counts it once (events from before the group have none).
+  return latestTriage(readEvents({ since: Date.now() - days * 86_400_000 }))
+    .filter((event) => wanted.has(event.decision) && (!options.front || event.front === options.front) && (!options.repo || event.repo === options.repo))
+    .map((event) => ({
+      ts: event.ts, front: event.front ?? null, repo: event.repo ?? null, head: event.head ?? null, source: event.source ?? "review",
+      call: event.call ?? null, provider: event.provider ?? null, group: event.report && event.spot ? `${event.report}:${event.spot}` : null,
+      severity: event.severity ?? null, decision: event.decision, file: event.file ?? null, line: event.line ?? null, title: event.title ?? null, reason: event.reason ?? null,
+    }));
 }
 
 function findings(options) {

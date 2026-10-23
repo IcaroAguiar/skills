@@ -533,6 +533,7 @@ try {
   // findings lists what was fixed, for spotting repeats; --decision widens it.
   assert.match(ledgerCli("findings").stdout, /review {2}high {2}fixed {2}a\.ts:3 {2}real bug\nreview-ledger: 1 finding\(s\)/);
   assert.deepEqual(JSON.parse(ledgerCli("findings", "--decision", "fixed,wrong", "--json").stdout).map((item) => [item.title, item.decision, item.source]), [["real bug", "fixed", "review"], ["nit", "wrong", "review"]], "one call's findings stay apart");
+  assert.equal(JSON.parse(ledgerCli("findings", "--json").stdout)[0].group, null, "a deep review finding has no T1 group");
   assert.equal(JSON.parse(ledgerCli("findings", "--repo", "nope", "--json").stdout).length, 0);
   assert.equal(ledgerCli("findings", "--decision", "maybe").status, 2);
   // Triage again to correct a decision: the newest one wins, nothing is counted twice.
@@ -593,7 +594,8 @@ try {
   assert.match(t1Triage.stdout, /2 T1 finding decision\(s\) from 1 spot\(s\)/);
   assert.deepEqual(events().filter((event) => event.type === "triage").map((event) => [event.source, event.provider, event.preexisting]), [["t1", "c-ok", true], ["t1", "c2-ok", true]]);
   const t1Finding = JSON.parse(ledgerCli("findings", "--decision", "irrelevant", "--json").stdout);
-  assert.deepEqual(t1Finding.map((item) => [item.source, item.reporters]), [["t1", ["c-ok", "c2-ok"]]], "a spot both lenses reported is one finding");
+  assert.deepEqual(t1Finding.map((item) => [item.source, item.provider]), [["t1", "c-ok"], ["t1", "c2-ok"]], "each lens's report stays, with its own severity and title");
+  assert.ok(t1Finding[0].group && t1Finding[0].group === t1Finding[1].group, "lenses on the same spot share a group");
   writeFileSync(t1Decisions, JSON.stringify([{ spot: 9, decision: "fixed" }]));
   assert.equal(ledgerCli("triage", "--t1", t1Json, "--decisions", t1Decisions).status, 2, "an unknown spot is a usage error");
   assert.equal(ledgerCli("untriaged").status, 0, "a T1 triage of every spot covers every lens's call");

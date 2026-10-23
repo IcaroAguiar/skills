@@ -29,13 +29,13 @@ entry per mechanism:
 ## Weekly pass
 
 1. Read the week's real findings with `scripts/review-ledger.mjs findings --since 7 --front <front> --json`. The command defaults to `fixed`.
-2. Group the findings by mechanism, not by wording. Count a finding reported by both T1 and the reviewer once. Merge each group into an existing entry when one matches.
+2. Group the findings by mechanism, not by wording. Rows that share a `group` are one T1 spot reported by several lenses: count them once, and take the highest severity among them. Count a finding that both T1 and the reviewer reported once too. Merge each group into an existing entry when one matches.
 3. Promote an entry when it has two occurrences, or one serious occurrence (P1, P2 or high) that a rule can catch without judgment.
 4. Pick the cheapest check that catches the mistake. Try these in order:
    1. a built-in rule of the repository's linter (oxlint, Biome, ESLint), switched on;
    2. a Semgrep rule in the repository's `.semgrep/`, with a rule test;
    3. a custom oxlint rule, when the pattern needs context that Semgrep lacks (the `install-anti-slop` plugin layout);
    4. a type or a test helper that makes the mistake unrepresentable.
-5. Prove the check works. It must flag the commit before the fix, and it must pass on the current default branch with no new suppressions. When it does not pass cleanly, fix the existing hits in the same PR or narrow the rule.
+5. Prove the check works. It must flag the commit before the fix (the row's `head`), and it must pass on the current default branch with no new suppressions. When it does not pass cleanly, fix the existing hits in the same PR or narrow the rule.
 6. When no rule can decide a pattern (a domain rule, a judgment), add one line to the repository's `REVIEW.md` so reviewers look for it, and mark the entry accordingly.
 7. Open each check as its own PR in that repository, through the normal review gate. The calibration only proposes: wait for the user's approval before opening one.
