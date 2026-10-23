@@ -19,7 +19,7 @@ Read [taste-profile.md](references/taste-profile.md) on every run. It is the use
 - **Redesign**: replace an existing interface's structure or look.
 - **Review**: audit evidence and issue a verdict without editing.
 - **Implement**: apply an approved or authorized design and prove it.
-- **Refine**: polish a sound interface (typography, spacing, surfaces, icons, motion, responsive behavior) without changing its product contract.
+- **Refine**: polish a sound interface (typography, spacing, surfaces, icons, motion, responsive behavior) without changing its product contract. Follow [refine.md](workflows/refine.md).
 - **Explore**: compare at most two credible directions on equivalent prototypes before production changes. Follow [explore.md](workflows/explore.md).
 - **Translate reference**: extract the functional relationships of a reference, then route to another branch. Follow [translate-reference.md](workflows/translate-reference.md).
 - **Capture preference**: turn a reference or comment into a candidate rule. Follow [preference-capture.md](references/preference-capture.md).
@@ -87,15 +87,15 @@ Follow the branch sequence in [workflows.md](references/workflows.md), or the wo
 
 Before delivering a design, a canvas, or an implementation, answer for each screen:
 
-- Could this screen belong to any app? Name what makes it this product's.
-- Is each table here because the work is comparison, or because it was the default?
+- Is this screen recognizably specific to this product and task? Name what makes it so.
+- Does every table here exist because the work is comparing records across the same attributes?
 - Does the signature element come from this domain, and is everything around it quiet?
 - Does each item show only its identity, its state, and one supporting line? A signature drawn inside the item, such as a cycle or a count on a node, belongs to the state, not to the line count.
-- Is there exactly one filled action in the page's base state? A sheet or dialog carries its own confirm; when the role's actions change with each record's state, the filled one is the role's most frequent decision and the rest are outline.
+- Does the page's base state have at most one filled action, placed on the decision the current state offers? A read-only state may have none. A sheet or dialog carries its own confirm; when the role's actions change with each record's state, the filled one is the role's most frequent decision and the rest are outline.
 
-A "no" or an unnamed answer sends the screen back to step 4 or step 6.
+A "no" or an answer without a named reason sends the screen back to step 4 or step 6.
 
-**Complete when:** every screen passes all five questions with a named reason.
+**Complete when:** every screen answers "yes" to all five questions with a named reason.
 
 ## 8. Prove and close
 
