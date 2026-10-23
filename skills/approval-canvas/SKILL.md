@@ -19,11 +19,12 @@ Decide what the user is approving, then say it back in one sentence before build
 ## Change on an existing screen
 
 1. **Current (H0) is the real screen.** Render it from the product itself, in this order of preference: (a) the real route or page component mounted in the canvas with its data hooks or API module mocked; (b) the real app running from a snapshot or worktree against a mock API; (c) a screenshot of the running app with the new block composed on top, labelled as such. A hand-built reproduction of the surroundings is a different screen: the user ends up judging the imitation (wrapping, spacing, missing details) instead of the change.
-2. **Proposal (H1) is H0 plus the requested change only.** Neighbouring blocks keep their real look, copy, order and spacing. Diff H0 against H1 at every captured width; any difference outside the changed block is a defect to fix before presenting.
+2. **Proposal (H1) is H0 plus the requested change only.** Neighbouring blocks keep their real look, copy, order and spacing. Diff H0 against H1 at every captured width. The affected region is the block's old and new positions plus the reflow they cause (content shifting up or down). Inside it, displacement is expected; anywhere else, and for any change of copy or styling in a neighbour, a difference is a defect to fix before presenting.
 3. **Variants.** When the user has not fixed the design, offer 2–3 variants of the block (placement, density, content) as `H1a`, `H1b`, `H1c`, each with one line on the trade-off. When they described the design, build that one.
 4. **The new block matches its neighbours**: same card shape, heading style, spacing and icon set as the blocks beside it.
-5. **Present** H0 and each variant side by side at 1440 and 390 px, plus the block's own states (loading, empty, error). Product files stay untouched until approval; a variant flag used to render the real app lives only in the snapshot or worktree.
-6. **Hand off** the approved variant as in step 8 of the area workflow.
+5. **Gate the block.** Run the `$design-direction` anti-generic gate on the changed block only, not on its surroundings. A block that fails goes back to step 3.
+6. **Present** H0 and each variant side by side at 1440 and 390 px, plus the block's own states (loading, empty, error). Product files stay untouched until approval; a variant flag used to render the real app lives only in the snapshot or worktree.
+7. **Hand off** the approved variant as in step 8 of the area workflow.
 
 ## Area redesign
 
