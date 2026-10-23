@@ -9,7 +9,7 @@ Shape every interface in two layers. **Discipline** is the floor: task, hierarch
 
 ## 1. Load the taste profile
 
-Read [taste-profile.md](references/taste-profile.md) on every run. It is the user's standing style and the verdicts behind it, so they never have to repeat it. A repository design document, an approved direction, or an explicit request overrides it for that scope.
+Read [taste-profile.md](references/taste-profile.md) on every run. It is the user's standing style and the verdicts behind it, so they never have to repeat it. A repository design document, an approved direction, or an explicit request overrides it for that scope. The verdict log is evidence of taste, not a catalog of answers: when it records an approved direction for the same screen, take the Refine branch from that direction; for any other screen, derive the expression from the work in step 4.
 
 **Complete when:** the profile is read and any repository-level override is named.
 
@@ -44,14 +44,14 @@ Required for Create, Redesign, Explore, and any request for a less generic or mo
 Work:              what the person does here, in one sentence
 Composition:       the model from composition-models.md that fits the work
 Metaphor:          what this screen is in the user's world
-Precedents:        three strong products that solved this kind of work, and what each contributes
+Precedents:        three strong products, including domain tools, that solved this kind of work, and the relationship each contributes
 Signature element: the one memorable form, born from the domain; everything else stays quiet
 Existing assets:   signatures the product already has that this screen keeps or extends
 ```
 
-Read [composition-models.md](references/composition-models.md), including its collection shapes, and [precedent-library.md](references/precedent-library.md) with [visual-references.md](references/visual-references.md) for research. Read [signature-elements.md](references/signature-elements.md) for the signature. When the work also defines a visual system, components, assets, or behavior end to end, follow [direction-sequence.md](workflows/direction-sequence.md).
+Read [composition-models.md](references/composition-models.md), including its collection shapes. Name precedents for the transferable relationship they show; open [precedent-library.md](references/precedent-library.md) and [visual-references.md](references/visual-references.md) and inspect the live product only when a claim depends on how that product looks today. Read [signature-elements.md](references/signature-elements.md) for the signature. When the work also defines a visual system, components, assets, or behavior end to end, follow [direction-sequence.md](workflows/direction-sequence.md).
 
-When two compositions remain credible, prototype both through Explore instead of averaging them.
+When two compositions remain credible, show both side by side instead of averaging them: as two wireframes in a proposal, or as equivalent prototypes through Explore before production changes.
 
 **Complete when:** every screen has all six lines, each line traces to the task or domain, and no screen takes the framed-table fallback while its work is something other than comparing similar records.
 
@@ -66,6 +66,7 @@ Load the modules for the elements you change or the problems you observe. For di
 | Expressive defaults to refuse | [expression-antipatterns.md](references/expression-antipatterns.md) |
 | Interactive UI, forms, input, or responsive behavior | [accessibility-and-usability.md](references/accessibility-and-usability.md) |
 | Native mobile app, phone or tablet flow, device runtime | [mobile-interfaces.md](references/mobile-interfaces.md) and [mobile-art-direction.md](references/mobile-art-direction.md) |
+| Responsive web at phone widths | [mobile-art-direction.md](references/mobile-art-direction.md) |
 | Mobile refinement or premium finish | [mobile-craft.md](references/mobile-craft.md) |
 | Web direction, motion, or feedback | [web-art-direction.md](references/web-art-direction.md) and [motion-and-feedback.md](references/motion-and-feedback.md) |
 | Status, feedback, alerts, metadata, or async behavior | [states-and-feedback.md](references/states-and-feedback.md) |
@@ -89,8 +90,8 @@ Before delivering a design, a canvas, or an implementation, answer for each scre
 - Could this screen belong to any app? Name what makes it this product's.
 - Is each table here because the work is comparison, or because it was the default?
 - Does the signature element come from this domain, and is everything around it quiet?
-- Does each item show only its identity, its state, and one supporting line?
-- Is there exactly one filled action on the screen?
+- Does each item show only its identity, its state, and one supporting line? A signature drawn inside the item, such as a cycle or a count on a node, belongs to the state, not to the line count.
+- Is there exactly one filled action in the page's base state? A sheet or dialog carries its own confirm; when the role's actions change with each record's state, the filled one is the role's most frequent decision and the rest are outline.
 
 A "no" or an unnamed answer sends the screen back to step 4 or step 6.
 

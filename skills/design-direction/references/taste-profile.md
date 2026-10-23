@@ -28,7 +28,8 @@ without discipline reads as noise. The user has rejected both.
 - **Page anatomy.** One page title, one sentence of description, metadata as
   plain text, actions on the right. No strip of metric cards above the content.
 - **Language.** Sentence case, the product's own vocabulary, active voice. A
-  jargon term (D0, CEUA) appears with a plain-language label.
+  jargon term (D0, CEUA) carries its plain-language label at the point of use,
+  not in a distant legend.
 - **Same idea on mobile.** At 390 px the composition adapts (columns stack,
   rails become indented trees, timelines go under the item) without horizontal
   scroll and without a separate card design.
