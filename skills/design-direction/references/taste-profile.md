@@ -30,8 +30,10 @@ without discipline reads as noise. The user has rejected both.
 - **Language.** Sentence case, the product's own vocabulary, active voice. A
   jargon term (D0, CEUA) carries its plain-language label at the point of use,
   not in a distant legend.
-- **Fidelity to what was approved.** The approved artifact is the spec down to
-  borders, dividers, fonts, sizes, and theme. One extra frame line, a bordered
+- **Fidelity to what was approved.** This binds the implementation, not the
+  proposal: proposals stay free to invent, as long as every new look is
+  declared. Once approved, the artifact is the spec down to borders, dividers,
+  fonts, sizes, and theme. One extra frame line, a bordered
   badge where a filled pill was approved, or a fallback font reads as a
   different design. Compare in the same theme and shell, side by side, before
   calling the work done; any substitution goes back to the user.

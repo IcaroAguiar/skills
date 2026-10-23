@@ -1,4 +1,5 @@
 import './canvas.css';
+import './proposed.css';
 import {
   AppShell,
   AppShellHeader,

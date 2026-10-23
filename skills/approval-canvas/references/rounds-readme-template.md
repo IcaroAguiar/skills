@@ -39,9 +39,9 @@ A tela e o estado vêm do hash: `#P4`, `#P4~rascunho`. Use `?tema=escuro` para o
 
 ## Mudanças no pacote de UI
 
-Aparências que a tela aprovada usa e que o pacote de UI ainda não produz. Cada item é implementado no próprio pacote e vale para todos os consumidores. O usuário aprova a lista junto com as telas.
+Propostas do canvas que o pacote de UI ainda não tem: visuais em `src/proposed.css` e componentes em `src/proposed/`. O nome na primeira coluna é o mesmo do marcador `/* proposta: Nome */` ou do arquivo, e o `check-fidelity.mjs` confere. O usuário aprova a lista junto com as telas; cada item aprovado é implementado no próprio pacote e vale para todos os consumidores.
 
-| Componente | Hoje | Proposto | Telas afetadas |
+| Proposta | Hoje no pacote | Proposto | Telas afetadas |
 | --- | --- | --- | --- |
 | … | … | … | … |
 

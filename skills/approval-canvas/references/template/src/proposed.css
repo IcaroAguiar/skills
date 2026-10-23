@@ -1,0 +1,12 @@
+/*
+ * Propostas: aparências que o pacote de UI ainda não tem e que a tela precisa.
+ * Proponha à vontade. Cada bloco começa com um marcador e o nome da proposta,
+ * e o nome entra no README em "Mudanças no pacote de UI":
+ *
+ *   /* proposta: Divisória leve da lista *\/
+ *   .minha-classe { ... }
+ *
+ * Componentes ou variantes novos ficam em src/proposed/<Nome>.tsx, com o mesmo
+ * registro no README. Na implementação, cada proposta aprovada vira mudança no
+ * pacote de UI (variante tipada e nomeada), não um retoque local no app.
+ */

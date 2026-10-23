@@ -1,7 +1,10 @@
-// Garante que o canvas não restiliza o pacote de UI: o que o usuário aprova
-// precisa ser o que o produto consegue mostrar com os componentes reais.
-// Uso: node check-fidelity.mjs   (sai com 1 e lista o que precisa ir para o pacote de UI)
-import { readdir, readFile } from 'node:fs/promises';
+// Garante que toda diferença entre o canvas e o pacote de UI é declarada.
+// A proposta é livre: visual, variante ou componente novo podem existir, desde que
+// fiquem em src/proposed.css (blocos marcados com /* proposta: Nome */) ou em
+// src/proposed/, e que cada nome apareça no README em "Mudanças no pacote de UI".
+// Proibido é a diferença escondida: retoque no canvas.css ou <style> embutido.
+// Uso: node check-fidelity.mjs   (sai com 1 e lista o que falta declarar)
+import { access, readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -131,7 +134,7 @@ const css = await readFile(`${here}src/canvas.css`, 'utf8');
 try {
   for (const selector of selectorsOf(css)) {
     if (!FRAME_SELECTORS.has(selector)) {
-      problems.push(`src/canvas.css: "${selector}" muda a aparência fora da moldura do canvas`);
+      problems.push(`src/canvas.css: "${selector}" muda a aparência fora da moldura; mova para src/proposed.css sob /* proposta: Nome */`);
     }
   }
 } catch (error) {
@@ -141,14 +144,59 @@ try {
 for (const file of await sourceFiles(`${here}src`)) {
   const source = await readFile(file, 'utf8');
   if (/<style[\s>]/.test(source)) {
-    problems.push(`${file.slice(here.length)}: <style> embutido restiliza componentes`);
+    problems.push(`${file.slice(here.length)}: <style> embutido é diferença escondida; mova para src/proposed.css`);
+  }
+}
+
+const exists = (path) => access(path).then(() => true, () => false);
+const proposals = [];
+
+// src/proposed.css: visuais novos, cada bloco sob um marcador /* proposta: Nome */.
+const proposedCss = `${here}src/proposed.css`;
+if (await exists(proposedCss)) {
+  const text = await readFile(proposedCss, 'utf8');
+  const markers = [...text.matchAll(/\/\*\s*proposta:\s*([^*]+?)\s*\*\//g)];
+  const beforeFirst = markers.length ? text.slice(0, markers[0].index) : text;
+  try {
+    if (selectorsOf(beforeFirst).length) {
+      problems.push('src/proposed.css: regra antes do primeiro /* proposta: Nome */; marque cada bloco com o nome da proposta');
+    }
+    selectorsOf(text);
+  } catch (error) {
+    problems.push(`src/proposed.css: ${error.message}`);
+  }
+  proposals.push(...markers.map((marker) => marker[1].trim()));
+}
+
+// src/proposed/: componentes e variantes novos; o nome do arquivo é o nome da proposta.
+const proposedDir = `${here}src/proposed`;
+if (await exists(proposedDir)) {
+  for (const entry of await readdir(proposedDir)) {
+    const match = entry.match(/^(.+)\.(tsx|ts)$/);
+    if (match) proposals.push(match[1]);
+  }
+}
+
+if (proposals.length) {
+  const readmePath = `${here}README.md`;
+  const readme = (await exists(readmePath)) ? await readFile(readmePath, 'utf8') : '';
+  const section = readme.split(/^## /m).find((part) => part.startsWith('Mudanças no pacote de UI')) ?? '';
+  for (const name of proposals) {
+    if (!section.includes(name)) {
+      problems.push(`proposta "${name}" não está no README em "Mudanças no pacote de UI"`);
+    }
   }
 }
 
 if (problems.length) {
-  console.error('O canvas restiliza o pacote de UI. Leve cada item ao pacote de UI ou liste-o');
-  console.error('no README em "Mudanças no pacote de UI" e mostre ao usuário antes da aprovação:');
+  console.error('O canvas tem diferenças em relação ao pacote de UI que não estão declaradas.');
+  console.error('Proponha à vontade, mas em src/proposed.css ou src/proposed/, e liste cada');
+  console.error('proposta no README em "Mudanças no pacote de UI" para o usuário aprovar:');
   for (const problem of problems) console.error(`- ${problem}`);
   process.exit(1);
 }
-console.log('Fidelidade: o canvas só usa a aparência do pacote de UI.');
+console.log(
+  proposals.length
+    ? `Fidelidade: ${proposals.length} proposta(s) declarada(s) (${proposals.join(', ')}); o resto usa o pacote de UI.`
+    : 'Fidelidade: o canvas usa só a aparência do pacote de UI.',
+);
