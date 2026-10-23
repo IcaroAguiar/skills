@@ -185,6 +185,22 @@ test("proposals: valid CSS at-rules are accepted and broken CSS is rejected", as
   }
 });
 
+test("proposals: @import is caught in any case and through CSS escapes, before or after a marker", async () => {
+  for (const imp of ['@IMPORT "./x.css";', '@\\69mport "./x.css";', '@\\69 mport "./x.css";', '@Im\\port "./x.css";']) {
+    for (const proposedCss of [`${imp}\n/* proposta: A */\n.x { color: red; }\n`, `/* proposta: A */\n${imp}\n.x { color: red; }\n`]) {
+      await withProposals({ proposedCss, readme: listed("A") }, (result) => {
+        assert.equal(result.status, 1, proposedCss);
+        assert.ok(result.stderr.includes("@import"), `${proposedCss}\n${result.stderr}`);
+      });
+    }
+  }
+});
+
+test("proposals: escaped braces in selectors are valid CSS", async () => {
+  await withProposals({ proposedCss: "/* proposta: A */\n.\\{ { color: red; }\n.\\7b x { color: blue; }\n", readme: listed("A") }, (result) =>
+    assert.equal(result.status, 0, result.stderr));
+});
+
 test("D: capture jobs cover each requested state, theme and width with stable names", async () => {
   const { captureJobs } = await import(pathToFileURL(join(template, "capture-jobs.mjs")));
   const screens = [{ id: "A1", states: ["vazio"] }, { id: "B1", states: [] }];

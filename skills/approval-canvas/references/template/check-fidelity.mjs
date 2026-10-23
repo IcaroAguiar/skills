@@ -164,6 +164,20 @@ function proposalStructure(text) {
       const end = text.indexOf('*/', i + 2);
       if (end < 0) throw new Error('comentário não terminado');
       i = end + 1;
+    } else if (char === '\\') {
+      // Escape de CSS: \7b (hex, com um espaço opcional) ou \{ (caractere literal).
+      // Vale como caractere comum: nunca abre bloco e entra decodificado na checagem.
+      const hex = text.slice(i + 1).match(/^[0-9a-fA-F]{1,6}/);
+      let decoded;
+      if (hex) {
+        decoded = String.fromCodePoint(Number.parseInt(hex[0], 16));
+        i += hex[0].length;
+        if (/\s/.test(text[i + 1] ?? '')) i += 1;
+      } else {
+        if (i + 1 >= text.length) throw new Error('escape no fim do arquivo');
+        decoded = text[++i];
+      }
+      if (depth === 0) outside += decoded;
     } else if (char === '"' || char === "'") {
       let j = i + 1;
       while (j < text.length && text[j] !== char) j += text[j] === '\\' ? 2 : 1;
@@ -187,7 +201,7 @@ if (await exists(proposedCss)) {
   const markers = [...text.matchAll(/\/\*\s*proposta:\s*([^*]+?)\s*\*\//g)];
   try {
     proposalStructure(text);
-    if (/@import\b/.test(proposalStructure(text))) {
+    if (/@import\b/i.test(proposalStructure(text))) {
       problems.push('src/proposed.css: @import esconde estilos sem declarar; escreva a proposta aqui, sob o marcador');
     }
     const beforeFirst = markers.length ? text.slice(0, markers[0].index) : text;
