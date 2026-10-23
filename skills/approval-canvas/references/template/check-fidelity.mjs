@@ -155,7 +155,9 @@ const proposals = [];
 // A proposta pode usar qualquer CSS válido (@keyframes, @supports, @font-face…);
 // aqui só se confere a estrutura e que nada fique fora de um marcador ou escondido
 // num @import.
-function proposalStructure(text) {
+function proposalStructure(source) {
+  // Pré-processamento do CSS: CRLF, CR e FF viram uma única quebra de linha.
+  const text = source.replace(/\r\n|\r|\f/g, '\n');
   let depth = 0;
   let outside = '';
   for (let i = 0; i < text.length; i++) {

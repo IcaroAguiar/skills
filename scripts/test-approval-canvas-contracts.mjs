@@ -186,7 +186,7 @@ test("proposals: valid CSS at-rules are accepted and broken CSS is rejected", as
 });
 
 test("proposals: @import is caught in any case and through CSS escapes, before or after a marker", async () => {
-  for (const imp of ['@IMPORT "./x.css";', '@\\69mport "./x.css";', '@\\69 mport "./x.css";', '@Im\\port "./x.css";']) {
+  for (const imp of ['@IMPORT "./x.css";', '@\\69mport "./x.css";', '@\\69 mport "./x.css";', '@\\69\r\nmport "./x.css";', '@\\69\fmport "./x.css";', '@Im\\port "./x.css";']) {
     for (const proposedCss of [`${imp}\n/* proposta: A */\n.x { color: red; }\n`, `/* proposta: A */\n${imp}\n.x { color: red; }\n`]) {
       await withProposals({ proposedCss, readme: listed("A") }, (result) => {
         assert.equal(result.status, 1, proposedCss);
