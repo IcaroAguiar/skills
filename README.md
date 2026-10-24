@@ -42,12 +42,10 @@ Repository instructions define catalogue maintenance. The repository is the cano
 | --- | --- |
 | `approval-canvas` | Approve a redesign on a static prototype built with the project's real components before product code changes |
 | `code-review` | Gate a finished pull request: deterministic pre-review, a fast pre-pass, then one independent reviewer |
-| `codex-review` | Get that independent review (and accepted fixes) from an OpenAI model through the Codex CLI |
 | `codebase-guardrails` | Keep a codebase healthy when agents write most of the code and tests |
 | `codebase-health` | Run an evidence-based repository check-up that ends in a sequenced roadmap |
 | `design-direction` | Art-direct and review interfaces: disciplined structure plus a domain-specific expression per screen |
 | `exploratory-qa` | Test what shipped the way people use it, with parallel persona agents |
-| `github-runner-ops` | Provision and operate GitHub Actions self-hosted runners shared by several projects |
 | `pr-demo-video` | Record a short captioned demo of a change running in the real app |
 | `record-real-dev-e2e` | Record real application workflows when a video is part of the evidence |
 | `task-closeout` | Close a task with a reviewable delivery and every workspace artifact accounted for |
