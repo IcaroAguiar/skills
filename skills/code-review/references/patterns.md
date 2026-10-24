@@ -1,9 +1,13 @@
 # Recurring findings become local checks
 
-A finding that reviewers keep making costs a model call every time. Once a
-deterministic check catches it, T0 finds it for free, before any model runs:
-T0 runs the repository's lint scripts and its `.semgrep/` rules
-([t0.md](t0.md)).
+A finding that reviewers keep making costs a model call every time, and the
+cheapest fix is to stop the mistake before review. Three layers, cheapest first:
+
+1. **Prevent.** The author reads the pitfall before writing the code.
+2. **Make it impossible.** A type, a helper, or an invariant test makes the mistake unrepresentable or fails it in the unit's own tests.
+3. **Detect.** A deterministic check finds it for free, before any model runs. T0 runs the repository's lint scripts and its `.semgrep/` rules ([t0.md](t0.md)).
+
+Review stays the last line of defense, not the first.
 
 ## Catalog
 
@@ -23,7 +27,8 @@ entry per mechanism:
 - `candidate`;
 - `proposed <repo> PR #<n> (<rule>)`;
 - `enforced <repo>: <rule>`;
-- `review hint <repo>: REVIEW.md`;
+- `pitfall <repo>: <AGENTS.md section or docs/solutions entry>`;
+- `structural <repo> PR #<n> (<type, helper or test>)`;
 - `not checkable: <why>`.
 
 ## Weekly pass
@@ -37,5 +42,8 @@ entry per mechanism:
    3. a custom oxlint rule, when the pattern needs context that Semgrep lacks (the `install-anti-slop` plugin layout);
    4. a type or a test helper that makes the mistake unrepresentable.
 5. Prove the check works. It must flag the defective code, and it must pass on the current default branch with no new suppressions. Look for the defect at the row's `head` first, and confirm it is really there: a review of uncommitted changes records a head that never contained it. When no commit has it, write the smallest example from the finding and make it the rule's test. When it does not pass cleanly, fix the existing hits in the same PR or narrow the rule.
-6. When no rule can decide a pattern (a domain rule, a judgment), add one line to the repository's `REVIEW.md` so reviewers look for it, and mark the entry accordingly.
-7. Open each check as its own PR in that repository, through the normal review gate. The calibration only proposes: wait for the user's approval before opening one.
+6. When no rule can decide a pattern (a domain rule, a judgment), prevent it instead:
+   1. Record it where the repository's agents read before they write code. When the repository's `AGENTS.md` defines a lessons mechanism (such as `docs/solutions/`), follow its format and update a matching entry instead of adding one. Otherwise, add one line to a "Known pitfalls" section of `AGENTS.md`: the rule, then where it was seen. The `orchestrate` brief quotes these pitfalls to every worker.
+   2. At two or more occurrences, also propose a type, a helper or an invariant test that makes the mistake impossible, and point the pitfall to it.
+   3. `REVIEW.md` is optional, as a reminder for reviewers. It never replaces the pitfall.
+7. Open each check as its own PR in that repository, through the normal review gate. This covers checks and pitfalls alike. The calibration only proposes: wait for the user's approval before opening one.
