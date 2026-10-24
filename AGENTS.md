@@ -1,6 +1,6 @@
 # Catalog maintenance
 
-`IcaroAguiar/agent-skills` is the canonical public source for reusable personal agent skills.
+`IcaroAguiar/skills` is the canonical public source for reusable personal agent skills.
 
 - For a reusable skill, create or update it in `skills/<skill-name>/` here; do not make a local harness copy the only source of truth.
 - Before any push, run `node scripts/validate-skills.mjs`, inspect the diff, and ensure no credentials, private paths, customer data, or machine-specific setup are being published.

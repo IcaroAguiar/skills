@@ -24,10 +24,10 @@ try {
   cpSync(join(sourceRoot, "scripts"), join(fixtureRoot, "scripts"), { recursive: true });
   cpSync(join(sourceRoot, ".github"), join(fixtureRoot, ".github"), { recursive: true });
   mkdirSync(join(fixtureRoot, "skills"));
-  for (const name of ["antigravity-executor", "design-direction", "record-real-dev-e2e", "summarize"]) {
+  for (const name of ["design-direction", "record-real-dev-e2e"]) {
     cpSync(join(sourceRoot, "skills", name), join(fixtureRoot, "skills", name), { recursive: true });
   }
-  for (const name of ["README.md", "GLOSSARY.md", "AGENTS.md"]) {
+  for (const name of ["README.md", "AGENTS.md"]) {
     cpSync(join(sourceRoot, name), join(fixtureRoot, name));
   }
 
@@ -45,8 +45,8 @@ try {
   run(1, new RegExp(`README.md: contains retired skill identifier ${retired}`));
   writeFileSync(readme, originalReadme);
 
-  rmSync(join(fixtureRoot, "skills", "summarize"), { recursive: true });
-  run(1, /summarize: required replacement skill is missing/);
+  rmSync(join(fixtureRoot, "skills", "record-real-dev-e2e"), { recursive: true });
+  run(1, /record-real-dev-e2e: required replacement skill is missing/);
 
   console.log("PASS catalogue validator negative contracts");
 } finally {
