@@ -16,6 +16,7 @@ const USAGE = `usage: review-ledger triage --t1 <report> --decisions <file|->
                             [--input <tokens>] [--output <tokens>] [--cache-read <tokens>] [--cache-write <tokens>]
        review-ledger stats [--since <days>] [--role <role>] [--json]
        review-ledger untriaged [--since <days>] [--repo <name>]
+       review-ledger findings [--since <days>] [--front <name>] [--repo <name>] [--decision <list>] [--json]
        review-ledger limits
        review-ledger clear <provider-id> --front <name>
 
@@ -27,6 +28,8 @@ decision is one of: ${[...DECISIONS].join(", ")}. Triage again to correct a deci
 the newest decision for the same finding replaces the earlier one in stats. A review
 that found nothing is triaged too, with an empty array. untriaged lists the answered
 T1 and review calls (default: last 14 days) nobody triaged yet, and exits 1 when there is one.
+findings lists triaged findings (default: last 7 days, decision fixed; --decision takes a
+comma list) with their newest decision, to find the ones that keep coming back.
 Ledger: ${ledgerPath()}`;
 
 function usage(message) {
@@ -78,6 +81,8 @@ function triageT1(options) {
   // The lens calls count as triaged only once every spot has a decision.
   const open = report.findings.length - new Set(decisions.map((item) => item.spot)).size;
   if (!open) for (const reviewer of report.reviewers) if (reviewer.call) appendEvent({ type: "triaged", call: reviewer.call, repo: report.repo, findings: decisions.length });
+  // Shared by every lens of this report and by a later re-triage of it.
+  const group = report.reviewers.map((reviewer) => reviewer.call).filter(Boolean).sort()[0] ?? newId();
   let count = 0;
   for (const [index, item] of decisions.entries()) {
     const spot = spots[index];
@@ -88,7 +93,7 @@ function triageT1(options) {
         call: reviewer.call ?? null, provider: reviewer.provider ?? finding.reviewer, model: reviewer.resolvedModel ?? reviewer.model ?? null,
         effort: reviewer.effort ?? null, arm: reviewer.arm, severity: finding.severity, serious: SERIOUS.has(finding.severity), lens: finding.lens,
         preexisting: Boolean(finding.preexisting), file: spot.file, line: finding.line ?? spot.line ?? null, title: finding.title, agreed: spot.reviewers.length,
-        decision: item.decision, reason: item.reason ?? null, partial: open > 0 || undefined,
+        decision: item.decision, reason: item.reason ?? null, report: group, spot: item.spot, partial: open > 0 || undefined,
       });
       count += 1;
     }
@@ -156,14 +161,42 @@ const percentile = (values, p) => {
   return sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
 };
 
+// A finding triaged twice counts once, with its newest decision.
+function latestTriage(events) {
+  const latest = new Map();
+  for (const event of events) if (event.type === "triage") latest.set([event.call ?? event.provider, event.file, event.line, event.title].join("\u0000"), event);
+  return [...latest.values()];
+}
+
+// The raw material for turning a repeated finding into a local check (references/patterns.md).
+function findingRows(options) {
+  const days = Number(options.since ?? 7);
+  if (!(days > 0)) usage("--since must be a positive number of days");
+  const wanted = new Set(String(options.decision ?? "fixed").split(","));
+  for (const decision of wanted) if (!DECISIONS.has(decision)) usage(`--decision takes ${[...DECISIONS].join(", ")}`);
+  // One row per reported finding. Lenses that reported the same T1 spot share a group,
+  // so the weekly pass counts it once (events from before the group have none).
+  return latestTriage(readEvents({ since: Date.now() - days * 86_400_000 }))
+    .filter((event) => wanted.has(event.decision) && (!options.front || event.front === options.front) && (!options.repo || event.repo === options.repo))
+    .map((event) => ({
+      ts: event.ts, front: event.front ?? null, repo: event.repo ?? null, head: event.head ?? null, source: event.source ?? "review",
+      call: event.call ?? null, provider: event.provider ?? null, group: event.report && event.spot ? `${event.report}:${event.spot}` : null,
+      severity: event.severity ?? null, decision: event.decision, file: event.file ?? null, line: event.line ?? null, title: event.title ?? null, reason: event.reason ?? null,
+    }));
+}
+
+function findings(options) {
+  const rows = findingRows(options);
+  if (options.json) return console.log(JSON.stringify(rows, null, 2));
+  for (const row of rows) console.log([String(row.ts ?? "").slice(0, 10), row.front ?? "-", row.repo ?? "-", row.source, row.severity ?? "-", row.decision, row.file ? `${row.file}${row.line ? `:${row.line}` : ""}` : "-", row.title ?? "-"].join("  "));
+  console.log(`review-ledger: ${rows.length} finding(s)`);
+}
+
 function stats(options) {
   const days = Number(options.since ?? 30);
   if (!(days > 0)) usage("--since must be a positive number of days");
   const all = readEvents({ since: Date.now() - days * 86_400_000 });
-  // A finding triaged twice counts once, with its newest decision.
-  const latest = new Map();
-  for (const event of all) if (event.type === "triage") latest.set([event.call ?? event.provider, event.file, event.line, event.title].join("\u0000"), event);
-  const kept = new Set(latest.values());
+  const kept = new Set(latestTriage(all));
   const events = all.filter((event) => event.type !== "triage" || kept.has(event));
   const key = (event) => [event.role ?? event.source, event.provider, event.resolvedModel ?? event.model ?? "?", event.effort ?? "-", event.arm ? "A/B" : ""].join("\u0000");
   const rows = new Map();
@@ -244,6 +277,7 @@ if (command === "clear") {
   } else if (command === "record") record(options);
   else if (command === "stats") stats(options);
   else if (command === "untriaged") untriaged(options);
+  else if (command === "findings") findings(options);
   else if (command === "limits") limits();
   else usage(`unknown command ${command}`);
 }

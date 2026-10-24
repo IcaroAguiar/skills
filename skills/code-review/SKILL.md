@@ -127,9 +127,11 @@ by number, review findings by call id; `[]` when a review found nothing).
 Before the final report, `scripts/review-ledger.mjs untriaged --repo <repo>` must
 print no call: it exits 1 while an answered T1 or review call has no decisions. Those decisions are the acted-on rate
 that tells which model and effort are worth their cost; `review-ledger stats`
-reads it back. When the same kind of finding keeps coming back, move it into
-`REVIEW.md`, a T0 rule or a check instead of finding it again. When a bug
-escapes review, add the change as a `review-eval` case.
+reads it back. When the same kind of finding keeps coming back, turn it into a
+lint rule, a T0 Semgrep rule or a `REVIEW.md` line instead of finding it again:
+`review-ledger findings` lists the fixed findings, and
+[references/patterns.md](references/patterns.md) keeps the catalog and the
+weekly pass. When a bug escapes review, add the change as a `review-eval` case.
 
 ## Delta review
 
