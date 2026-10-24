@@ -53,8 +53,11 @@ allowed only when the brief or the domain earns it:
 
 - same-size cards of icon, heading, and text as the page structure;
 - a hero metric (big number, small label, supporting stats) as the opening;
-- gradient text, decorative glass or blur, colored side borders thicker than
-  1px on cards or alerts, zero-blur offset shadows;
+- gradient text, decorative glass or blur, zero-blur offset shadows;
+- an accent-colored side stripe or tinted outline marking the selected, next,
+  recommended, or "your turn" item, or a callout. This one is banned, not
+  merely suspect: the user rejected it on sight as AI-looking. Use a neutral
+  surface lift, text weight, and a text label instead;
 - sparklines, rings, or soft rounded rectangles standing in for content;
 - monospace as a "technical" costume instead of for codes, data, or measures;
 - emoji or Unicode glyphs in place of the icon system;
