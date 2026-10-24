@@ -74,7 +74,7 @@ node <this-skill>/scripts/review-run.mjs --role review -C <repo> --base <base-sh
 
 If the current context authored or fixed the change, dispatch exactly one fresh
 independent reviewer with this skill and the fixed diff. When the local policy
-names the reviewer (for example Codex through `codex-review`), use that one, on
+names the reviewer (for example an OpenAI model through the Codex CLI), use that one, on
 the account that owns the repository, at the starting effort from T0's route.
 Pass the author's model as `--author-model`, so a fallback never lands on it.
 If the current context is already that reviewer, review directly. Never create

@@ -101,7 +101,7 @@ const LEVELS = ["low", "medium", "high", "xhigh", "max"];
 const MAX_INLINE_DIFF = 400 * 1024;
 
 // T0's route for exactly this tree, when it exists, gives the starting effort,
-// following codex-review's table: a delta one level below the full review, a fix
+// following the reviewer effort table: a delta one level below the full review, a fix
 // at high (medium when the route says the change is docs, tests or UI).
 function routeEffort(root, headSha, { role, resuming }) {
   const dirty = git(root, ["status", "--porcelain"]).trim().length > 0;
