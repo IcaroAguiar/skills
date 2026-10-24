@@ -25,6 +25,14 @@ without discipline reads as noise. The user has rejected both.
   panel or an overflow menu.
 - **State always carries text.** At most one badge per item, omitted when the
   section already says the state. Color never carries meaning alone.
+- **Emphasis without colored borders.** Never mark the selected, focused,
+  next, recommended, or "your turn" item, or a callout, with an accent-colored
+  border: no side stripe (`border-l-2 border-primary`, `before:` bars) and no
+  tinted outline (`border-primary/50`, `ring-primary/15`). The user reads it as
+  AI-generated. Mark emphasis with a neutral surface lift (the row or item gets
+  the muted surface), a stronger text weight, and, when the meaning needs words,
+  a text label ("Próximo da fila", "Sua vez"). A callout is an icon plus text.
+  Keyboard focus rings stay; they are accessibility, not emphasis.
 - **Page anatomy.** One page title, one sentence of description, metadata as
   plain text, actions on the right. No strip of metric cards above the content.
 - **Language.** Sentence case, the product's own vocabulary, active voice. A
@@ -71,3 +79,5 @@ a screen, and update the rules above when a pattern repeats.
 | 2026-10-23 | Researcher validation queue, organizations, lab pipeline, and animal requests redone as framed tables | Rejected: "área genérica com tabela e lista", "pouco criativo", "ruidoso" | One layout for every screen is the failure mode; it erased an existing passport metaphor |
 | 2026-10-23 | Same screens redone as passport queue with checklist strip, org chart, stage pipeline, delivery timeline with the breeding cycle | "Excelente" / "Muito bom e criativo" | Task → metaphor → precedents → one signature element produces the house style; keep complexity in check |
 | 2026-10-23 | Platform redesign as implemented, compared with the approved canvas | "Uma borda a mais"; "por que não conseguimos perfeição nos detalhes?" | Detail parity is part of the approval: a shared empty state and a decision tile drew boxes the canvas did not have, the app's global CSS (which the canvas never loaded) restyled table headers and badges, a reused badge added a border, and fonts differed. Start the canvas from the product's baseline and check side by side in the same conditions |
+| 2026-10-24 | Capacity queues (prequalification, plans, conformity) reusing the candidate-queue passport | "Se for igual, vai causar confusão"; "telas muito parecidas" | A metaphor belongs to one task. Screens that sit side by side need distinct shapes: a rule matrix, a stage board, a review inbox |
+| 2026-10-24 | Review inbox with an accent side border on the highlighted row | "Há muito tempo quero dizer, não gosto dessa borda colorida… tem muita cara de IA" | Accent stripes and tinted outlines as emphasis are banned; use a neutral surface lift, weight, and a text label |

@@ -47,7 +47,25 @@ try {
     await page.goto(`${url}?tema=${job.theme}&c=${name}#${job.id}${job.state ? `~${job.state}` : ''}`, { waitUntil: 'networkidle' });
     await page.locator('h1').first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => errors.push('sem h1'));
     await page.evaluate(() => document.fonts.ready);
-    await page.waitForTimeout(400);
+    // Espera a página parar de mexer: animações de layout (ex.: sidebar abrindo) distorcem a captura.
+    const settle = () => page.evaluate(async () => {
+      await Promise.all(document.getAnimations().map((a) => a.finished.catch(() => null)));
+      let last = '';
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        const now = [...document.querySelectorAll('[data-sidebar="sidebar"], main, h1')].map((el) => { const r = el.getBoundingClientRect(); return `${r.left},${r.width}`; }).join(';');
+        if (now === last) return;
+        last = now;
+      }
+    });
+    await settle();
+    // fullPage estica a janela no meio da captura e reanima a casca; estique antes e espere de novo.
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    if (height > 900) {
+      await page.setViewportSize({ width, height });
+      await settle();
+    }
+    await page.waitForTimeout(200);
     const overflow = await page.evaluate(() => (document.documentElement.scrollWidth > innerWidth + 1 ? [`Página ${document.documentElement.scrollWidth}px > ${innerWidth}px`] : []));
     await page.screenshot({ path: `${output}/${name}.png`, fullPage: true });
     report.push({ name, errors: [...errors], overflow });
