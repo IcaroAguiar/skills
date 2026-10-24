@@ -199,7 +199,7 @@ function score(entry, report) {
   };
 }
 
-function summarize(results, config) {
+function summarizeResults(results, config) {
   const mine = results.filter((result) => result.config === config);
   const clean = mine.filter((result) => result.noise !== null);
   const expected = mine.reduce((sum, result) => sum + result.expected, 0);
@@ -238,7 +238,7 @@ async function runAll(options) {
   } finally {
     if (!options.keep) rmSync(work, { recursive: true, force: true });
   }
-  const summaries = options.configs.map((config) => summarize(results, config.name));
+  const summaries = options.configs.map((config) => summarizeResults(results, config.name));
   printTable(results, summaries);
   if (options.json) writeReport(options.json, { tool: "review-eval", cases: options.cases, results: results.map(({ report, ...rest }) => rest), summaries });
   return results.every((result) => result.status !== "ok") ? 1 : 0;
