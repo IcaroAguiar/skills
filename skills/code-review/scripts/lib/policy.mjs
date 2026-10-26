@@ -185,6 +185,13 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
   });
 }
 
+// The change's reviewable size from T0's route, recorded on every call so the
+// calibration can compare review time and findings by size (references/pr-size.md).
+export function diffSize(route) {
+  if (!route) return null;
+  return { lines: route.reviewLines ?? route.changedLines ?? null, files: route.reviewFiles ?? null };
+}
+
 // Runs the first available candidate, falling back on limits, logins and transient
 // failures (each transient one retried once first). `error` and `timeout` end the
 // chain. Every attempt lands in the ledger. Returns the final attempt plus history.
@@ -196,13 +203,6 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
 //
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
-// The change's reviewable size from T0's route, recorded on every call so the
-// calibration can compare review time and findings by size (references/pr-size.md).
-export function diffSize(route) {
-  if (!route) return null;
-  return { lines: route.reviewLines ?? route.changedLines ?? null, files: route.reviewFiles ?? null };
-}
-
 export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, unfit = () => null, onAttempt = () => {} }) {
   let list = candidates(front, role, { slot, authorModel, headSha, cooled: cooldowns() });
   if (resume) {

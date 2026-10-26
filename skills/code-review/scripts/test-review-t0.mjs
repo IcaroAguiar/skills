@@ -257,7 +257,7 @@ try {
   const large = routed();
   assert.equal(large.route.size, "large");
   assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
-  assert.equal(large.report?.verdict ?? "PASS", "PASS", "size advises, never blocks");
+  // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
   // ---- Ctrl-C during a check starts no further check ---------------------------
   newRepo("cancel");

@@ -128,6 +128,7 @@ function record(options) {
   for (const key of ["duration", "turns", "cost", "input", "output", "cache-read", "cache-write", "lines", "files"]) {
     if (options[key] !== undefined && !(Number(options[key]) >= 0)) usage(`--${key} must be a non-negative number`);
   }
+  if (options.files !== undefined && options.lines === undefined) usage("--files needs --lines");
   const number = (key) => (options[key] === undefined ? null : Number(options[key]));
   const tokens = ["input", "output", "cache-read", "cache-write"].some((key) => options[key] !== undefined)
     ? { input: number("input") ?? 0, output: number("output") ?? 0, cacheRead: number("cache-read") ?? 0, cacheWrite: number("cache-write") ?? 0, reasoning: 0 }

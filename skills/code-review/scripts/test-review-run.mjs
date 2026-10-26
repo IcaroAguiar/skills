@@ -532,6 +532,7 @@ try {
   assert.match(ledgerCli("stats", "--by", "size").stdout, /effort\s+size\s+calls/);
   assert.equal(ledgerCli("stats", "--by", "repo").status, 2, "--by takes only size");
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "ok", "--lines", "-1").status, 2);
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "ok", "--files", "3").status, 2, "--files alone would be dropped");
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "limit", "--until", "soon").status, 2, "an unreadable reset is refused");
   assert.equal(ledgerCli("record", "--role", "review", "--provider", "x", "--status", "ok").status, 2, "record needs the front");
   // Cooldowns belong to a front: the same id on another account stays available.
