@@ -531,15 +531,13 @@ function routeChange(root, base, changed, { addedLines, reviewAdded }) {
   const numstat = git(root, ["diff", "--numstat", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
   let deletedLines = 0;
   let reviewDeleted = 0;
-  const pureRenames = new Set();
   for (let index = 0; index < numstat.length; index += 1) {
     const record = numstat[index];
     if (!record) continue;
     const first = record.indexOf("\t");
     const second = record.indexOf("\t", first + 1);
-    const [inserted, deleted, path] = [record.slice(0, first), record.slice(first + 1, second), record.slice(second + 1)];
+    const [deleted, path] = [record.slice(first + 1, second), record.slice(second + 1)];
     const file = path || numstat[(index += 2)];
-    if (!path && inserted === "0" && deleted === "0") pureRenames.add(file);
     const count = Number(deleted) || 0;
     deletedLines += count;
     if (file && reviewable(file)) reviewDeleted += count;
@@ -547,6 +545,17 @@ function routeChange(root, base, changed, { addedLines, reviewAdded }) {
   const changedLines = addedLines + deletedLines;
   const reviewLines = reviewAdded + reviewDeleted;
   // Every changed file a person opens counts, binary and mode-only edits included.
+  // A pure rename (R100, same mode; binary or text) has nothing to read.
+  const raw = git(root, ["diff", "--raw", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
+  const pureRenames = new Set();
+  for (let index = 0; index < raw.length; index += 1) {
+    if (!raw[index].startsWith(":")) continue;
+    const [oldMode, newMode, , , status] = raw[index].slice(1).split(" ");
+    if (/^[RC]/.test(status)) {
+      if (status === "R100" && oldMode === newMode) pureRenames.add(raw[index + 2]);
+      index += 2;
+    } else index += 1;
+  }
   const touched = new Set(changed.filter((file) => reviewable(file) && !pureRenames.has(file)));
   // Both sides of a rename: moving code out of an auth path still touches auth.
   const paths = new Set([...changed, ...git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean)]);

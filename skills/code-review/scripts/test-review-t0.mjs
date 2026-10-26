@@ -266,6 +266,12 @@ try {
   rmSync(join(repo, "src/generated\tmodule.ts"));
   const binaries = routed().route;
   assert.deepEqual([binaries.size, binaries.reviewFiles, binaries.reviewLines], ["large", 32, 1], "binary edits count as files; a tab in a path keeps the whole path");
+  commit("binary edits");
+  for (let index = 0; index < 31; index += 1) sh("git", ["mv", `asset${index}.bin`, `moved${index}.bin`]);
+  const movedBinaries = routed().route;
+  assert.deepEqual([movedBinaries.size, movedBinaries.reviewFiles], ["small", 0], "pure binary renames have nothing to read");
+  writeFileSync(join(repo, "moved0.bin"), Buffer.from([0, 9, 9, 9]));
+  assert.ok(routed().route.reviewFiles >= 1, "an edited binary rename still counts (git may show it as a delete and an add)");
   // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
   // ---- Ctrl-C during a check starts no further check ---------------------------
