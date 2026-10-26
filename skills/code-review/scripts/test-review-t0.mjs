@@ -257,6 +257,15 @@ try {
   const large = routed();
   assert.equal(large.route.size, "large");
   assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
+  newRepo("route-size-files");
+  write("README.md", "# size\n");
+  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
+  write("src/generated\tmodule.ts", code(1));
+  commit("base");
+  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index, 1]));
+  rmSync(join(repo, "src/generated\tmodule.ts"));
+  const binaries = routed().route;
+  assert.deepEqual([binaries.size, binaries.reviewFiles, binaries.reviewLines], ["large", 32, 1], "binary edits count as files; a tab in a path keeps the whole path");
   // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
   // ---- Ctrl-C during a check starts no further check ---------------------------

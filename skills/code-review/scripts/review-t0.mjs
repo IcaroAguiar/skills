@@ -526,24 +526,28 @@ const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)
 // Deterministic routing for the model tiers: the deep review's starting effort,
 // whether the fast pre-pass (T1) is worth running, and the diff's size.
 function routeChange(root, base, changed, { addedLines, reviewAdded }) {
-  // -z prints a rename as "added\tdeleted\t" followed by the old and the new path.
+  // -z prints "added\tdeleted\tpath", or for a rename "added\tdeleted\t" followed by
+  // the old and the new path. A path may itself hold tabs; binary files print "-".
   const numstat = git(root, ["diff", "--numstat", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
   let deletedLines = 0;
   let reviewDeleted = 0;
-  const touched = new Set(reviewAdded.files);
+  const pureRenames = new Set();
   for (let index = 0; index < numstat.length; index += 1) {
-    if (!numstat[index]) continue;
-    const [, deleted, path] = numstat[index].split("\t");
+    const record = numstat[index];
+    if (!record) continue;
+    const first = record.indexOf("\t");
+    const second = record.indexOf("\t", first + 1);
+    const [inserted, deleted, path] = [record.slice(0, first), record.slice(first + 1, second), record.slice(second + 1)];
     const file = path || numstat[(index += 2)];
+    if (!path && inserted === "0" && deleted === "0") pureRenames.add(file);
     const count = Number(deleted) || 0;
     deletedLines += count;
-    if (count && file && reviewable(file)) {
-      reviewDeleted += count;
-      touched.add(file);
-    }
+    if (file && reviewable(file)) reviewDeleted += count;
   }
   const changedLines = addedLines + deletedLines;
-  const reviewLines = reviewAdded.lines + reviewDeleted;
+  const reviewLines = reviewAdded + reviewDeleted;
+  // Every changed file a person opens counts, binary and mode-only edits included.
+  const touched = new Set(changed.filter((file) => reviewable(file) && !pureRenames.has(file)));
   // Both sides of a rename: moving code out of an auth path still touches auth.
   const paths = new Set([...changed, ...git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean)]);
   const code = [...paths].filter((file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !LOW_RISK_FILE.test(file));
@@ -685,14 +689,11 @@ async function main() {
     if (!options.strict) report.incomplete.push(...steps.filter((step) => step.status === "missing").map((step) => step.detail));
     if (options.checks && !discovered.checks.length) report.incomplete.push("no repository checks found");
 
-    const reviewAdded = { lines: 0, files: [] };
+    let reviewAdded = 0;
     for (const [file, lines] of added) {
       const count = lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").filter((line, index, all) => line || index < all.length - 1).length : 0) : lines.size;
       report.addedLines += count;
-      if (count && reviewable(file)) {
-        reviewAdded.lines += count;
-        reviewAdded.files.push(file);
-      }
+      if (reviewable(file)) reviewAdded += count;
     }
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
