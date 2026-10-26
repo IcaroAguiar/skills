@@ -278,7 +278,8 @@ try {
   const reordered = routed().route;
   assert.ok(reordered.reviewFiles >= 1 && reordered.reviewLines > 0, "a rename with reordered lines is read, even when git scores it R100");
   sh("git", ["reset", "-q", "--hard", "HEAD"]);
-  writeFileSync(join(repo, "moved0.bin"), Buffer.from([0, 9, 9, 9]));
+  sh("git", ["mv", "moved0.bin", "renamed0.bin"]);
+  writeFileSync(join(repo, "renamed0.bin"), Buffer.from([0, 7, 7, 7]));
   assert.ok(routed().route.reviewFiles >= 1, "an edited binary rename still counts (git may show it as a delete and an add)");
   // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
