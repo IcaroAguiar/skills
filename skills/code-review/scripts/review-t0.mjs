@@ -516,14 +516,34 @@ const SENSITIVE_AREAS = Object.entries({
 }).map(([area, words]) => [area, new Set(words.split(" "))]);
 const MIGRATION_FILE = /(^|\/)migrations?\/|\.sql$|(^|\/)schema\.prisma$|\.migration\.[cm]?[jt]s$/i;
 const T1_MIN_CHANGED_LINES = 20;
+// The PR size rule (references/pr-size.md): a layer of about 400 reviewable lines,
+// and past 800 lines or 30 files the change is split into a stack or says why.
 const LARGE_DIFF = { lines: 800, files: 30 };
+const TARGET_LINES = 400;
+// Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
+const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !/\.snap$/.test(file);
 
 // Deterministic routing for the model tiers: the deep review's starting effort,
 // whether the fast pre-pass (T1) is worth running, and the diff's size.
-function routeChange(root, base, changed, addedLines) {
-  const deletedLines = git(root, ["diff", "--numstat", "-M", "--no-ext-diff", base, "--"]).split("\n")
-    .reduce((sum, line) => sum + (Number(line.split("\t")[1]) || 0), 0);
+function routeChange(root, base, changed, { addedLines, reviewAdded }) {
+  // -z prints a rename as "added\tdeleted\t" followed by the old and the new path.
+  const numstat = git(root, ["diff", "--numstat", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
+  let deletedLines = 0;
+  let reviewDeleted = 0;
+  const touched = new Set(reviewAdded.files);
+  for (let index = 0; index < numstat.length; index += 1) {
+    if (!numstat[index]) continue;
+    const [, deleted, path] = numstat[index].split("\t");
+    const file = path || numstat[(index += 2)];
+    const count = Number(deleted) || 0;
+    deletedLines += count;
+    if (count && file && reviewable(file)) {
+      reviewDeleted += count;
+      touched.add(file);
+    }
+  }
   const changedLines = addedLines + deletedLines;
+  const reviewLines = reviewAdded.lines + reviewDeleted;
   // Both sides of a rename: moving code out of an auth path still touches auth.
   const paths = new Set([...changed, ...git(root, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, "--"]).split("\0").filter(Boolean)]);
   const code = [...paths].filter((file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !LOW_RISK_FILE.test(file));
@@ -537,8 +557,10 @@ function routeChange(root, base, changed, addedLines) {
   return {
     effort: !code.length ? "medium" : areas.size ? "xhigh" : "high",
     reasons: [...areas].map(([area, files]) => ({ area, files: files.slice(0, 3), more: Math.max(0, files.length - 3) })),
-    size: changedLines > LARGE_DIFF.lines || changed.length > LARGE_DIFF.files ? "large" : changedLines < 50 ? "small" : "medium",
+    size: reviewLines > LARGE_DIFF.lines || touched.size > LARGE_DIFF.files ? "large" : reviewLines < 50 ? "small" : "medium",
     changedLines,
+    reviewLines,
+    reviewFiles: touched.size,
     codeFiles: code.length,
     t1: !code.length ? { run: false, why: "docs, tests, styles, locales or assets only" }
       : changedLines < T1_MIN_CHANGED_LINES ? { run: false, why: `under ${T1_MIN_CHANGED_LINES} changed lines` }
@@ -549,6 +571,14 @@ function routeChange(root, base, changed, addedLines) {
 function formatRoute(route) {
   const reasons = route.reasons.map(({ area, files, more }) => `${area}: ${files.join(", ")}${more ? ` +${more}` : ""}`).join("; ");
   return `ROUTE deep-review effort ${route.effort}${reasons ? ` (${reasons})` : ""}  T1 ${route.t1.run ? "run" : `skip (${route.t1.why})`}  ${route.size} diff, ${route.changedLines} changed lines`;
+}
+
+// Advice, never a blocker: the author splits the change or says why it stays whole.
+function formatSize(route) {
+  const counted = `${route.reviewLines ?? route.changedLines} reviewable lines in ${route.reviewFiles ?? "?"} files`;
+  if (route.size === "large") return `SIZE ${counted}: over ${LARGE_DIFF.lines} lines or ${LARGE_DIFF.files} files. Split it into a stack of layers of about ${TARGET_LINES} lines, or state in the PR's merge-danger section why it stays whole (references/pr-size.md)`;
+  if ((route.reviewLines ?? 0) > TARGET_LINES) return `SIZE ${counted}: over the ${TARGET_LINES}-line layer target; fine as one PR, but the next change on this branch belongs in a new stack layer`;
+  return null;
 }
 
 // ---- report -----------------------------------------------------------------
@@ -563,7 +593,7 @@ function format(report) {
   for (const check of report.checks) lines.push(`  ${mark[check.status]} ${check.name.padEnd(28)} ${seconds(check.durationMs).padStart(7)}  ${check.command}`);
   for (const skipped of report.skippedChecks) lines.push(`  -    ${skipped}`);
   if (report.skippedFiles.length) lines.push(`  -    ${report.skippedFiles.length} file(s) not scanned or code-rules only; see skippedFiles in the report`);
-  if (report.route) lines.push("", formatRoute(report.route));
+  if (report.route) lines.push("", formatRoute(report.route), ...[formatSize(report.route)].filter(Boolean));
   if (report.findings.length) {
     lines.push("", "findings (added lines only):");
     for (const finding of report.findings) {
@@ -655,12 +685,18 @@ async function main() {
     if (!options.strict) report.incomplete.push(...steps.filter((step) => step.status === "missing").map((step) => step.detail));
     if (options.checks && !discovered.checks.length) report.incomplete.push("no repository checks found");
 
+    const reviewAdded = { lines: 0, files: [] };
     for (const [file, lines] of added) {
-      report.addedLines += lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").length : 0) : lines.size;
+      const count = lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").filter((line, index, all) => line || index < all.length - 1).length : 0) : lines.size;
+      report.addedLines += count;
+      if (count && reviewable(file)) {
+        reviewAdded.lines += count;
+        reviewAdded.files.push(file);
+      }
     }
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
-      route: routeChange(root, base.sha, changed, report.addedLines),
+      route: routeChange(root, base.sha, changed, { addedLines: report.addedLines, reviewAdded }),
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,

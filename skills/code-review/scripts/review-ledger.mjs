@@ -14,7 +14,8 @@ const USAGE = `usage: review-ledger triage --t1 <report> --decisions <file|->
                             [--effort <e>] [--repo <name>] [--head <sha>] [--duration <s>] [--until <iso>]
                             [--session <id>] [--label <text>] [--turns <n>] [--cost <usd>]
                             [--input <tokens>] [--output <tokens>] [--cache-read <tokens>] [--cache-write <tokens>]
-       review-ledger stats [--since <days>] [--role <role>] [--json]
+                            [--lines <reviewable lines>] [--files <n>]
+       review-ledger stats [--since <days>] [--role <role>] [--by size] [--json]
        review-ledger untriaged [--since <days>] [--repo <name>]
        review-ledger findings [--since <days>] [--front <name>] [--repo <name>] [--decision <list>] [--json]
        review-ledger limits
@@ -124,7 +125,7 @@ function record(options) {
   for (const key of ["front", "role", "provider", "status"]) if (!options[key]) usage(`record needs --${key}`);
   if (!["ok", "limit", "auth", "transient", "empty", "timeout", "error"].includes(options.status)) usage("--status must be ok, limit, auth, transient, empty, timeout or error");
   if (options.until !== undefined && !Number.isFinite(Date.parse(options.until))) usage("--until must be a date and time, such as 2026-10-21T15:00:00Z");
-  for (const key of ["duration", "turns", "cost", "input", "output", "cache-read", "cache-write"]) {
+  for (const key of ["duration", "turns", "cost", "input", "output", "cache-read", "cache-write", "lines", "files"]) {
     if (options[key] !== undefined && !(Number(options[key]) >= 0)) usage(`--${key} must be a non-negative number`);
   }
   const number = (key) => (options[key] === undefined ? null : Number(options[key]));
@@ -138,6 +139,7 @@ function record(options) {
     until: options.until === undefined ? undefined : new Date(Date.parse(options.until)).toISOString(),
     durationMs: options.duration ? Number(options.duration) * 1000 : null, sessionId: options.session ?? null, label: options.label ?? null,
     turns: number("turns"), costUsd: number("cost"), usage: tokens,
+    size: options.lines === undefined ? undefined : { lines: number("lines"), files: number("files") },
   });
   console.log(`review-ledger: call ${call} recorded`);
 }
@@ -192,17 +194,27 @@ function findings(options) {
   console.log(`review-ledger: ${rows.length} finding(s)`);
 }
 
+// Reviewable lines of the change, in the PR size rule's bands (references/pr-size.md).
+const SIZE_BUCKETS = ["<=400", "401-800", ">800", "?"];
+function sizeBucket(size) {
+  const lines = size?.lines;
+  if (!Number.isFinite(lines)) return "?";
+  return lines <= 400 ? "<=400" : lines <= 800 ? "401-800" : ">800";
+}
+
 function stats(options) {
   const days = Number(options.since ?? 30);
   if (!(days > 0)) usage("--since must be a positive number of days");
   const all = readEvents({ since: Date.now() - days * 86_400_000 });
   const kept = new Set(latestTriage(all));
   const events = all.filter((event) => event.type !== "triage" || kept.has(event));
-  const key = (event) => [event.role ?? event.source, event.provider, event.resolvedModel ?? event.model ?? "?", event.effort ?? "-", event.arm ? "A/B" : ""].join("\u0000");
+  if (options.by !== undefined && options.by !== "size") usage("--by takes size");
+  const bySize = options.by === "size";
+  const key = (event) => [event.role ?? event.source, event.provider, event.resolvedModel ?? event.model ?? "?", event.effort ?? "-", event.arm ? "A/B" : "", bySize ? sizeBucket(event.size) : ""].join("\u0000");
   const rows = new Map();
   const row = (event) => {
     const id = key(event);
-    if (!rows.has(id)) rows.set(id, { role: event.role ?? event.source, provider: event.provider, model: event.resolvedModel ?? event.model ?? "?", effort: event.effort ?? "-", ab: Boolean(event.arm), calls: 0, ok: 0, limit: 0, failed: 0, durations: [], turns: [], cost: 0, costCalls: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, triaged: 0, fixed: 0, wrong: 0, seriousFixed: 0 });
+    if (!rows.has(id)) rows.set(id, { role: event.role ?? event.source, provider: event.provider, model: event.resolvedModel ?? event.model ?? "?", effort: event.effort ?? "-", ab: Boolean(event.arm), size: bySize ? sizeBucket(event.size) : undefined, calls: 0, ok: 0, limit: 0, failed: 0, durations: [], turns: [], cost: 0, costCalls: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, triaged: 0, fixed: 0, wrong: 0, seriousFixed: 0 });
     return rows.get(id);
   };
   const calls = new Map(events.filter((event) => event.type === "call").map((event) => [event.call, event]));
@@ -234,18 +246,18 @@ function stats(options) {
   const table = [...rows.values()].map((r) => {
     const prompt = r.input + r.cacheRead + r.cacheWrite;
     return {
-      role: r.role, provider: r.provider, model: r.model, effort: r.effort + (r.ab ? " (A/B)" : ""), calls: r.calls, ok: r.ok, limited: r.limit, failed: r.failed,
+      role: r.role, provider: r.provider, model: r.model, effort: r.effort + (r.ab ? " (A/B)" : ""), size: r.size, calls: r.calls, ok: r.ok, limited: r.limit, failed: r.failed,
       p50: percentile(r.durations, 0.5), p90: percentile(r.durations, 0.9), turnsP50: percentile(r.turns, 0.5),
       costPerOk: r.costCalls && r.ok ? r.cost / r.ok : null, cacheRead: prompt ? r.cacheRead / prompt : null,
       triaged: r.triaged, actedOn: r.triaged ? r.fixed / r.triaged : null, wrong: r.triaged ? r.wrong / r.triaged : null,
       seriousFixedPerReview: r.ok ? r.seriousFixed / r.ok : null,
     };
-  }).sort((a, b) => a.role.localeCompare(b.role) || b.calls - a.calls);
+  }).sort((a, b) => a.role.localeCompare(b.role) || (bySize ? SIZE_BUCKETS.indexOf(a.size) - SIZE_BUCKETS.indexOf(b.size) : 0) || b.calls - a.calls);
   if (options.json) return console.log(JSON.stringify({ sinceDays: days, rows: table }, null, 2));
   const pct = (value) => (value === null ? "-" : `${Math.round(value * 100)}%`);
   const secs = (ms) => (ms === null ? "-" : `${Math.round(ms / 1000)}s`);
-  const head = ["role", "provider", "model", "effort", "calls", "ok", "limited", "p50", "p90", "turns", "$/review", "cache", "triaged", "acted-on", "wrong", "serious fixed/review"];
-  const lines = table.map((r) => [r.role, r.provider, r.model, r.effort, r.calls, r.ok, r.limited, secs(r.p50), secs(r.p90), r.turnsP50 ?? "-", r.costPerOk === null ? "-" : `$${r.costPerOk.toFixed(2)}`, pct(r.cacheRead), r.triaged, pct(r.actedOn), pct(r.wrong), r.seriousFixedPerReview === null ? "-" : r.seriousFixedPerReview.toFixed(2)].map(String));
+  const head = ["role", "provider", "model", "effort", ...(bySize ? ["size"] : []), "calls", "ok", "limited", "p50", "p90", "turns", "$/review", "cache", "triaged", "acted-on", "wrong", "serious fixed/review"];
+  const lines = table.map((r) => [r.role, r.provider, r.model, r.effort, ...(bySize ? [r.size] : []), r.calls, r.ok, r.limited, secs(r.p50), secs(r.p90), r.turnsP50 ?? "-", r.costPerOk === null ? "-" : `$${r.costPerOk.toFixed(2)}`, pct(r.cacheRead), r.triaged, pct(r.actedOn), pct(r.wrong), r.seriousFixedPerReview === null ? "-" : r.seriousFixedPerReview.toFixed(2)].map(String));
   const widths = head.map((title, index) => Math.max(title.length, ...lines.map((line) => line[index].length)));
   console.log(`review-ledger stats, last ${days} day(s)`);
   for (const line of [head, ...lines]) console.log(line.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd());

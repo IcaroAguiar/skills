@@ -18,8 +18,8 @@ node scripts/review-run.mjs --role fix    -C <repo> --prompt fix.md --out f.md
 node scripts/review-run.mjs --plan --role review -C <repo> --author-model <model|human>   # candidates, calls nothing
 node scripts/review-ledger.mjs triage --t1 <t1-report> --decisions d.json
 node scripts/review-ledger.mjs triage --call <call> --decisions d.json
-node scripts/review-ledger.mjs record --front <front> --role review --provider <id> --status limit --until <iso>   # T3 calls
-node scripts/review-ledger.mjs stats [--since 30] [--role t1]
+node scripts/review-ledger.mjs record --front <front> --role review --provider <id> --status limit --until <iso>   # T3 calls; add --lines/--files from T0's route
+node scripts/review-ledger.mjs stats [--since 30] [--role t1] [--by size]
 node scripts/review-ledger.mjs limits
 node scripts/review-ledger.mjs clear <provider> --front <front>
 ```
@@ -185,7 +185,9 @@ arm: calls, successes, limits, p50/p90 time, median turns, cost per review
 (everything the provider spent, failed attempts included, divided by the
 reviews it delivered),
 cache-read share of the prompt, decisions, the **acted-on rate** (`fixed` ÷
-decided), the `wrong` rate, and serious fixed findings per review. The authors'
+decided), the `wrong` rate, and serious fixed findings per review. `--by size`
+splits each row by the change's reviewable lines (`<=400`, `401-800`, `>800`, `?`
+for calls without a size), to check the marks in [pr-size.md](pr-size.md). The authors'
 edits are the signal Cloudflare used. Two caveats apply: an edit does not prove a
 finding right, and small groups (tens of findings) have wide error bars. Compare
 configurations on the same kind of work before you change the policy.

@@ -7,7 +7,7 @@
 
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import { defaultPolicy, dispatch, loadPolicy, resolveFront } from "./lib/policy.mjs";
+import { defaultPolicy, diffSize, dispatch, loadPolicy, resolveFront } from "./lib/policy.mjs";
 import { defaultReportPath, git, isGenerated, LOCKFILES, readJson, stopGroups, tail, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
 const MAX_DIFF_BYTES = 400 * 1024;
@@ -279,8 +279,8 @@ function repoPath(file, root) {
 }
 
 // One lens: its slot's candidates in order, falling back when a provider is limited.
-async function review(front, slot, prompt, root, head, options) {
-  const { final, attempts } = await dispatch({ front, role: "t1", slot, prompt, root, headSha: head, timeoutMs: options.timeout * 1000 });
+async function review(front, slot, prompt, root, head, size, options) {
+  const { final, attempts } = await dispatch({ front, role: "t1", slot, prompt, root, headSha: head, timeoutMs: options.timeout * 1000, size });
   const used = final ?? attempts.at(-1) ?? { provider: front.roles.t1[slot]?.flat()[0] ?? `lens${slot + 1}`, status: "limit" };
   const provider = front.providers[used.provider] ?? {};
   const entry = {
@@ -395,7 +395,7 @@ async function main() {
 
   const slots = front.roles?.t1 ?? [];
   if (!slots.length) stop(`front ${front.name} has no T1 lenses in the review policy`);
-  const results = await Promise.all(slots.map((_, slot) => review(front, slot, prompt, root, t0.head.sha, options)));
+  const results = await Promise.all(slots.map((_, slot) => review(front, slot, prompt, root, t0.head.sha, diffSize(t0.route), options)));
   // Two lenses that fell back to the same provider still report separately.
   results.forEach((result, index) => {
     if (results.findIndex((other) => other.name === result.name) !== index) {

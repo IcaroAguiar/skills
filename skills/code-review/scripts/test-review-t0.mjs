@@ -240,6 +240,24 @@ try {
   sh("git", ["mv", "src/auth/session.ts", "src/client.ts"]);
   const moved = routed().route;
   assert.deepEqual([moved.effort, moved.reasons.map((reason) => reason.area)], ["xhigh", ["auth"]], "moving code out of an auth path still touches auth");
+  assert.deepEqual([moved.reviewLines, moved.reviewFiles], [0, 0], "a pure rename has nothing to read");
+
+  // ---- size: only reviewable lines count, and past the limit T0 advises a split ----
+  newRepo("route-size");
+  write("README.md", "# size\n");
+  commit("base");
+  write("src/__snapshots__/a.test.ts.snap", code(2000));
+  write("dist/bundle.js", code(1000));
+  write("src/a.ts", code(500));
+  const target = routed();
+  assert.deepEqual([target.route.size, target.route.reviewLines, target.route.reviewFiles], ["medium", 500, 1], "snapshots and build output do not count");
+  assert.ok(target.route.changedLines > 3000, "changed lines still count everything");
+  assert.match(target.output, /SIZE 500 reviewable lines in 1 files: over the 400-line layer target/);
+  write("src/b.ts", code(400));
+  const large = routed();
+  assert.equal(large.route.size, "large");
+  assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
+  assert.equal(large.report?.verdict ?? "PASS", "PASS", "size advises, never blocks");
 
   // ---- Ctrl-C during a check starts no further check ---------------------------
   newRepo("cancel");

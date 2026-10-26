@@ -196,7 +196,14 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
 //
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
-export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, unfit = () => null, onAttempt = () => {} }) {
+// The change's reviewable size from T0's route, recorded on every call so the
+// calibration can compare review time and findings by size (references/pr-size.md).
+export function diffSize(route) {
+  if (!route) return null;
+  return { lines: route.reviewLines ?? route.changedLines ?? null, files: route.reviewFiles ?? null };
+}
+
+export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, unfit = () => null, onAttempt = () => {} }) {
   let list = candidates(front, role, { slot, authorModel, headSha, cooled: cooldowns() });
   if (resume) {
     // The session's provider must still be a candidate for this role and still
@@ -206,7 +213,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
   }
   list = list.map((candidate) => ({ ...candidate, skip: candidate.skip ?? unfit(candidate.provider, resume?.provider === candidate.id) }));
   const attempts = list.filter((candidate) => candidate.skip).map(({ id, skip }) => ({ provider: id, status: "skipped", reason: skip }));
-  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label };
+  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label, size: size ?? undefined };
   // No provider sees a prompt gitleaks has not cleared; see lib/prompt-scan.mjs.
   for (const text of [prompt, resume?.prompt].filter(Boolean)) {
     const scan = await scanPrompt(text);

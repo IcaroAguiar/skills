@@ -178,6 +178,8 @@ try {
   assert.equal(forced.status, 0, forced.output);
   const capped = forced.report.reviewers[0];
   assert.deepEqual([capped.status, capped.findings, capped.dropped, capped.overCap], ["ok", 10, 0, 2], "the cap is not reported as malformed");
+  const lastCall = readFileSync(join(workspace, "state", "ledger.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((event) => event.type === "call").at(-1);
+  assert.deepEqual(lastCall.size, { lines: 40, files: 1 }, "each call records the change's reviewable size");
 
   newRepo("empty");
   reviewT0();
