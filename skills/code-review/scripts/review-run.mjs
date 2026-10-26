@@ -9,7 +9,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cooldowns, findCall, readEvents } from "./lib/ledger.mjs";
-import { candidates, dispatch, loadPolicy, policyPath, resolveFront } from "./lib/policy.mjs";
+import { candidates, diffSize, dispatch, loadPolicy, policyPath, resolveFront } from "./lib/policy.mjs";
 import { defaultReportPath, git, readJson, stopGroups, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
 const USAGE = `usage: review-run --role review|fix --prompt <file> --out <file> [-C <dir>]
@@ -100,14 +100,19 @@ function stop(message, code = 2) {
 const LEVELS = ["low", "medium", "high", "xhigh", "max"];
 const MAX_INLINE_DIFF = 400 * 1024;
 
-// T0's route for exactly this tree, when it exists, gives the starting effort,
-// following the reviewer effort table: a delta one level below the full review, a fix
-// at high (medium when the route says the change is docs, tests or UI).
-function routeEffort(root, headSha, { role, resuming }) {
+// T0's route for exactly this tree, when it exists.
+function t0Route(root, headSha) {
   const dirty = git(root, ["status", "--porcelain"]).trim().length > 0;
   const path = defaultReportPath("review-t0", root, headSha, dirty);
   const t0 = existsSync(path) ? readJson(() => readFileSync(path, "utf8")) : null;
-  const level = t0?.verdict === "PASS" && t0.head?.tree === treeFingerprint(root) ? t0.route?.effort ?? null : null;
+  return t0?.verdict === "PASS" && t0.head?.tree === treeFingerprint(root) ? t0.route ?? null : null;
+}
+
+// The route gives the starting effort, following the reviewer effort table: a delta
+// one level below the full review, a fix at high (medium when the route says the
+// change is docs, tests or UI).
+function routeEffort(route, { role, resuming }) {
+  const level = route?.effort ?? null;
   if (!level) return null;
   if (role === "fix") return level === "medium" ? "medium" : "high";
   return resuming ? LEVELS[Math.max(1, LEVELS.indexOf(level) - 1)] : level;
@@ -173,12 +178,13 @@ async function main() {
     if (earlier.front !== front.name || !front.providers[earlier.provider]) stop(`call ${options.resume} ran on ${earlier.front}/${earlier.provider}, which this front does not have; start a fresh review`);
     resume = { call: earlier.call, provider: earlier.provider, sessionId: earlier.sessionId, prompt };
   }
-  const effort = options.effort ?? routeEffort(root, headSha, { role: options.role, resuming: Boolean(resume) });
+  const route = t0Route(root, headSha);
+  const effort = options.effort ?? routeEffort(route, { role: options.role, resuming: Boolean(resume) });
   const started = Date.now();
   const { final, attempts } = await dispatch({
     front, role: options.role, prompt: resume ? fresh?.text ?? null : prompt, root, effort,
     unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
-    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume,
+    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route),
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),
   });
 

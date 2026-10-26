@@ -240,6 +240,48 @@ try {
   sh("git", ["mv", "src/auth/session.ts", "src/client.ts"]);
   const moved = routed().route;
   assert.deepEqual([moved.effort, moved.reasons.map((reason) => reason.area)], ["xhigh", ["auth"]], "moving code out of an auth path still touches auth");
+  assert.deepEqual([moved.reviewLines, moved.reviewFiles], [0, 0], "a pure rename has nothing to read");
+
+  // ---- size: only reviewable lines count, and past the limit T0 advises a split ----
+  newRepo("route-size");
+  write("README.md", "# size\n");
+  commit("base");
+  write("src/__snapshots__/a.test.ts.snap", code(2000));
+  write("dist/bundle.js", code(1000));
+  write("src/a.ts", code(500));
+  const target = routed();
+  assert.deepEqual([target.route.size, target.route.reviewLines, target.route.reviewFiles], ["medium", 500, 1], "snapshots and build output do not count");
+  assert.ok(target.route.changedLines > 3000, "changed lines still count everything");
+  assert.match(target.output, /SIZE 500 reviewable lines in 1 files: over the 400-line layer target/);
+  write("src/b.ts", code(400));
+  const large = routed();
+  assert.equal(large.route.size, "large");
+  assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
+  newRepo("route-size-files");
+  write("README.md", "# size\n");
+  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
+  write("src/generated\tmodule.ts", code(1));
+  commit("base");
+  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index, 1]));
+  rmSync(join(repo, "src/generated\tmodule.ts"));
+  const binaries = routed().route;
+  assert.deepEqual([binaries.size, binaries.reviewFiles, binaries.reviewLines], ["large", 32, 1], "binary edits count as files; a tab in a path keeps the whole path");
+  commit("binary edits");
+  for (let index = 0; index < 31; index += 1) sh("git", ["mv", `asset${index}.bin`, `moved${index}.bin`]);
+  const movedBinaries = routed().route;
+  assert.deepEqual([movedBinaries.size, movedBinaries.reviewFiles], ["small", 0], "pure binary renames have nothing to read");
+  commit("binary renames");
+  write("src/order.ts", Array.from({ length: 40 }, (_, index) => `export const line${index} = ${index};\n`).join(""));
+  commit("ordered");
+  sh("git", ["mv", "src/order.ts", "src/reordered.ts"]);
+  write("src/reordered.ts", Array.from({ length: 40 }, (_, index) => `export const line${39 - index} = ${39 - index};\n`).join(""));
+  const reordered = routed().route;
+  assert.ok(reordered.reviewFiles >= 1 && reordered.reviewLines > 0, "a rename with reordered lines is read, even when git scores it R100");
+  sh("git", ["reset", "-q", "--hard", "HEAD"]);
+  sh("git", ["mv", "moved0.bin", "renamed0.bin"]);
+  writeFileSync(join(repo, "renamed0.bin"), Buffer.from([0, 7, 7, 7]));
+  assert.ok(routed().route.reviewFiles >= 1, "an edited binary rename still counts (git may show it as a delete and an add)");
+  // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
   // ---- Ctrl-C during a check starts no further check ---------------------------
   newRepo("cancel");
