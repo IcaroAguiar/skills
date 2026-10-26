@@ -545,16 +545,23 @@ function routeChange(root, base, changed, { addedLines, reviewAdded }) {
   const changedLines = addedLines + deletedLines;
   const reviewLines = reviewAdded + reviewDeleted;
   // Every changed file a person opens counts, binary and mode-only edits included.
-  // A pure rename (R100, same mode; binary or text) has nothing to read.
-  const raw = git(root, ["diff", "--raw", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
+  // A pure rename (same blob and mode, binary or text) has nothing to read. Git's
+  // similarity score is not enough: reordered lines can still score R100. An
+  // unstaged side shows a zero blob id, so hash the working-tree file.
+  const raw = git(root, ["diff", "--raw", "-z", "-M", "--no-abbrev", "--no-ext-diff", base, "--"]).split("\0");
   const pureRenames = new Set();
   for (let index = 0; index < raw.length; index += 1) {
     if (!raw[index].startsWith(":")) continue;
-    const [oldMode, newMode, , , status] = raw[index].slice(1).split(" ");
-    if (/^[RC]/.test(status)) {
-      if (status === "R100" && oldMode === newMode) pureRenames.add(raw[index + 2]);
-      index += 2;
-    } else index += 1;
+    const [oldMode, newMode, oldBlob, newBlob, status] = raw[index].slice(1).split(" ");
+    if (!/^[RC]/.test(status)) {
+      index += 1;
+      continue;
+    }
+    const file = raw[index + 2];
+    index += 2;
+    if (!status.startsWith("R") || oldMode !== newMode) continue;
+    const blob = /^0+$/.test(newBlob) ? git(root, ["hash-object", "--", file]).trim() : newBlob;
+    if (blob === oldBlob) pureRenames.add(file);
   }
   const touched = new Set(changed.filter((file) => reviewable(file) && !pureRenames.has(file)));
   // Both sides of a rename: moving code out of an auth path still touches auth.

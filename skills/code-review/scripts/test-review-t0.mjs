@@ -270,6 +270,14 @@ try {
   for (let index = 0; index < 31; index += 1) sh("git", ["mv", `asset${index}.bin`, `moved${index}.bin`]);
   const movedBinaries = routed().route;
   assert.deepEqual([movedBinaries.size, movedBinaries.reviewFiles], ["small", 0], "pure binary renames have nothing to read");
+  commit("binary renames");
+  write("src/order.ts", Array.from({ length: 40 }, (_, index) => `export const line${index} = ${index};\n`).join(""));
+  commit("ordered");
+  sh("git", ["mv", "src/order.ts", "src/reordered.ts"]);
+  write("src/reordered.ts", Array.from({ length: 40 }, (_, index) => `export const line${39 - index} = ${39 - index};\n`).join(""));
+  const reordered = routed().route;
+  assert.ok(reordered.reviewFiles >= 1 && reordered.reviewLines > 0, "a rename with reordered lines is read, even when git scores it R100");
+  sh("git", ["reset", "-q", "--hard", "HEAD"]);
   writeFileSync(join(repo, "moved0.bin"), Buffer.from([0, 9, 9, 9]));
   assert.ok(routed().route.reviewFiles >= 1, "an edited binary rename still counts (git may show it as a delete and an add)");
   // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
