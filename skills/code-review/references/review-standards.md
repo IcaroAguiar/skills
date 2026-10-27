@@ -27,6 +27,26 @@ contract-level inputs and outputs, or a regression that fails before the fix.
 A short test with an obvious literal expectation is not tautological merely
 because it is simple.
 
+## Comments
+
+A comment earns its place by saying what the code cannot: why a non-obvious
+choice was made, a constraint or invariant, a unit, or an outside reference (a
+spec, an issue, an upstream bug). Report the added comments that:
+
+- restate the name, the signature or the next line (`/** Returns the user. */`);
+- document declarations by habit: a docblock on internal or self-explanatory
+  code. Keep docblocks for public contracts whose behavior the signature does
+  not tell;
+- narrate history or process: what changed, what the code used to do, which
+  review, finding or PR asked for it;
+- keep commented-out code, or a TODO without an issue.
+
+Report them as one `SIMPLIFICATION` finding that lists every place: medium when
+they run through the diff (T0 printed a `COMMENTS` line), low otherwise. The fix
+is to delete them, or to move what they say into a name, a type or a test. Never
+ask the author to add a comment that a clearer name, type or test would make
+unnecessary.
+
 ## Structural baseline
 
 Repository standards override this baseline. Treat these as judgement calls and

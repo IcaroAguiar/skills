@@ -214,7 +214,7 @@ try {
   const routed = () => {
     const result = reviewT0(["--no-checks"]);
     assert.equal(result.status, 0, result.output);
-    return { route: result.report.route, output: result.output };
+    return { route: result.report.route, comments: result.report.comments, output: result.output };
   };
   write("src/tiny.ts", code(3));
   assert.deepEqual(routed().route.t1, { run: false, why: "under 20 changed lines" });
@@ -257,6 +257,19 @@ try {
   const large = routed();
   assert.equal(large.route.size, "large");
   assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
+  // ---- comments: a diff that documents every declaration gets a COMMENTS line ----
+  newRepo("comments");
+  write("README.md", "# comments\n");
+  commit("base");
+  const documented = (count) => Array.from({ length: count }, (_, index) => `/** The value ${index}. */\nexport const value${index} = ${index};\n`).join("");
+  write("src/a.ts", documented(12) + code(100));
+  for (const test of ["src/a.test.ts", "src/flow.e2e.ts", "e2e/login.ts", "scripts/test-run.mjs"]) write(test, "// a test may explain itself\n".repeat(50));
+  write("src/b.ts", "// eslint-disable-next-line no-console\n// @ts-expect-error legacy\n*[Symbol.iterator]() {}\nimport eslint from 'eslint';\n" + code(10));
+  const noisy = routed();
+  assert.deepEqual([noisy.comments.lines, noisy.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
+  assert.match(noisy.output, /COMMENTS 12 of 136 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
+  write("src/a.ts", documented(3) + code(100));
+  assert.doesNotMatch(routed().output, /COMMENTS/, "a few comments are no signal");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
