@@ -264,10 +264,10 @@ try {
   const documented = (count) => Array.from({ length: count }, (_, index) => `/** The value ${index}. */\nexport const value${index} = ${index};\n`).join("");
   write("src/a.ts", documented(12) + code(100));
   for (const test of ["src/a.test.ts", "src/flow.e2e.ts", "e2e/login.ts", "scripts/test-run.mjs"]) write(test, "// a test may explain itself\n".repeat(50));
-  write("src/b.ts", "// eslint-disable-next-line no-console\n// @ts-expect-error legacy\n*[Symbol.iterator]() {}\n" + code(10));
+  write("src/b.ts", "// eslint-disable-next-line no-console\n// @ts-expect-error legacy\n*[Symbol.iterator]() {}\nimport eslint from 'eslint';\n" + code(10));
   const noisy = routed();
-  assert.deepEqual([noisy.comments.lines, noisy.comments.sourceLines], [12, 135], "tests and lint directives count on neither side");
-  assert.match(noisy.output, /COMMENTS 12 of 135 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
+  assert.deepEqual([noisy.comments.lines, noisy.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
+  assert.match(noisy.output, /COMMENTS 12 of 136 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
   write("src/a.ts", documented(3) + code(100));
   assert.doesNotMatch(routed().output, /COMMENTS/, "a few comments are no signal");
   newRepo("route-size-files");

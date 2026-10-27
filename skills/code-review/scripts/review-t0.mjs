@@ -615,9 +615,10 @@ function commentShare(root, added) {
     let comments = 0;
     for (const number of lines === "all" ? text.map((_, index) => index + 1) : lines) {
       const line = (text[number - 1] ?? "").trim();
-      if (!line || COMMENT_DIRECTIVE.test(line)) continue;
+      const comment = syntax.test(line);
+      if (!line || (comment && COMMENT_DIRECTIVE.test(line))) continue;
       source += 1;
-      if (syntax.test(line)) comments += 1;
+      if (comment) comments += 1;
     }
     if (comments) byFile.push({ file, lines: comments });
   }
