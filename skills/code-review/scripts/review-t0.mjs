@@ -593,6 +593,45 @@ function formatRoute(route) {
   return `ROUTE deep-review effort ${route.effort}${reasons ? ` (${reasons})` : ""}  T1 ${route.t1.run ? "run" : `skip (${route.t1.why})`}  ${route.size} diff, ${route.changedLines} changed lines`;
 }
 
+// Comment lines among the added source lines, outside tests. Agents document every
+// declaration by habit; the reviewer judges each one (references/review-standards.md).
+const COMMENT_SYNTAX = [
+  [/\.[cm]?[jt]sx?$|\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/, /^(\/\/|\/\*|\*(\s|\/|$))/],
+  [/\.(py|rb|sh|bash|zsh|ex|exs|pl)$/, /^#(?!!)/],
+];
+const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
+const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]+$|_test\.[^/]+$/;
+const COMMENT_FLAG = { lines: 10, share: 0.03 };
+const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
+
+function commentShare(root, added) {
+  let source = 0;
+  const byFile = [];
+  for (const [file, lines] of added) {
+    const syntax = COMMENT_SYNTAX.find(([pattern]) => pattern.test(file))?.[1];
+    const path = join(root, file);
+    if (!syntax || !reviewable(file) || TEST_FILE.test(file) || !existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).size > MAX_COMMENT_SCAN_BYTES) continue;
+    const text = readFileSync(path, "utf8").split("\n");
+    let comments = 0;
+    for (const number of lines === "all" ? text.map((_, index) => index + 1) : lines) {
+      const line = (text[number - 1] ?? "").trim();
+      if (!line) continue;
+      source += 1;
+      if (syntax.test(line) && !COMMENT_DIRECTIVE.test(line)) comments += 1;
+    }
+    if (comments) byFile.push({ file, lines: comments });
+  }
+  const lines = byFile.reduce((sum, entry) => sum + entry.lines, 0);
+  return { lines, sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
+}
+
+function formatComments(comments) {
+  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share) return null;
+  const share = Math.round((100 * comments.lines) / comments.sourceLines);
+  const where = comments.top.map(({ file, lines }) => `${file} ${lines}`).join(", ");
+  return `COMMENTS ${comments.lines} of ${comments.sourceLines} added source lines (${share}%) are comments (most in ${where}). Keep only what the code cannot say; the reviewer reports the rest (references/review-standards.md, Comments)`;
+}
+
 // Advice, never a blocker: the author splits the change or says why it stays whole.
 function formatSize(route) {
   const counted = `${route.reviewLines ?? route.changedLines} reviewable lines in ${route.reviewFiles ?? "?"} files`;
@@ -613,7 +652,7 @@ function format(report) {
   for (const check of report.checks) lines.push(`  ${mark[check.status]} ${check.name.padEnd(28)} ${seconds(check.durationMs).padStart(7)}  ${check.command}`);
   for (const skipped of report.skippedChecks) lines.push(`  -    ${skipped}`);
   if (report.skippedFiles.length) lines.push(`  -    ${report.skippedFiles.length} file(s) not scanned or code-rules only; see skippedFiles in the report`);
-  if (report.route) lines.push("", formatRoute(report.route), ...[formatSize(report.route)].filter(Boolean));
+  if (report.route) lines.push("", formatRoute(report.route), ...[formatSize(report.route), formatComments(report.comments)].filter(Boolean));
   if (report.findings.length) {
     lines.push("", "findings (added lines only):");
     for (const finding of report.findings) {
@@ -714,6 +753,7 @@ async function main() {
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
       route: routeChange(root, base.sha, changed, { addedLines: report.addedLines, reviewAdded }),
+      comments: commentShare(root, added),
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,
