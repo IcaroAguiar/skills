@@ -604,14 +604,16 @@ const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|fixtures?)\/|\.(te
 const COMMENT_FLAG = { lines: 10, share: 0.03 };
 const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
 
-function commentShare(root, added) {
+function commentShare(root, base, added) {
   let source = 0;
   const byFile = [];
+  const scanned = [];
   for (const [file, lines] of added) {
     const syntax = COMMENT_SYNTAX.find(([pattern]) => pattern.test(file))?.[1];
     const path = join(root, file);
     if (!syntax || !reviewable(file) || TEST_FILE.test(file) || !existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).size > MAX_COMMENT_SCAN_BYTES) continue;
     const text = readFileSync(path, "utf8").split("\n");
+    if (lines !== "all") scanned.push([file, syntax]);
     let comments = 0;
     for (const number of lines === "all" ? text.map((_, index) => index + 1) : lines) {
       const line = (text[number - 1] ?? "").trim();
@@ -623,11 +625,34 @@ function commentShare(root, added) {
     if (comments) byFile.push({ file, lines: comments });
   }
   const lines = byFile.reduce((sum, entry) => sum + entry.lines, 0);
-  return { lines, sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
+  return { lines, removed: removedComments(root, base, scanned), sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
+}
+
+// Comment lines the diff deleted from the same files: a cleanup that shortens
+// comments adds some while removing more, and is no signal. One diff
+// per file, so no path is parsed back from a header; renamed files count none.
+// The line is only advice, so a failing diff leaves the count unknown (null).
+function removedComments(root, base, scanned) {
+  try {
+    let removed = 0;
+    for (const [file, syntax] of scanned) {
+      let inHunk = false;
+      for (const line of git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", base, "--", file]).split("\n")) {
+        if (line.startsWith("@@")) inHunk = true;
+        else if (inHunk && line.startsWith("-")) {
+          const text = line.slice(1).trim();
+          if (text && syntax.test(text) && !COMMENT_DIRECTIVE.test(text)) removed += 1;
+        }
+      }
+    }
+    return removed;
+  } catch {
+    return null;
+  }
 }
 
 function formatComments(comments) {
-  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share) return null;
+  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share || (comments.removed ?? 0) >= comments.lines) return null;
   const share = Math.round((100 * comments.lines) / comments.sourceLines);
   const where = comments.top.map(({ file, lines }) => `${file} ${lines}`).join(", ");
   return `COMMENTS ${comments.lines} of ${comments.sourceLines} added source lines (${share}%) are comments (most in ${where}). Keep only what the code cannot say; the reviewer reports the rest (references/review-standards.md, Comments)`;
@@ -754,7 +779,7 @@ async function main() {
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
       route: routeChange(root, base.sha, changed, { addedLines: report.addedLines, reviewAdded }),
-      comments: commentShare(root, added),
+      comments: commentShare(root, base.sha, added),
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,

@@ -270,6 +270,16 @@ try {
   assert.match(noisy.output, /COMMENTS 12 of 136 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
   write("src/a.ts", documented(3) + code(100));
   assert.doesNotMatch(routed().output, /COMMENTS/, "a few comments are no signal");
+  // A cleanup that shortens comments adds a few while deleting more: no line.
+  write("src/a.ts", documented(3) + code(100));
+  commit("documented");
+  write("src/a.ts", Array.from({ length: 12 }, (_, index) => `// v${index}\n`).join("") + code(100));
+  write("src/[slug] c.ts", Array.from({ length: 40 }, (_, index) => `/** long ${index} */\nexport const c${index} = ${index};\n`).join(""));
+  commit("more docs");
+  write("src/[slug] c.ts", Array.from({ length: 40 }, (_, index) => `export const c${index} = ${index};\n`).join("") + "// c\n".repeat(10));
+  const cleanup = routed();
+  assert.ok(cleanup.comments.removed >= 40, "removed comment lines are counted");
+  assert.doesNotMatch(cleanup.output, /COMMENTS/, "a net comment cleanup gets no COMMENTS line");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
