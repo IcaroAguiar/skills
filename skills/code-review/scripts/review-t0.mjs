@@ -600,7 +600,7 @@ const COMMENT_SYNTAX = [
   [/\.(py|rb|sh|bash|zsh|ex|exs|pl)$/, /^#(?!!)/],
 ];
 const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
-const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]+$|_test\.[^/]+$/;
+const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|fixtures?)\/|\.(test|spec|e2e)\.[^/]+$|(^|\/)test[-_][^/]+$|_test\.[^/]+$/;
 const COMMENT_FLAG = { lines: 10, share: 0.03 };
 const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
 
@@ -615,9 +615,9 @@ function commentShare(root, added) {
     let comments = 0;
     for (const number of lines === "all" ? text.map((_, index) => index + 1) : lines) {
       const line = (text[number - 1] ?? "").trim();
-      if (!line) continue;
+      if (!line || COMMENT_DIRECTIVE.test(line)) continue;
       source += 1;
-      if (syntax.test(line) && !COMMENT_DIRECTIVE.test(line)) comments += 1;
+      if (syntax.test(line)) comments += 1;
     }
     if (comments) byFile.push({ file, lines: comments });
   }
