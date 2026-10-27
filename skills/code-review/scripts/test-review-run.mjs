@@ -273,6 +273,19 @@ try {
   assert.equal(rr().status, 0);
   assert.equal(invoked("m-limited").length, 1, "a logged-out provider also cools down");
 
+  // The cooldown follows the subscription: a limit skips the same model at another
+  // effort on that CLI, a failed login skips every model on it, another CLI still runs.
+  const sibling = (status) => {
+    chain({ "a-high": claude("m-shared", { effort: "high" }), "a-med": claude("m-shared", { effort: "medium" }), "a-other": claude("m-other"), "codex-ok": codex("m-ok") }, ["a-high", "a-med", "a-other", "codex-ok"]);
+    reset({ "m-shared": status, "m-other": "ok" });
+    return rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]);
+  };
+  assert.deepEqual(sibling("limit"), [["a-high", "limit"], ["a-med", "skipped"], ["a-other", "ok"]]);
+  const shared = rr().result.attempts.find((attempt) => attempt.provider === "a-med");
+  assert.match(shared.reason, /^limit until .* \(shared with a-high\)$/);
+  assert.deepEqual(sibling("auth"), [["a-high", "auth"], ["a-med", "skipped"], ["a-other", "skipped"], ["codex-ok", "ok"]]);
+  assert.equal(invoked("m-shared").length, 1, "the shared model ran once");
+
   // ---- 5. transient retry, hard errors -----------------------------------------------
   chain({ "claude-flaky": claude("m-flaky"), "codex-ok": codex("m-ok") }, ["claude-flaky", "codex-ok"]);
   reset({ "m-flaky": "transient-once" });

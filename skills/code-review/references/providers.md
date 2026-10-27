@@ -94,8 +94,8 @@ scoped to that CLI's path) and `review-run` refuses to run.
 | Status | Meaning | Next |
 | --- | --- | --- |
 | `ok` | answered | stop |
-| `limit` | rate or usage limit (HTTP 429, "usage limit", quota) | next candidate; this provider cools down until the reset the CLI states, else 30 min |
-| `auth` | logged out or rejected credentials | next candidate; cools down 10 min |
+| `limit` | rate or usage limit (HTTP 429, "usage limit", quota) | next candidate; this provider and the front's others on the same CLI and model cool down until the reset the CLI states, else 30 min |
+| `auth` | logged out or rejected credentials | next candidate; every provider of the front on the same CLI cools down 10 min |
 | `transient` | overloaded, 5xx, dropped connection | retry once, then next candidate |
 | `empty` | the turn ended with no answer and no model output | next candidate, no cooldown. Codex does this (exit 0) when its provider silently drops the input; `claude -p` does it when a `UserPromptSubmit` hook blocks the prompt, printing the hook's message as if it were the answer. A string shaped like a credential in the diff is enough for either, and a dropped message stays in the Codex session, so later resumes of that session come back empty too: start a fresh review. Build fake credentials in tests at run time instead of writing them as literals. |
 | `oversize` | the prompt is over 700 KB and this CLI takes it on argv (agy, cursor) | next candidate, no cooldown |
@@ -117,8 +117,12 @@ Cooldowns live in the ledger and are shared by every harness on the machine:
 when one session hits a limit, the next session skips that provider without
 spending a call. They are keyed by front and provider id (`work/sonnet`), so one
 account's limit never blocks another account's provider of the same name.
+Within a front they follow the subscription: a limit also skips the same model
+at another effort on the same CLI, and a failed login skips every model on it,
+in the call that hit it and in later ones.
 `review-ledger limits` shows them; `clear <provider> --front <front>` ends one
-early (after a login, say).
+early (after a login, say); clear the provider it names, and the ones
+sharing it run again too.
 
 **`--base`** appends `git diff <base>...HEAD` and its commit list to the prompt
 Use it on every review: it saves the round trip in which the reviewer would fetch
