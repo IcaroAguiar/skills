@@ -43,7 +43,7 @@ if (mode === "transient-once") {
 }
 const answer = control.answer ?? "answer from " + name + "/" + model;
 const fakeCredential = ["FAKE", "CREDENTIAL", "0000", "0000"].join("-");
-const epoch = Math.floor(Date.now() / 1000) + 3600;
+const epoch = Math.floor(Date.now() / 1000) + (control.resetIn ?? 3600);
 const failures = {
   limit: ["Claude AI usage limit reached|" + epoch, 429, "You've hit your usage limit. Try again in 45 minutes."],
   auth: ["Not logged in. Please run /login", 401, "unauthorized: please login"],
@@ -272,6 +272,27 @@ try {
   assert.equal(callEvents()[0].status, "auth");
   assert.equal(rr().status, 0);
   assert.equal(invoked("m-limited").length, 1, "a logged-out provider also cools down");
+
+  // The cooldown follows the subscription: a limit skips the same model at another
+  // effort on that CLI, a failed login skips every model on it, another CLI still runs.
+  const sibling = (status) => {
+    chain({ "a-high": claude("m-shared", { effort: "high" }), "a-med": claude("m-shared", { effort: "medium" }), "a-other": claude("m-other"), "codex-ok": codex("m-ok") }, ["a-high", "a-med", "a-other", "codex-ok"]);
+    reset({ "m-shared": status, "m-other": "ok" });
+    return rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]);
+  };
+  assert.deepEqual(sibling("limit"), [["a-high", "limit"], ["a-med", "skipped"], ["a-other", "ok"]]);
+  const shared = rr().result.attempts.find((attempt) => attempt.provider === "a-med");
+  assert.match(shared.reason, /^limit until .* \(shared with a-high\)$/);
+  assert.deepEqual(sibling("auth"), [["a-high", "auth"], ["a-med", "skipped"], ["a-other", "skipped"], ["codex-ok", "ok"]]);
+  assert.equal(invoked("m-shared").length, 1, "the shared model ran once");
+  // Cursor names the effort inside the model id; it is still the same quota.
+  chain({ "c-high": cursor("m-c[effort=high]"), "c-med": cursor("m-c[effort=medium]"), "codex-ok": codex("m-ok") }, ["c-high", "c-med", "codex-ok"]);
+  reset({ "m-c[effort=high]": "limit", "m-c[effort=medium]": "ok" });
+  assert.deepEqual(rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["c-high", "limit"], ["c-med", "skipped"], ["codex-ok", "ok"]]);
+  // A reset already past by the time the chain reaches the sibling no longer skips it.
+  sibling("ok");
+  reset({ "m-shared": "limit", "resetIn": -60, "m-other": "ok" });
+  assert.deepEqual(rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["a-high", "limit"], ["a-med", "limit"], ["a-other", "ok"]]);
 
   // ---- 5. transient retry, hard errors -----------------------------------------------
   chain({ "claude-flaky": claude("m-flaky"), "codex-ok": codex("m-ok") }, ["claude-flaky", "codex-ok"]);
@@ -522,6 +543,11 @@ try {
   const recorded = ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "limit", "--until", new Date(Date.now() + 3_600_000).toISOString());
   assert.equal(recorded.status, 0, recorded.output);
   assert.match(ledgerCli("limits").stdout, /^main\/t3-opus {2}limit until /, "a manually recorded limit cools the provider");
+  // A failed login and a spent quota land in different columns.
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "auth").status, 0);
+  const opusRow = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-opus");
+  assert.deepEqual([opusRow.calls, opusRow.limited, opusRow.auth], [2, 1, 1]);
+  assert.match(ledgerCli("stats").stdout, /limited\s+auth\s+p50/);
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "300", "--turns", "4", "--cost", "0.5", "--input", "100", "--cache-read", "300").status, 0);
   const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-sol");
   assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-6.1-sol", "high", 300_000, 4, 0.5, 0.75]);

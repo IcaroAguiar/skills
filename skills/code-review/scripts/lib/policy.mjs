@@ -159,6 +159,24 @@ export function modelFamily(model) {
   return claude ? `claude-${claude[1]}` : id;
 }
 
+// One subscription backs every provider on the same CLI, so a cooldown is shared:
+// a failed login stops all of them, a limit every one on the same model (another
+// effort is not another quota). `limits` names the provider that hit it; clear that one.
+const account = (provider) => `${provider?.kind}\u0000${provider?.bin ?? provider?.command ?? ""}`;
+// Cursor puts the effort in the model id: `claude-sonnet-5-5[effort=high]`.
+const quota = (provider) => String(provider?.model ?? "").replace(/\[[^\]]*\]$/, "");
+function sharedCooldown(front, id, cooled, now = Date.now()) {
+  const own = front.providers[id];
+  for (const [other, provider] of Object.entries(front.providers)) {
+    const cool = cooled.get(cooldownKey(front.name, other));
+    // A chain can outlast a reset it saw, so expiry is checked again here.
+    if (!cool || Date.parse(cool.until) <= now || (other !== id && account(provider) !== account(own))) continue;
+    if (other === id) return cool;
+    if (cool.status === "auth" || quota(provider) === quota(own)) return { ...cool, via: other };
+  }
+  return null;
+}
+
 // Ordered candidates for one slot. A split entry picks one arm per head (stable, so
 // a rerun of the same head uses the same arm); the other arms follow as fallbacks.
 export function candidates(front, role, { slot = 0, authorModel = null, headSha = "", cooled = new Map() } = {}) {
@@ -176,10 +194,10 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
   const seen = new Set();
   return list.filter(({ id }) => !seen.has(id) && seen.add(id)).map((candidate) => {
     const provider = front.providers[candidate.id];
-    const cool = cooled.get(cooldownKey(front.name, candidate.id));
+    const cool = sharedCooldown(front, candidate.id, cooled);
     const same = authorModel && role !== "fix" && modelFamily(provider.model) === modelFamily(authorModel);
     const skip = same ? `same model as the author (${authorModel})`
-      : cool ? `${cool.status} until ${cool.until}`
+      : cool ? `${cool.status} until ${cool.until}${cool.via ? ` (shared with ${cool.via})` : ""}`
         : null;
     return { ...candidate, provider, skip };
   });
@@ -204,7 +222,8 @@ export function diffSize(route) {
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
 export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, unfit = () => null, onAttempt = () => {} }) {
-  let list = candidates(front, role, { slot, authorModel, headSha, cooled: cooldowns() });
+  const cooled = cooldowns();
+  let list = candidates(front, role, { slot, authorModel, headSha, cooled });
   if (resume) {
     // The session's provider must still be a candidate for this role and still
     // independent from the author; otherwise only a fresh reviewer may answer.
@@ -225,6 +244,14 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
     return { final: entry, attempts: [...attempts, entry] };
   }
   for (const candidate of list.filter((entry) => !entry.skip)) {
+    // A limit or a failed login earlier in this chain also skips the candidates that share it.
+    const cool = sharedCooldown(front, candidate.id, cooled);
+    if (cool) {
+      const entry = { provider: candidate.id, status: "skipped", reason: `${cool.status} until ${cool.until} (shared with ${cool.via})` };
+      attempts.push(entry);
+      onAttempt(entry);
+      continue;
+    }
     const resuming = resume?.provider === candidate.id;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const call = newId();
@@ -241,6 +268,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
         resumeOf: resuming ? resume.call : undefined, fresh: resume && !resuming ? true : undefined, retry: attempt > 1 || undefined,
       };
       appendEvent(record);
+      if (record.until) cooled.set(cooldownKey(front.name, candidate.id), { until: record.until, status: record.status, error: record.error ?? null });
       // The caller sees the CLI's words; the ledger above only the summary.
       const entry = { ...record, error: result.status === "ok" ? undefined : result.error, provider: candidate.id, text: result.text ?? "" };
       attempts.push(entry);
