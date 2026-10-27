@@ -629,25 +629,30 @@ function commentShare(root, base, added) {
 }
 
 // Comment lines the diff deleted from the same files: a cleanup that shortens
-// comments adds some while removing more, and is no signal.
+// comments adds some while removing more, and is no signal. One diff
+// per file, so no path is parsed back from a header; renamed files count none.
+// The line is only advice, so a failing diff leaves the count unknown (null).
 function removedComments(root, base, scanned) {
-  if (!scanned.length) return 0;
-  const syntaxOf = new Map(scanned);
-  let file = null;
-  let removed = 0;
-  const patch = git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, "--", ...syntaxOf.keys()]);
-  for (const line of patch.split("\n")) {
-    if (line.startsWith("--- ")) file = line.startsWith("--- a/") ? line.slice(6) : null;
-    else if (line.startsWith("-") && file && syntaxOf.has(file)) {
-      const text = line.slice(1).trim();
-      if (text && syntaxOf.get(file).test(text) && !COMMENT_DIRECTIVE.test(text)) removed += 1;
+  try {
+    let removed = 0;
+    for (const [file, syntax] of scanned) {
+      let inHunk = false;
+      for (const line of git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", base, "--", file]).split("\n")) {
+        if (line.startsWith("@@")) inHunk = true;
+        else if (inHunk && line.startsWith("-")) {
+          const text = line.slice(1).trim();
+          if (text && syntax.test(text) && !COMMENT_DIRECTIVE.test(text)) removed += 1;
+        }
+      }
     }
+    return removed;
+  } catch {
+    return null;
   }
-  return removed;
 }
 
 function formatComments(comments) {
-  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share || comments.removed >= comments.lines) return null;
+  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share || (comments.removed ?? 0) >= comments.lines) return null;
   const share = Math.round((100 * comments.lines) / comments.sourceLines);
   const where = comments.top.map(({ file, lines }) => `${file} ${lines}`).join(", ");
   return `COMMENTS ${comments.lines} of ${comments.sourceLines} added source lines (${share}%) are comments (most in ${where}). Keep only what the code cannot say; the reviewer reports the rest (references/review-standards.md, Comments)`;

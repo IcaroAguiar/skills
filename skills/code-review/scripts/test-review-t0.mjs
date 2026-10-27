@@ -274,9 +274,9 @@ try {
   write("src/a.ts", documented(3) + code(100));
   commit("documented");
   write("src/a.ts", Array.from({ length: 12 }, (_, index) => `// v${index}\n`).join("") + code(100));
-  write("src/c.ts", Array.from({ length: 40 }, (_, index) => `/** long ${index} */\nexport const c${index} = ${index};\n`).join(""));
+  write("src/[slug] c.ts", Array.from({ length: 40 }, (_, index) => `/** long ${index} */\nexport const c${index} = ${index};\n`).join(""));
   commit("more docs");
-  write("src/c.ts", Array.from({ length: 40 }, (_, index) => `export const c${index} = ${index};\n`).join("") + "// c\n".repeat(10));
+  write("src/[slug] c.ts", Array.from({ length: 40 }, (_, index) => `export const c${index} = ${index};\n`).join("") + "// c\n".repeat(10));
   const cleanup = routed();
   assert.ok(cleanup.comments.removed >= 40, "removed comment lines are counted");
   assert.doesNotMatch(cleanup.output, /COMMENTS/, "a net comment cleanup gets no COMMENTS line");
