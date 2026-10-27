@@ -163,13 +163,16 @@ export function modelFamily(model) {
 // a failed login stops all of them, a limit every one on the same model (another
 // effort is not another quota). `limits` names the provider that hit it; clear that one.
 const account = (provider) => `${provider?.kind}\u0000${provider?.bin ?? provider?.command ?? ""}`;
-function sharedCooldown(front, id, cooled) {
+// Cursor puts the effort in the model id: `claude-sonnet-5-5[effort=high]`.
+const quota = (provider) => String(provider?.model ?? "").replace(/\[[^\]]*\]$/, "");
+function sharedCooldown(front, id, cooled, now = Date.now()) {
   const own = front.providers[id];
   for (const [other, provider] of Object.entries(front.providers)) {
     const cool = cooled.get(cooldownKey(front.name, other));
-    if (!cool || (other !== id && account(provider) !== account(own))) continue;
+    // A chain can outlast a reset it saw, so expiry is checked again here.
+    if (!cool || Date.parse(cool.until) <= now || (other !== id && account(provider) !== account(own))) continue;
     if (other === id) return cool;
-    if (cool.status === "auth" || provider.model === own.model) return { ...cool, via: other };
+    if (cool.status === "auth" || quota(provider) === quota(own)) return { ...cool, via: other };
   }
   return null;
 }

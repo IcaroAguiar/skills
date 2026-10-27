@@ -43,7 +43,7 @@ if (mode === "transient-once") {
 }
 const answer = control.answer ?? "answer from " + name + "/" + model;
 const fakeCredential = ["FAKE", "CREDENTIAL", "0000", "0000"].join("-");
-const epoch = Math.floor(Date.now() / 1000) + 3600;
+const epoch = Math.floor(Date.now() / 1000) + (control.resetIn ?? 3600);
 const failures = {
   limit: ["Claude AI usage limit reached|" + epoch, 429, "You've hit your usage limit. Try again in 45 minutes."],
   auth: ["Not logged in. Please run /login", 401, "unauthorized: please login"],
@@ -285,6 +285,14 @@ try {
   assert.match(shared.reason, /^limit until .* \(shared with a-high\)$/);
   assert.deepEqual(sibling("auth"), [["a-high", "auth"], ["a-med", "skipped"], ["a-other", "skipped"], ["codex-ok", "ok"]]);
   assert.equal(invoked("m-shared").length, 1, "the shared model ran once");
+  // Cursor names the effort inside the model id; it is still the same quota.
+  chain({ "c-high": cursor("m-c[effort=high]"), "c-med": cursor("m-c[effort=medium]"), "codex-ok": codex("m-ok") }, ["c-high", "c-med", "codex-ok"]);
+  reset({ "m-c[effort=high]": "limit", "m-c[effort=medium]": "ok" });
+  assert.deepEqual(rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["c-high", "limit"], ["c-med", "skipped"], ["codex-ok", "ok"]]);
+  // A reset already past by the time the chain reaches the sibling no longer skips it.
+  sibling("ok");
+  reset({ "m-shared": "limit", "resetIn": -60, "m-other": "ok" });
+  assert.deepEqual(rr().result.attempts.map((attempt) => [attempt.provider, attempt.status]), [["a-high", "limit"], ["a-med", "limit"], ["a-other", "ok"]]);
 
   // ---- 5. transient retry, hard errors -----------------------------------------------
   chain({ "claude-flaky": claude("m-flaky"), "codex-ok": codex("m-ok") }, ["claude-flaky", "codex-ok"]);
