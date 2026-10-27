@@ -215,7 +215,7 @@ function stats(options) {
   const rows = new Map();
   const row = (event) => {
     const id = key(event);
-    if (!rows.has(id)) rows.set(id, { role: event.role ?? event.source, provider: event.provider, model: event.resolvedModel ?? event.model ?? "?", effort: event.effort ?? "-", ab: Boolean(event.arm), size: bySize ? sizeBucket(event.size) : undefined, calls: 0, ok: 0, limit: 0, failed: 0, durations: [], turns: [], cost: 0, costCalls: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, triaged: 0, fixed: 0, wrong: 0, seriousFixed: 0 });
+    if (!rows.has(id)) rows.set(id, { role: event.role ?? event.source, provider: event.provider, model: event.resolvedModel ?? event.model ?? "?", effort: event.effort ?? "-", ab: Boolean(event.arm), size: bySize ? sizeBucket(event.size) : undefined, calls: 0, ok: 0, limit: 0, auth: 0, failed: 0, durations: [], turns: [], cost: 0, costCalls: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, triaged: 0, fixed: 0, wrong: 0, seriousFixed: 0 });
     return rows.get(id);
   };
   const calls = new Map(events.filter((event) => event.type === "call").map((event) => [event.call, event]));
@@ -228,7 +228,9 @@ function stats(options) {
         r.ok += 1;
         if (Number.isFinite(event.durationMs)) r.durations.push(event.durationMs);
         if (Number.isFinite(event.turns)) r.turns.push(event.turns);
-      } else if (event.status === "limit" || event.status === "auth") r.limit += 1;
+      } else if (event.status === "limit") r.limit += 1;
+      // A failed login is not a spent quota: its own column, so neither is misread.
+      else if (event.status === "auth") r.auth += 1;
       else r.failed += 1;
       if (Number.isFinite(event.costUsd)) {
         r.cost += event.costUsd;
@@ -247,7 +249,7 @@ function stats(options) {
   const table = [...rows.values()].map((r) => {
     const prompt = r.input + r.cacheRead + r.cacheWrite;
     return {
-      role: r.role, provider: r.provider, model: r.model, effort: r.effort + (r.ab ? " (A/B)" : ""), size: r.size, calls: r.calls, ok: r.ok, limited: r.limit, failed: r.failed,
+      role: r.role, provider: r.provider, model: r.model, effort: r.effort + (r.ab ? " (A/B)" : ""), size: r.size, calls: r.calls, ok: r.ok, limited: r.limit, auth: r.auth, failed: r.failed,
       p50: percentile(r.durations, 0.5), p90: percentile(r.durations, 0.9), turnsP50: percentile(r.turns, 0.5),
       costPerOk: r.costCalls && r.ok ? r.cost / r.ok : null, cacheRead: prompt ? r.cacheRead / prompt : null,
       triaged: r.triaged, actedOn: r.triaged ? r.fixed / r.triaged : null, wrong: r.triaged ? r.wrong / r.triaged : null,
@@ -257,8 +259,8 @@ function stats(options) {
   if (options.json) return console.log(JSON.stringify({ sinceDays: days, rows: table }, null, 2));
   const pct = (value) => (value === null ? "-" : `${Math.round(value * 100)}%`);
   const secs = (ms) => (ms === null ? "-" : `${Math.round(ms / 1000)}s`);
-  const head = ["role", "provider", "model", "effort", ...(bySize ? ["size"] : []), "calls", "ok", "limited", "p50", "p90", "turns", "$/review", "cache", "triaged", "acted-on", "wrong", "serious fixed/review"];
-  const lines = table.map((r) => [r.role, r.provider, r.model, r.effort, ...(bySize ? [r.size] : []), r.calls, r.ok, r.limited, secs(r.p50), secs(r.p90), r.turnsP50 ?? "-", r.costPerOk === null ? "-" : `$${r.costPerOk.toFixed(2)}`, pct(r.cacheRead), r.triaged, pct(r.actedOn), pct(r.wrong), r.seriousFixedPerReview === null ? "-" : r.seriousFixedPerReview.toFixed(2)].map(String));
+  const head = ["role", "provider", "model", "effort", ...(bySize ? ["size"] : []), "calls", "ok", "limited", "auth", "p50", "p90", "turns", "$/review", "cache", "triaged", "acted-on", "wrong", "serious fixed/review"];
+  const lines = table.map((r) => [r.role, r.provider, r.model, r.effort, ...(bySize ? [r.size] : []), r.calls, r.ok, r.limited, r.auth, secs(r.p50), secs(r.p90), r.turnsP50 ?? "-", r.costPerOk === null ? "-" : `$${r.costPerOk.toFixed(2)}`, pct(r.cacheRead), r.triaged, pct(r.actedOn), pct(r.wrong), r.seriousFixedPerReview === null ? "-" : r.seriousFixedPerReview.toFixed(2)].map(String));
   const widths = head.map((title, index) => Math.max(title.length, ...lines.map((line) => line[index].length)));
   console.log(`review-ledger stats, last ${days} day(s)`);
   for (const line of [head, ...lines]) console.log(line.map((cell, index) => cell.padEnd(widths[index])).join("  ").trimEnd());

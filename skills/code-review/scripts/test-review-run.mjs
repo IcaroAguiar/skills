@@ -522,6 +522,11 @@ try {
   const recorded = ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "limit", "--until", new Date(Date.now() + 3_600_000).toISOString());
   assert.equal(recorded.status, 0, recorded.output);
   assert.match(ledgerCli("limits").stdout, /^main\/t3-opus {2}limit until /, "a manually recorded limit cools the provider");
+  // A failed login and a spent quota land in different columns.
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-opus", "--status", "auth").status, 0);
+  const opusRow = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-opus");
+  assert.deepEqual([opusRow.calls, opusRow.limited, opusRow.auth], [2, 1, 1]);
+  assert.match(ledgerCli("stats").stdout, /limited\s+auth\s+p50/);
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "300", "--turns", "4", "--cost", "0.5", "--input", "100", "--cache-read", "300").status, 0);
   const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-sol");
   assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-6.1-sol", "high", 300_000, 4, 0.5, 0.75]);
