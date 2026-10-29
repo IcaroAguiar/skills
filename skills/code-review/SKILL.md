@@ -36,8 +36,10 @@ covers, and confirms or dismisses each T0 warning with a reason. T0's `ROUTE`
 line gives the reviewer's starting reasoning effort and says whether T1 runs.
 Its `SIZE` line flags a change past the layer target or the limit. Split it into a
 stack, or say in the PR why it stays whole: `references/pr-size.md`. Its
-`COMMENTS` line flags a diff that adds many comments; the reviewer reports the
-ones the code does not need (`references/review-standards.md`, Comments).
+`COMMENTS` line flags a diff that adds many comments: from 5% of the added source
+lines it blocks T0, and `review-run` refuses the review too, so trim them before
+asking; below that the reviewer reports the ones the code does not need
+(`references/review-standards.md`, Comments).
 Details, configuration and suppression: `references/t0.md`.
 
 ## Fast pre-pass (T1)

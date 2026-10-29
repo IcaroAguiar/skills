@@ -9,7 +9,8 @@ import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defaultReportPath, git, isGenerated, LOCKFILES, readJson, run, stopGroups, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
+import { commentLevel, commentShare, formatComments } from "./lib/comments.mjs";
+import { collectChanges, defaultReportPath, git, isGenerated, LOCKFILES, readJson, resolveBase, reviewable, run, stopGroups, tail, treeFingerprint, writeReport } from "./lib/repo.mjs";
 
 const RULES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../rules");
 const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
@@ -72,58 +73,6 @@ function usage(message) {
 
 function hasCommand(command) {
   return spawnSync("sh", ["-c", `command -v "$1" >/dev/null 2>&1`, "sh", command]).status === 0;
-}
-
-function resolveBase(root, requested) {
-  const candidates = requested
-    ? [requested]
-    : [git(root, ["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"], { allowFailure: true })?.trim(), "origin/main", "origin/master", "main", "master"];
-  for (const ref of candidates.filter(Boolean)) {
-    if (git(root, ["rev-parse", "--verify", "-q", `${ref}^{commit}`], { allowFailure: true }) === null) continue;
-    const sha = git(root, ["merge-base", "HEAD", ref], { allowFailure: true })?.trim();
-    if (sha) return { ref, sha };
-  }
-  throw new Error(requested ? `base ${requested} is not a commit with a merge-base` : "no default branch found; pass --base <ref>");
-}
-
-// Changed paths (deletions included) and added line numbers per surviving file.
-// Paths come from -z output. The patch is one diff split on "diff --git" lines,
-// in the same order as the path list; content lines always start with +, -, space
-// or "\\", so file headers never need parsing. "all" marks files to scan whole:
-// untracked files and text that git shows as binary (a -diff attribute).
-function collectChanges(root, base) {
-  const fields = git(root, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
-  const entries = [];
-  for (let index = 0; index < fields.length && fields[index];) {
-    const code = fields[index++];
-    if (code.startsWith("R") || code.startsWith("C")) entries.push({ code: code[0], from: fields[index++], path: fields[index++] });
-    else entries.push({ code: code[0], path: fields[index++] });
-  }
-  const patches = entries.length
-    ? git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", "-M", base, "--"]).split(/^(?=diff --git )/m).filter((piece) => piece.startsWith("diff --git "))
-    : [];
-  if (patches.length !== entries.length) throw new Error(`diff has ${patches.length} file patches for ${entries.length} changed paths`);
-  const changed = [];
-  const added = new Map();
-  entries.forEach((entry, index) => {
-    changed.push(entry.path);
-    if (entry.code === "D") return;
-    const lines = new Set();
-    let binary = false;
-    for (const line of patches[index].split("\n")) {
-      if (line.startsWith("Binary files ")) binary = true;
-      const hunk = line.startsWith("@@") && line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
-      if (!hunk) continue;
-      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-      for (let offset = 0; offset < count; offset += 1) lines.add(Number(hunk[1]) + offset);
-    }
-    added.set(entry.path, binary ? "all" : lines);
-  });
-  for (const file of git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) {
-    changed.push(file);
-    added.set(file, "all");
-  }
-  return { changed, added };
 }
 
 function isAdded(added, file, start, end = start) {
@@ -521,7 +470,6 @@ const T1_MIN_CHANGED_LINES = 20;
 const LARGE_DIFF = { lines: 800, files: 30 };
 const TARGET_LINES = 400;
 // Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
-const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !/\.snap$/.test(file);
 
 // Deterministic routing for the model tiers: the deep review's starting effort,
 // whether the fast pre-pass (T1) is worth running, and the diff's size.
@@ -591,71 +539,6 @@ function routeChange(root, base, changed, { addedLines, reviewAdded }) {
 function formatRoute(route) {
   const reasons = route.reasons.map(({ area, files, more }) => `${area}: ${files.join(", ")}${more ? ` +${more}` : ""}`).join("; ");
   return `ROUTE deep-review effort ${route.effort}${reasons ? ` (${reasons})` : ""}  T1 ${route.t1.run ? "run" : `skip (${route.t1.why})`}  ${route.size} diff, ${route.changedLines} changed lines`;
-}
-
-// Comment lines among the added source lines, outside tests. Agents document every
-// declaration by habit; the reviewer judges each one (references/review-standards.md).
-const COMMENT_SYNTAX = [
-  [/\.[cm]?[jt]sx?$|\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/, /^(\/\/|\/\*|\*(\s|\/|$))/],
-  [/\.(py|rb|sh|bash|zsh|ex|exs|pl)$/, /^#(?!!)/],
-];
-const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
-const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|fixtures?)\/|\.(test|spec|e2e)\.[^/]+$|(^|\/)test[-_][^/]+$|_test\.[^/]+$/;
-const COMMENT_FLAG = { lines: 10, share: 0.03 };
-const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
-
-function commentShare(root, base, added) {
-  let source = 0;
-  const byFile = [];
-  const scanned = [];
-  for (const [file, lines] of added) {
-    const syntax = COMMENT_SYNTAX.find(([pattern]) => pattern.test(file))?.[1];
-    const path = join(root, file);
-    if (!syntax || !reviewable(file) || TEST_FILE.test(file) || !existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).size > MAX_COMMENT_SCAN_BYTES) continue;
-    const text = readFileSync(path, "utf8").split("\n");
-    if (lines !== "all") scanned.push([file, syntax]);
-    let comments = 0;
-    for (const number of lines === "all" ? text.map((_, index) => index + 1) : lines) {
-      const line = (text[number - 1] ?? "").trim();
-      const comment = syntax.test(line);
-      if (!line || (comment && COMMENT_DIRECTIVE.test(line))) continue;
-      source += 1;
-      if (comment) comments += 1;
-    }
-    if (comments) byFile.push({ file, lines: comments });
-  }
-  const lines = byFile.reduce((sum, entry) => sum + entry.lines, 0);
-  return { lines, removed: removedComments(root, base, scanned), sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
-}
-
-// Comment lines the diff deleted from the same files: a cleanup that shortens
-// comments adds some while removing more, and is no signal. One diff
-// per file, so no path is parsed back from a header; renamed files count none.
-// The line is only advice, so a failing diff leaves the count unknown (null).
-function removedComments(root, base, scanned) {
-  try {
-    let removed = 0;
-    for (const [file, syntax] of scanned) {
-      let inHunk = false;
-      for (const line of git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", base, "--", file]).split("\n")) {
-        if (line.startsWith("@@")) inHunk = true;
-        else if (inHunk && line.startsWith("-")) {
-          const text = line.slice(1).trim();
-          if (text && syntax.test(text) && !COMMENT_DIRECTIVE.test(text)) removed += 1;
-        }
-      }
-    }
-    return removed;
-  } catch {
-    return null;
-  }
-}
-
-function formatComments(comments) {
-  if (!comments || comments.lines < COMMENT_FLAG.lines || comments.lines < comments.sourceLines * COMMENT_FLAG.share || (comments.removed ?? 0) >= comments.lines) return null;
-  const share = Math.round((100 * comments.lines) / comments.sourceLines);
-  const where = comments.top.map(({ file, lines }) => `${file} ${lines}`).join(", ");
-  return `COMMENTS ${comments.lines} of ${comments.sourceLines} added source lines (${share}%) are comments (most in ${where}). Keep only what the code cannot say; the reviewer reports the rest (references/review-standards.md, Comments)`;
 }
 
 // Advice, never a blocker: the author splits the change or says why it stays whole.
@@ -770,6 +653,8 @@ async function main() {
     if (!options.strict) report.incomplete.push(...steps.filter((step) => step.status === "missing").map((step) => step.detail));
     if (options.checks && !discovered.checks.length) report.incomplete.push("no repository checks found");
 
+    const comments = commentShare(root, base.sha, added, changed);
+    if (commentLevel(comments) === "block") report.blockers.push(`comments: ${comments.lines - (comments.removed ?? 0)} new in ${comments.sourceLines} added source lines`);
     let reviewAdded = 0;
     for (const [file, lines] of added) {
       const count = lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").filter((line, index, all) => line || index < all.length - 1).length : 0) : lines.size;
@@ -779,7 +664,7 @@ async function main() {
     Object.assign(report, {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
       route: routeChange(root, base.sha, changed, { addedLines: report.addedLines, reviewAdded }),
-      comments: commentShare(root, base.sha, added),
+      comments,
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,

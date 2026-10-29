@@ -42,7 +42,9 @@ spec, an issue, an upstream bug). Report the added comments that:
 - keep commented-out code, or a TODO without an issue.
 
 Report them as one `SIMPLIFICATION` finding that lists every place: medium when
-they run through the diff (T0 printed a `COMMENTS` line), low otherwise. The fix
+they run through the diff (the prompt or T0 carries a `COMMENTS` line), low
+otherwise. Past 5% of the added source lines T0 and `review-run` block before
+any review, so the author trims them first. The fix
 is to delete them, or to move what they say into a name, a type or a test. Never
 ask the author to add a comment that a clearer name, type or test would make
 unnecessary.

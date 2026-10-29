@@ -265,9 +265,14 @@ try {
   write("src/a.ts", documented(12) + code(100));
   for (const test of ["src/a.test.ts", "src/flow.e2e.ts", "e2e/login.ts", "scripts/test-run.mjs"]) write(test, "// a test may explain itself\n".repeat(50));
   write("src/b.ts", "// eslint-disable-next-line no-console\n// @ts-expect-error legacy\n*[Symbol.iterator]() {}\nimport eslint from 'eslint';\n" + code(10));
-  const noisy = routed();
-  assert.deepEqual([noisy.comments.lines, noisy.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
-  assert.match(noisy.output, /COMMENTS 12 of 136 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
+  const noisy = reviewT0(["--no-checks"]);
+  assert.equal(noisy.status, 1, "past 5% the comments block T0");
+  assert.deepEqual([noisy.report.comments.lines, noisy.report.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
+  assert.match(noisy.output, /COMMENTS 12 new comment lines in 136 added source lines \(9%; 12 added, 0 removed; most in src\/a\.ts 12\): over the 5% limit/);
+  assert.match(noisy.output, /RESULT BLOCKED \(comments: 12 new in 136 added source lines\)/);
+  write("src/a.ts", documented(12) + code(300));
+  const advised = routed();
+  assert.match(advised.output, /COMMENTS 12 new comment lines in 336 added source lines \(4%.*the reviewer reports the rest/, "between 3% and 5% T0 only advises");
   write("src/a.ts", documented(3) + code(100));
   assert.doesNotMatch(routed().output, /COMMENTS/, "a few comments are no signal");
   // A cleanup that shortens comments adds a few while deleting more: no line.
@@ -280,6 +285,16 @@ try {
   const cleanup = routed();
   assert.ok(cleanup.comments.removed >= 40, "removed comment lines are counted");
   assert.doesNotMatch(cleanup.output, /COMMENTS/, "a net comment cleanup gets no COMMENTS line");
+  // Splitting a commented module adds its comments in new files and removes them from the old one.
+  const notes = (from, to) => Array.from({ length: to - from }, (_, index) => `// note ${from + index}\nexport const m${from + index} = ${from + index};\n`).join("");
+  write("src/notes.ts", notes(0, 30));
+  commit("notes");
+  rmSync(join(repo, "src/notes.ts"));
+  write("src/notes-a.ts", notes(0, 15) + code(40));
+  write("src/notes-b.ts", notes(15, 30) + code(40).replaceAll("value", "other"));
+  const split = routed();
+  assert.deepEqual([split.comments.lines, split.comments.removed], [30, 30], "comments deleted from another file count as removed");
+  assert.doesNotMatch(split.output, /COMMENTS/, "moving commented code to new files adds no comments on net");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));

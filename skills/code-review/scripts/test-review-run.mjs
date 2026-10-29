@@ -689,6 +689,23 @@ try {
   assert.equal(calls().length, 0, "without a scanner nothing is sent");
   writeFileSync(promptFile, "REVIEW-PROMPT\n");
 
+  // ---- comments: a comment-heavy diff never reaches a reviewer, with or without T0 ----
+  newRepo("comments");
+  chain({ "codex-ok": codex("m-ok") }, ["codex-ok"]);
+  const commented = (count, plain) => Array.from({ length: count }, (_, index) => `// value ${index}\nexport const v${index} = ${index};\n`).join("") + Array.from({ length: plain }, (_, index) => `export const p${index} = ${index};\n`).join("");
+  write("src/a.ts", commented(12, 50));
+  reset({ "m-ok": "ok" });
+  const heavy = rr();
+  assert.equal(heavy.status, 1, heavy.output);
+  assert.match(heavy.output, /COMMENTS 12 new comment lines in 74 added source lines \(16%.*over the 5% limit.*No reviewer runs/);
+  assert.equal(calls().length, 0, "no provider sees a diff past the comment limit");
+  write("src/a.ts", commented(12, 300));
+  reset({ "m-ok": "ok" });
+  const advised = rr();
+  assert.equal(advised.status, 0, advised.output);
+  assert.match(calls()[0].stdin, /<comment_count>\nCOMMENTS 12 new comment lines in 324 added source lines \(4%/, "between 3% and 5% the reviewer gets the count");
+  assert.deepEqual(callEvents()[0].comments, { lines: 12, sourceLines: 324 }, "the ledger keeps the count for calibration");
+
   console.log("PASS review-run contract");
 } finally {
   rmSync(workspace, { recursive: true, force: true });

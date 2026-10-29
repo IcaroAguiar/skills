@@ -221,7 +221,7 @@ export function diffSize(route) {
 //
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
-export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, unfit = () => null, onAttempt = () => {} }) {
+export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, comments = null, unfit = () => null, onAttempt = () => {} }) {
   const cooled = cooldowns();
   let list = candidates(front, role, { slot, authorModel, headSha, cooled });
   if (resume) {
@@ -232,7 +232,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
   }
   list = list.map((candidate) => ({ ...candidate, skip: candidate.skip ?? unfit(candidate.provider, resume?.provider === candidate.id) }));
   const attempts = list.filter((candidate) => candidate.skip).map(({ id, skip }) => ({ provider: id, status: "skipped", reason: skip }));
-  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label, size: size ?? undefined };
+  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label, size: size ?? undefined, comments: comments ?? undefined };
   // No provider sees a prompt gitleaks has not cleared; see lib/prompt-scan.mjs.
   for (const text of [prompt, resume?.prompt].filter(Boolean)) {
     const scan = await scanPrompt(text);
