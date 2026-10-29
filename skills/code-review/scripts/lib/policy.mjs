@@ -221,7 +221,7 @@ export function diffSize(route) {
 //
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
-export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, comments = null, unfit = () => null, onAttempt = () => {} }) {
+export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, comments = null, resumeComments = null, unfit = () => null, onAttempt = () => {} }) {
   const cooled = cooldowns();
   let list = candidates(front, role, { slot, authorModel, headSha, cooled });
   if (resume) {
@@ -232,7 +232,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
   }
   list = list.map((candidate) => ({ ...candidate, skip: candidate.skip ?? unfit(candidate.provider, resume?.provider === candidate.id) }));
   const attempts = list.filter((candidate) => candidate.skip).map(({ id, skip }) => ({ provider: id, status: "skipped", reason: skip }));
-  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label, size: size ?? undefined, comments: comments ?? undefined };
+  const meta = { front: front.name, role, repo: basename(root), head: headSha || null, slot: role === "t1" ? slot : undefined, label, size: size ?? undefined };
   // No provider sees a prompt gitleaks has not cleared; see lib/prompt-scan.mjs.
   for (const text of [prompt, resume?.prompt].filter(Boolean)) {
     const scan = await scanPrompt(text);
@@ -260,7 +260,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
       const env = { ...process.env, [PROMPT_HASH_ENV]: promptHash(sent) };
       const result = await callProvider(candidate.provider, { role, prompt: sent, root, effort: level, resume: resuming ? resume.sessionId : null, timeoutMs, env });
       const record = {
-        type: "call", call, ...meta, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
+        type: "call", call, ...meta, comments: (resuming ? resumeComments : comments) ?? undefined, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
         resolvedModel: result.resolvedModel ?? null, effort: level, experiment: candidate.experiment, arm: candidate.arm,
         status: result.status, until: result.status === "limit" || result.status === "auth" ? result.resetAt ?? new Date(Date.now() + DEFAULT_COOLDOWN_MS[result.status]).toISOString() : undefined,
         error: result.status === "ok" ? undefined : result.summary ?? result.status, durationMs: result.durationMs, turns: result.turns ?? null,

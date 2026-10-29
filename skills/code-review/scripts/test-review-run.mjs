@@ -712,7 +712,7 @@ try {
   const advised = rr(["--base", "main"]);
   assert.equal(advised.status, 0, advised.output);
   assert.match(calls()[0].stdin, /<comment_count>\nCOMMENTS 12 new comment lines in 324 added source lines \(4%/, "between 3% and 5% the reviewer gets the count");
-  assert.deepEqual(callEvents()[0].comments, { lines: 12, sourceLines: 324 }, "the ledger keeps the count for calibration");
+  assert.deepEqual(callEvents()[0].comments, { lines: 12, removed: 0, sourceLines: 324 }, "the ledger keeps the count for calibration");
   // A delta without comments still cannot carry a full fallback past the limit.
   write("src/a.ts", commented(12, 50));
   commitAll("back to heavy");
@@ -724,6 +724,21 @@ try {
   const fallback = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", promptFile, "--out", outFile, "--author-model", "human", "--base", head, "--resume", "nope", "--fresh-prompt", join(workspace, "fresh.txt"), "--full-base", "main"]);
   assert.equal(fallback.status, 1, fallback.output);
   assert.match(fallback.output, /over the 5% limit/, "the full range a fresh fallback would get is counted too");
+  // A fresh fallback logs the full range's count, not the delta's.
+  write("src/a.ts", commented(12, 300));
+  commitAll("advisory again");
+  const fullReview = rr(["--base", "main"]);
+  assert.equal(fullReview.status, 0, fullReview.output);
+  const deltaBase = sh("git", ["rev-parse", "HEAD"]).trim();
+  write("src/c.ts", commented(0, 30));
+  commitAll("plain delta");
+  chain({ "codex-ok": codex("m-ok"), "codex-other": codex("m-other") }, ["codex-other"]);
+  writeFileSync(logFile, "");
+  const fellBack = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", promptFile, "--out", outFile, "--author-model", "human", "--base", deltaBase, "--resume", fullReview.result.call, "--fresh-prompt", join(workspace, "fresh.txt"), "--full-base", "main"]);
+  assert.equal(fellBack.status, 0, fellBack.output);
+  assert.match(fellBack.output, /FRESH/);
+  assert.match(invoked("m-other")[0].stdin, /<comment_count>\nCOMMENTS 12 new comment lines/, "the fresh prompt carries the full range's count");
+  assert.deepEqual(callEvents().at(-1).comments, { lines: 12, removed: 0, sourceLines: 384 }, "and so does its ledger event");
   newRepo("comments-no-default");
   sh("git", ["branch", "-m", "trunk"]);
   reset({ "m-ok": "ok" });

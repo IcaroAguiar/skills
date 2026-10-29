@@ -132,8 +132,7 @@ function withDiff(prompt, root, base) {
   return { text: `${prompt.trimEnd()}\n\n<fixed_diff range="${range}">\n<commits>\n${log}\n</commits>\n${body}</fixed_diff>\n`, whole };
 }
 
-// Counted here as well as in T0, because a review can start without T0 having run,
-// over the committed range the prompt carries.
+// A review can start without T0, so the count also runs here, on the committed range the prompt carries.
 function countComments(root, ref) {
   let base;
   try {
@@ -143,6 +142,8 @@ function countComments(root, ref) {
   }
   return commentShare(root, base.sha, collectChanges(root, base.sha, "HEAD"), { head: "HEAD" });
 }
+
+const counts = (comments) => comments && { lines: comments.lines, removed: comments.removed, sourceLines: comments.sourceLines };
 
 const SHELL_KINDS = new Set(["codex"]);
 
@@ -203,7 +204,7 @@ async function main() {
   const { final, attempts } = await dispatch({
     front, role: options.role, prompt: resume ? (fresh ? fresh.text + noteFor(freshComments) : null) : prompt, root, effort,
     unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
-    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route), comments: comments && { lines: comments.lines, sourceLines: comments.sourceLines },
+    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route), comments: counts(resume ? freshComments : comments), resumeComments: resume ? counts(comments) : null,
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),
   });
 

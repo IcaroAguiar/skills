@@ -2,9 +2,7 @@ import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { git, reviewable } from "./repo.mjs";
 
-// Comment lines among the added source lines, outside tests. Agents document every
-// declaration by habit. Past COMMENT_BLOCK the author trims before any reviewer
-// runs; between the two the reviewer judges each one (references/review-standards.md).
+// Past COMMENT_BLOCK no reviewer runs; above COMMENT_FLAG the reviewer judges each comment (references/review-standards.md).
 const C_LIKE = /\.[cm]?[jt]sx?$|\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/;
 const HASH = /\.(py|rb|sh|bash|zsh|ex|exs|pl)$/;
 const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
@@ -15,27 +13,41 @@ const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
 
 const syntaxOf = (file) => (!reviewable(file) || TEST_FILE.test(file) ? null : C_LIKE.test(file) ? "c" : HASH.test(file) ? "hash" : null);
 
-// "comment", "directive", "code" or "blank" per line. C-like files track block
-// comments and multi-line template literals, so the body of a `/* */` block counts
-// and a `//` that opens a line inside a template string does not.
+// Tracks quotes, template literals and block comments; regex literals are not tracked.
 function classify(text, syntax) {
-  let inBlock = false;
-  let inTemplate = false;
-  return text.split("\n").map((raw) => {
+  const lines = text.split("\n");
+  const kind = (line, comment) => (!line ? "blank" : comment ? (COMMENT_DIRECTIVE.test(line) ? "directive" : "comment") : "code");
+  if (syntax === "hash") return lines.map((raw) => kind(raw.trim(), /^#(?!!)/.test(raw.trim())));
+  let state = "code";
+  let depth = 0;
+  const templates = [];
+  return lines.map((raw) => {
     const line = raw.trim();
-    const kind = (comment) => (comment ? (COMMENT_DIRECTIVE.test(line) ? "directive" : "comment") : line ? "code" : "blank");
-    if (syntax === "hash") return kind(/^#(?!!)/.test(line));
-    if (inBlock) {
-      inBlock = !line.includes("*/");
-      return kind(true);
+    const result = kind(line, state === "block" || (state === "code" && /^\/[/*]/.test(line)));
+    for (let index = 0; index < raw.length; index += 1) {
+      const char = raw[index];
+      const pair = raw.slice(index, index + 2);
+      if (state === "block") {
+        if (pair === "*/") [state, index] = ["code", index + 1];
+      } else if (state === "'" || state === '"') {
+        if (char === "\\") index += 1;
+        else if (char === state) state = "code";
+      } else if (state === "`") {
+        if (char === "\\") index += 1;
+        else if (char === "`") state = "code";
+        else if (pair === "${") {
+          templates.push(depth);
+          [state, depth, index] = ["code", 0, index + 1];
+        }
+      } else if (pair === "//") break;
+      else if (pair === "/*") [state, index] = ["block", index + 1];
+      else if (char === "'" || char === '"' || char === "`") state = char;
+      else if (char === "{") depth += 1;
+      else if (char === "}" && depth === 0 && templates.length) [state, depth] = ["`", templates.pop()];
+      else if (char === "}") depth -= 1;
     }
-    if (!inTemplate && line.startsWith("//")) return kind(true);
-    if (!inTemplate && line.startsWith("/*")) {
-      inBlock = !line.slice(2).includes("*/");
-      return kind(true);
-    }
-    if ((line.replace(/\\./g, "").match(/`/g)?.length ?? 0) % 2) inTemplate = !inTemplate;
-    return kind(false);
+    if (state === "'" || state === '"') state = "code";
+    return result;
   });
 }
 
@@ -48,7 +60,6 @@ function readText(root, file, head) {
   return existsSync(path) && lstatSync(path).isFile() && lstatSync(path).size <= MAX_COMMENT_SCAN_BYTES ? readFileSync(path, "utf8") : null;
 }
 
-// Counts the change from `base` to the working tree, or to the commit `head`.
 export function commentShare(root, base, { added, changed, renamed }, { head = null } = {}) {
   let source = 0;
   const byFile = [];
@@ -69,11 +80,8 @@ export function commentShare(root, base, { added, changed, renamed }, { head = n
   return { lines, removed: removedComments(root, base, head, changed, renamed), sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
 }
 
-// Comment lines the diff deleted from any source file, deleted files included, so
-// a refactor that moves commented code into a new module adds none on net. One
-// diff per file (a rename with its old path, as the added lines were counted)
-// gives the deleted line numbers, classified in the base version of the file.
-// Unknown (null) when a diff fails; then the count can advise but never block.
+// Deleted files and renames (through the old path) count, so moving commented code adds none on net.
+// null when a diff fails: the count may then advise, never block.
 function removedComments(root, base, head, changed, renamed) {
   try {
     let removed = 0;
@@ -93,7 +101,6 @@ function removedComments(root, base, head, changed, renamed) {
   }
 }
 
-// "block", "advise" or null, from the comment lines the diff adds on net.
 export function commentLevel(comments) {
   const net = comments ? comments.lines - (comments.removed ?? 0) : 0;
   if (net <= 0 || !comments.sourceLines) return null;

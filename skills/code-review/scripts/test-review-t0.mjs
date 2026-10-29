@@ -313,6 +313,11 @@ try {
   const block = reviewT0(["--no-checks"]);
   assert.equal(block.report.comments.lines, 14, "every line of a block comment counts");
   assert.equal(block.status, 1, block.output);
+  write("src/template.ts", "const tick = \"`\";\n" + "// a real comment\n".repeat(12) + "export const page = `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "${ { a: 1 }.a }\n`;\n" + code(40));
+  const quoted = reviewT0(["--no-checks"]).report.comments;
+  assert.equal(quoted.lines, 12, "a backtick in quotes opens no template; the template's lines are code");
+  write("src/template.ts", "/*\n" + "\n".repeat(12) + "*/\n" + code(40));
+  assert.equal(routed().comments.lines, 2, "blank lines inside a block comment are blank");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));

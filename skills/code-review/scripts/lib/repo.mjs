@@ -203,8 +203,7 @@ export function resolveBase(root, requested) {
 // Paths come from -z output. The patch is one diff split on "diff --git" lines,
 // in the same order as the path list; content lines always start with +, -, space
 // or "\\", so file headers never need parsing. "all" marks files to scan whole:
-// untracked files and text that git shows as binary (a -diff attribute). With
-// `head`, the change ends at that commit instead of the working tree.
+// untracked files and text that git shows as binary (a -diff attribute).
 export function collectChanges(root, base, head = null) {
   const range = head ? [base, head] : [base];
   const fields = git(root, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", ...range, "--"]).split("\0");
