@@ -5,8 +5,8 @@ import { git, reviewable } from "./repo.mjs";
 // Past COMMENT_BLOCK no reviewer runs; above COMMENT_FLAG the reviewer judges each comment (references/review-standards.md).
 const JS = /\.[cm]?[jt]sx?$/;
 const C_LIKE = /\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/;
-// A `/` after one of these starts a regex literal; after anything else it divides.
-const REGEX_BEFORE = /(^|[(,=:[!&|?{};+\-*%<>~^]|\b(return|typeof|case|do|else|in|of|void|yield|await|delete|instanceof|new|throw))\s*$/;
+// A `/` after one of these starts a regex literal; after a value (`x`, `)`, `]`, `++`) it divides.
+const REGEX_BEFORE = /(^|[(,=:[!&|?{};~^%<>*]|(^|[^+])\+|(^|[^-])-|\b(return|typeof|case|do|else|in|of|void|yield|await|delete|instanceof|new|throw))\s*$/;
 const HASH = /\.(py|rb|sh|bash|zsh|ex|exs|pl)$/;
 const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
 const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|fixtures?)\/|\.(test|spec|e2e)\.[^/]+$|(^|\/)test[-_][^/]+$|_test\.[^/]+$/;
@@ -32,6 +32,7 @@ function classify(text, syntax) {
     for (let index = 0; index < raw.length; index += 1) {
       const char = raw[index];
       const pair = raw.slice(index, index + 2);
+      const from = state;
       if (state === "block") {
         if (pair === "*/") [state, index] = ["code", index + 1];
       } else if (state === "'" || state === '"') {
@@ -55,9 +56,12 @@ function classify(text, syntax) {
       else if (char === "{") depth += 1;
       else if (char === "}" && depth === 0 && templates.length) [state, depth] = ["`", templates.pop()];
       else if (char === "}") depth -= 1;
-      if (state === "code" && char.trim()) before = (before + char).slice(-12);
+      // A closed string, template or regex is a value; a closed block comment is nothing.
+      const token = from === "code" && state === "code" ? char : from !== "code" && from !== "block" && state === "code" ? "a" : "";
+      if (token) before = (before + token).replace(/\s+/g, " ").slice(-12);
     }
     if (state === "'" || state === '"' || state === "regex") state = "code";
+    before = `${before} `.replace(/\s+/g, " ").slice(-12);
     return result;
   });
 }

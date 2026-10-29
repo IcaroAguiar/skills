@@ -320,6 +320,8 @@ try {
   assert.equal(routed().comments.lines, 2, "blank lines inside a block comment are blank");
   write("src/template.ts", "export const special = /[/*]/;\nexport const half = 4 / 2; // why: halves\n" + code(40));
   assert.equal(routed().comments.lines, 0, "a regex literal opens no block comment; a trailing comment is a code line");
+  write("src/template.ts", "export const n = count++ / 2; /*\n" + "a real block comment\n".repeat(12) + "*/\nexport const w = 4 /* scale */ / `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "`;\n" + code(400));
+  assert.equal(reviewT0(["--no-checks"]).report.comments.lines, 13, "a division after a value or a comment is no regex");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
