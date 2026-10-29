@@ -469,7 +469,6 @@ const T1_MIN_CHANGED_LINES = 20;
 // and past 800 lines or 30 files the change is split into a stack or says why.
 const LARGE_DIFF = { lines: 800, files: 30 };
 const TARGET_LINES = 400;
-// Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
 
 // Deterministic routing for the model tiers: the deep review's starting effort,
 // whether the fast pre-pass (T1) is worth running, and the diff's size.
@@ -593,7 +592,7 @@ async function main() {
   const headSha = git(root, ["rev-parse", "HEAD"]).trim();
   const dirty = git(root, ["status", "--porcelain"]).trim().length > 0;
   const reportPath = options.json ?? defaultReportPath("review-t0", root, headSha, dirty);
-  const { changed, added } = collectChanges(root, base.sha);
+  const { changed, added, renamed } = collectChanges(root, base.sha);
   const report = {
     tool: "review-t0",
     version: 3,
@@ -653,7 +652,7 @@ async function main() {
     if (!options.strict) report.incomplete.push(...steps.filter((step) => step.status === "missing").map((step) => step.detail));
     if (options.checks && !discovered.checks.length) report.incomplete.push("no repository checks found");
 
-    const comments = commentShare(root, base.sha, added, changed);
+    const comments = commentShare(root, base.sha, { added, changed, renamed });
     if (commentLevel(comments) === "block") report.blockers.push(`comments: ${comments.lines - (comments.removed ?? 0)} new in ${comments.sourceLines} added source lines`);
     let reviewAdded = 0;
     for (const [file, lines] of added) {

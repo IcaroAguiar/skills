@@ -295,6 +295,16 @@ try {
   const split = routed();
   assert.deepEqual([split.comments.lines, split.comments.removed], [30, 30], "comments deleted from another file count as removed");
   assert.doesNotMatch(split.output, /COMMENTS/, "moving commented code to new files adds no comments on net");
+  // A rename that rewrites its comments in place removes as many as it adds.
+  rmSync(join(repo, "src/notes-a.ts"));
+  rmSync(join(repo, "src/notes-b.ts"));
+  write("src/notes.ts", notes(0, 30) + code(100));
+  commit("long notes");
+  sh("git", ["mv", "src/notes.ts", "src/renamed.ts"]);
+  write("src/renamed.ts", notes(0, 30).replaceAll("// note", "// reworded") + code(100));
+  const renamed = routed();
+  assert.deepEqual([renamed.comments.lines, renamed.comments.removed], [30, 30], "a rename's removed comments are counted through its old path");
+  assert.doesNotMatch(renamed.output, /COMMENTS/);
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));

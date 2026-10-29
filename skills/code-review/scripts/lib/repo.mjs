@@ -33,6 +33,7 @@ export function git(root, args, { allowFailure = false, okStatus = [0] } = {}) {
   return result.stdout;
 }
 
+// Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
 export const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !/\.snap$/.test(file);
 
 export function isGenerated(file) {
@@ -217,8 +218,10 @@ export function collectChanges(root, base) {
   if (patches.length !== entries.length) throw new Error(`diff has ${patches.length} file patches for ${entries.length} changed paths`);
   const changed = [];
   const added = new Map();
+  const renamed = new Map();
   entries.forEach((entry, index) => {
     changed.push(entry.path);
+    if (entry.from) renamed.set(entry.path, entry.from);
     if (entry.code === "D") return;
     const lines = new Set();
     let binary = false;
@@ -235,5 +238,5 @@ export function collectChanges(root, base) {
     changed.push(file);
     added.set(file, "all");
   }
-  return { changed, added };
+  return { changed, added, renamed };
 }

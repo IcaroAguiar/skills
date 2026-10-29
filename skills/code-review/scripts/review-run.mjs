@@ -141,8 +141,7 @@ function countComments(root, ref) {
     if (ref) throw error;
     return null; // no default branch and no --base: nothing to count against
   }
-  const { added, changed } = collectChanges(root, base.sha);
-  return commentShare(root, base.sha, added, changed);
+  return commentShare(root, base.sha, collectChanges(root, base.sha));
 }
 
 const SHELL_KINDS = new Set(["codex"]);

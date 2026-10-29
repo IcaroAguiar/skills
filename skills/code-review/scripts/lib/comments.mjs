@@ -15,7 +15,7 @@ const COMMENT_FLAG = { lines: 10, share: 0.03 };
 const COMMENT_BLOCK = { lines: 10, share: 0.05 };
 const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
 
-export function commentShare(root, base, added, changed) {
+export function commentShare(root, base, { added, changed, renamed }) {
   let source = 0;
   const byFile = [];
   for (const [file, lines] of added) {
@@ -34,23 +34,24 @@ export function commentShare(root, base, added, changed) {
     if (comments) byFile.push({ file, lines: comments });
   }
   const lines = byFile.reduce((sum, entry) => sum + entry.lines, 0);
-  return { lines, removed: removedComments(root, base, changed), sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
+  return { lines, removed: removedComments(root, base, changed, renamed), sourceLines: source, top: byFile.sort((a, b) => b.lines - a.lines).slice(0, 3) };
 }
 
 const commentSyntax = (file) => (reviewable(file) && !TEST_FILE.test(file) ? COMMENT_SYNTAX.find(([pattern]) => pattern.test(file))?.[1] : undefined);
 
 // Comment lines the diff deleted from any source file, deleted files included, so
 // a refactor that moves commented code into a new module adds none on net. One
-// diff per file, so no path is parsed back from a header. A failing diff leaves
-// the count unknown (null), and the limit then applies to the added lines alone.
-function removedComments(root, base, changed) {
+// diff per file (a rename with its old path, as the added lines were counted), so
+// no path is parsed back from a header. A failing diff leaves the count unknown
+// (null), and the limit then applies to the added lines alone.
+function removedComments(root, base, changed, renamed) {
   try {
     let removed = 0;
     for (const file of changed) {
       const syntax = commentSyntax(file);
       if (!syntax) continue;
       let inHunk = false;
-      for (const line of git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", base, "--", file]).split("\n")) {
+      for (const line of git(root, ["diff", "-U0", "-M", "--no-color", "--no-ext-diff", base, "--", ...(renamed.has(file) ? [renamed.get(file)] : []), file]).split("\n")) {
         if (line.startsWith("@@")) inHunk = true;
         else if (inHunk && line.startsWith("-")) {
           const text = line.slice(1).trim();
