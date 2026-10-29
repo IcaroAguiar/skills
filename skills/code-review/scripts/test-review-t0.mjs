@@ -318,6 +318,8 @@ try {
   assert.equal(quoted.lines, 12, "a backtick in quotes opens no template; the template's lines are code");
   write("src/template.ts", "/*\n" + "\n".repeat(12) + "*/\n" + code(40));
   assert.equal(routed().comments.lines, 2, "blank lines inside a block comment are blank");
+  write("src/template.ts", "export const special = /[/*]/;\nexport const half = 4 / 2; // why: halves\n" + code(40));
+  assert.equal(routed().comments.lines, 0, "a regex literal opens no block comment; a trailing comment is a code line");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));

@@ -3,7 +3,10 @@ import { join } from "node:path";
 import { git, reviewable } from "./repo.mjs";
 
 // Past COMMENT_BLOCK no reviewer runs; above COMMENT_FLAG the reviewer judges each comment (references/review-standards.md).
-const C_LIKE = /\.[cm]?[jt]sx?$|\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/;
+const JS = /\.[cm]?[jt]sx?$/;
+const C_LIKE = /\.(go|rs|java|kts?|swift|c|cc|cpp|h|hpp|cs|scala|dart|php)$/;
+// A `/` after one of these starts a regex literal; after anything else it divides.
+const REGEX_BEFORE = /(^|[(,=:[!&|?{};+\-*%<>~^]|\b(return|typeof|case|do|else|in|of|void|yield|await|delete|instanceof|new|throw))\s*$/;
 const HASH = /\.(py|rb|sh|bash|zsh|ex|exs|pl)$/;
 const COMMENT_DIRECTIVE = /\b(eslint|oxlint|biome-ignore|prettier-ignore|istanbul|c8 ignore|nosemgrep|noqa|type: *ignore|pragma)\b|@ts-|^(\/\/|#) *(ok|ruleid|todoruleid):/i;
 const TEST_FILE = /(^|\/)(__tests__|__mocks__|tests?|spec|e2e|fixtures?)\/|\.(test|spec|e2e)\.[^/]+$|(^|\/)test[-_][^/]+$|_test\.[^/]+$/;
@@ -11,15 +14,17 @@ const COMMENT_FLAG = { lines: 10, share: 0.03 };
 const COMMENT_BLOCK = { lines: 10, share: 0.05 };
 const MAX_COMMENT_SCAN_BYTES = 2 * 1024 * 1024;
 
-const syntaxOf = (file) => (!reviewable(file) || TEST_FILE.test(file) ? null : C_LIKE.test(file) ? "c" : HASH.test(file) ? "hash" : null);
+const syntaxOf = (file) => (!reviewable(file) || TEST_FILE.test(file) ? null : JS.test(file) ? "js" : C_LIKE.test(file) ? "c" : HASH.test(file) ? "hash" : null);
 
-// Tracks quotes, template literals and block comments; regex literals are not tracked.
+// Tracks quotes, template literals, block comments and, in JS, regex literals.
 function classify(text, syntax) {
   const lines = text.split("\n");
   const kind = (line, comment) => (!line ? "blank" : comment ? (COMMENT_DIRECTIVE.test(line) ? "directive" : "comment") : "code");
   if (syntax === "hash") return lines.map((raw) => kind(raw.trim(), /^#(?!!)/.test(raw.trim())));
   let state = "code";
   let depth = 0;
+  let inClass = false;
+  let before = "";
   const templates = [];
   return lines.map((raw) => {
     const line = raw.trim();
@@ -39,14 +44,20 @@ function classify(text, syntax) {
           templates.push(depth);
           [state, depth, index] = ["code", 0, index + 1];
         }
+      } else if (state === "regex") {
+        if (char === "\\") index += 1;
+        else if (char === "[" || char === "]") inClass = char === "[";
+        else if (char === "/" && !inClass) state = "code";
       } else if (pair === "//") break;
       else if (pair === "/*") [state, index] = ["block", index + 1];
+      else if (char === "/" && syntax === "js" && REGEX_BEFORE.test(before)) [state, inClass] = ["regex", false];
       else if (char === "'" || char === '"' || char === "`") state = char;
       else if (char === "{") depth += 1;
       else if (char === "}" && depth === 0 && templates.length) [state, depth] = ["`", templates.pop()];
       else if (char === "}") depth -= 1;
+      if (state === "code" && char.trim()) before = (before + char).slice(-12);
     }
-    if (state === "'" || state === '"') state = "code";
+    if (state === "'" || state === '"' || state === "regex") state = "code";
     return result;
   });
 }
