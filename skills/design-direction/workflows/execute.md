@@ -38,7 +38,7 @@ theme, shell, widths, and states as the approved captures, compare each pair
 side by side, and list every non-data difference: frames, dividers, fonts and
 case, sizes, spacing, colors, icons, copy. Fix each one or bring it to the user
 as a deviation with both images. A substitution the implementer chose is not
-covered by the approval. With `$approval-canvas`, this is its parity gate
+covered by the approval. With `$design-canvas`, this is its parity gate
 (`pairs.mjs`).
 
 ## Complete when

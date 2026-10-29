@@ -40,7 +40,7 @@ Repository instructions define catalogue maintenance. The repository is the cano
 
 | Skill | Use it to |
 | --- | --- |
-| `approval-canvas` | Approve a redesign on a static prototype built with the project's real components before product code changes |
+| `design-canvas` | Approve a redesign on a static prototype built with the project's real components before product code changes |
 | `code-review` | Gate a finished pull request: deterministic pre-review, a fast pre-pass, then one independent reviewer |
 | `codebase-guardrails` | Keep a codebase healthy when agents write most of the code and tests |
 | `codebase-health` | Run an evidence-based repository check-up that ends in a sequenced roadmap |

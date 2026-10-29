@@ -1,5 +1,5 @@
 ---
-name: approval-canvas
+name: design-canvas
 description: Build a static, interactive prototype ("canvas") with the project's real design-system components and fake data so the user approves a visual change before product code changes, then hand the approved canvas to an implementer as the spec. Two branches: redesigning an area screen by screen, and adding, moving or changing one block on an existing screen. Use when asked for "canvas de aprovação", "abra o canvas", "mockup para eu aprovar", "aprovar o visual antes de implementar", "redesign da área X", "reconstruir as telas reais no canvas" or "aplicar o novo design em toda a área".
 ---
 
@@ -8,6 +8,8 @@ description: Build a static, interactive prototype ("canvas") with the project's
 The user approves **composition and copy** on real components before any product code changes. The canvas is a static Vite prototype that imports the repository's real design-system package, uses fake data and keeps all state in memory. Respond in the user's language.
 
 You are the orchestrator: you own the design recipe, the redesign decision for every screen, the visual review and the decision log. Subagents inventory and build.
+
+Subagents run on a fast model: `claude-sonnet-5-5` at high effort on Claude, `gpt-6.1-terra` on Codex, or the current fast tier of the same family. Name the model on every spawn (inventory, screen implementers, hand-off), because a subagent otherwise inherits your premium model.
 
 ## Pick the branch first
 

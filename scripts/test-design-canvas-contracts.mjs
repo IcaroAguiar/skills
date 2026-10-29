@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const skill = join(repositoryRoot, "skills/approval-canvas");
+const skill = join(repositoryRoot, "skills/design-canvas");
 const template = join(skill, "references/template");
 
 function requireText(source, fragments, label) {
@@ -26,7 +26,7 @@ const clean = checkFidelity(template);
 assert.equal(clean.status, 0, `template must pass check-fidelity:\n${clean.stderr}`);
 
 // A canvas-only restyle of a real component is caught, and so is an inline <style>.
-const scratch = await mkdtemp(join(tmpdir(), "approval-canvas-fidelity-"));
+const scratch = await mkdtemp(join(tmpdir(), "design-canvas-fidelity-"));
 try {
   await cp(template, scratch, { recursive: true });
   const css = await readFile(join(scratch, "src/canvas.css"), "utf8");
@@ -51,7 +51,7 @@ const skillText = await readFile(join(skill, "SKILL.md"), "utf8");
 requireText(
   skillText,
   ["The canvas starts from the product's baseline", "font links", "Propose freely, declare every difference", "Fidelity constrains the implementation, not the proposal", "src/proposed.css", "check-fidelity.mjs", "product's default theme", "THEMES=claro,escuro", "an embedded `<style>`", "Parity gate before the PR", "pairs.mjs", "references/handoff-brief.md"],
-  "approval-canvas SKILL.md",
+  "design-canvas SKILL.md",
 );
 const handoff = await readFile(join(skill, "references/handoff-brief.md"), "utf8");
 requireText(handoff, ["Deviations need the user", "Parity gate", "same theme"], "handoff-brief.md");
@@ -60,7 +60,7 @@ requireText(implementer, ["THEMES=claro,escuro", "DARK", "todos os estados"], "i
 const readme = await readFile(join(skill, "references/rounds-readme-template.md"), "utf8");
 requireText(readme, ["## Mudanças no pacote de UI", "## Desvios aprovados"], "rounds-readme-template.md");
 
-console.log("Validated approval-canvas fidelity check, parity gate, and hand-off contracts.");
+console.log("Validated design-canvas fidelity check, parity gate, and hand-off contracts.");
 
 for (const { name, css, status, diagnostic } of [
   { name: "B: explicit and implicit frame nesting", css: ".canvas-shell { & main { overflow: visible; } > [data-sidebar=\"inset\"] { overflow: visible; } }", status: 0 },
@@ -74,7 +74,7 @@ for (const { name, css, status, diagnostic } of [
   { name: "B: unclosed blocks are diagnosed", css: ".canvas-shell { & main { overflow: visible; }", status: 1, diagnostic: "CSS inválido" },
 ]) {
   test(name, async () => {
-    const directory = await mkdtemp(join(tmpdir(), "approval-canvas-css-"));
+    const directory = await mkdtemp(join(tmpdir(), "design-canvas-css-"));
     try {
       await cp(template, directory, { recursive: true });
       await writeFile(join(directory, "src/canvas.css"), css);
@@ -88,7 +88,7 @@ for (const { name, css, status, diagnostic } of [
 }
 
 async function withProposals({ proposedCss, components = [], readme }, run) {
-  const directory = await mkdtemp(join(tmpdir(), "approval-canvas-proposals-"));
+  const directory = await mkdtemp(join(tmpdir(), "design-canvas-proposals-"));
   try {
     await cp(template, directory, { recursive: true });
     if (proposedCss !== undefined) await writeFile(join(directory, "src/proposed.css"), proposedCss);
@@ -223,7 +223,7 @@ test("D: capture jobs cover each requested state, theme and width with stable na
 });
 
 test("C: empty folders fail before resolving or launching Playwright", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "approval-canvas-empty-"));
+  const directory = await mkdtemp(join(tmpdir(), "design-canvas-empty-"));
   try {
     const canvas = join(directory, "canvas");
     const app = join(directory, "app");
@@ -246,7 +246,7 @@ test("A: pairs render both PNG colors and the saved gallery loads its images", {
   const root = resolve(process.env.UI_ROOT);
   const require = createRequire(join(root, process.env.WEB_APP ?? "apps/web", "package.json"));
   const { chromium } = require("@playwright/test");
-  const directory = await mkdtemp(join(tmpdir(), "approval-canvas-pairs-"));
+  const directory = await mkdtemp(join(tmpdir(), "design-canvas-pairs-"));
   let browser;
   try {
     const canvas = join(directory, "canvas");
