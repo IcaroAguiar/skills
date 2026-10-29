@@ -1,4 +1,4 @@
-// Helpers shared by review-t0 and review-t1: git access, child processes in
+// Helpers shared by review-t0, review-t1 and review-run: git access, child processes in
 // their own group, the working-tree fingerprint and report files.
 
 import { createHash } from "node:crypto";
@@ -32,6 +32,9 @@ export function git(root, args, { allowFailure = false, okStatus = [0] } = {}) {
   }
   return result.stdout;
 }
+
+// Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
+export const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !/\.snap$/.test(file);
 
 export function isGenerated(file) {
   return file.split("/").some((segment) => GENERATED_DIRS.has(segment)) || /\.min\.[a-z]+$|\.map$/.test(file);
@@ -182,4 +185,59 @@ export function writePrivateFile(path, text) {
 
 export function writeReport(path, report) {
   writePrivateFile(path, `${JSON.stringify(report, null, 2)}\n`);
+}
+
+export function resolveBase(root, requested) {
+  const candidates = requested
+    ? [requested]
+    : [git(root, ["symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"], { allowFailure: true })?.trim(), "origin/main", "origin/master", "main", "master"];
+  for (const ref of candidates.filter(Boolean)) {
+    if (git(root, ["rev-parse", "--verify", "-q", `${ref}^{commit}`], { allowFailure: true }) === null) continue;
+    const sha = git(root, ["merge-base", "HEAD", ref], { allowFailure: true })?.trim();
+    if (sha) return { ref, sha };
+  }
+  throw new Error(requested ? `base ${requested} is not a commit with a merge-base` : "no default branch found; pass --base <ref>");
+}
+
+// Changed paths (deletions included) and added line numbers per surviving file.
+// Paths come from -z output. The patch is one diff split on "diff --git" lines,
+// in the same order as the path list; content lines always start with +, -, space
+// or "\\", so file headers never need parsing. "all" marks files to scan whole:
+// untracked files and text that git shows as binary (a -diff attribute).
+export function collectChanges(root, base, head = null) {
+  const range = head ? [base, head] : [base];
+  const fields = git(root, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", ...range, "--"]).split("\0");
+  const entries = [];
+  for (let index = 0; index < fields.length && fields[index];) {
+    const code = fields[index++];
+    if (code.startsWith("R") || code.startsWith("C")) entries.push({ code: code[0], from: fields[index++], path: fields[index++] });
+    else entries.push({ code: code[0], path: fields[index++] });
+  }
+  const patches = entries.length
+    ? git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", "-M", ...range, "--"]).split(/^(?=diff --git )/m).filter((piece) => piece.startsWith("diff --git "))
+    : [];
+  if (patches.length !== entries.length) throw new Error(`diff has ${patches.length} file patches for ${entries.length} changed paths`);
+  const changed = [];
+  const added = new Map();
+  const renamed = new Map();
+  entries.forEach((entry, index) => {
+    changed.push(entry.path);
+    if (entry.code === "R") renamed.set(entry.path, entry.from);
+    if (entry.code === "D") return;
+    const lines = new Set();
+    let binary = false;
+    for (const line of patches[index].split("\n")) {
+      if (line.startsWith("Binary files ")) binary = true;
+      const hunk = line.startsWith("@@") && line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+      if (!hunk) continue;
+      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+      for (let offset = 0; offset < count; offset += 1) lines.add(Number(hunk[1]) + offset);
+    }
+    added.set(entry.path, binary ? "all" : lines);
+  });
+  for (const file of head ? [] : git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) {
+    changed.push(file);
+    added.set(file, "all");
+  }
+  return { changed, added, renamed };
 }

@@ -10,7 +10,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cooldowns, findCall, readEvents } from "./lib/ledger.mjs";
 import { candidates, diffSize, dispatch, loadPolicy, policyPath, resolveFront } from "./lib/policy.mjs";
-import { defaultReportPath, git, readJson, stopGroups, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
+import { commentLevel, commentShare, formatComments } from "./lib/comments.mjs";
+import { collectChanges, defaultReportPath, git, readJson, resolveBase, stopGroups, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
 const USAGE = `usage: review-run --role review|fix --prompt <file> --out <file> [-C <dir>]
                   [--effort <level>] [--author-model <model>] [--front <name>]
@@ -131,6 +132,19 @@ function withDiff(prompt, root, base) {
   return { text: `${prompt.trimEnd()}\n\n<fixed_diff range="${range}">\n<commits>\n${log}\n</commits>\n${body}</fixed_diff>\n`, whole };
 }
 
+// A review can start without T0, so the count also runs here, on the committed range the prompt carries.
+function countComments(root, ref) {
+  let base;
+  try {
+    base = resolveBase(root, ref);
+  } catch (error) {
+    stop(ref ? error.message : "no default branch found; pass --base so the comment count can run");
+  }
+  return commentShare(root, base.sha, collectChanges(root, base.sha, "HEAD"), { head: "HEAD" });
+}
+
+const counts = (comments) => comments && { lines: comments.lines, removed: comments.removed, sourceLines: comments.sourceLines };
+
 const SHELL_KINDS = new Set(["codex"]);
 
 function plan(front, options, headSha) {
@@ -167,9 +181,15 @@ async function main() {
       return stop(`cannot read ${path}: ${error.message}`);
     }
   };
+  const comments = options.role === "review" ? countComments(root, options.base) : null;
+  const freshComments = options.role === "review" && options.fullBase ? countComments(root, options.fullBase) : null;
+  const blocked = [comments, freshComments].find((counted) => commentLevel(counted) === "block");
+  if (blocked) stop(`${formatComments(blocked)}. No reviewer runs on this diff until then.`, 1);
+  const noteFor = (counted) => (commentLevel(counted) === "advise" ? `\n<comment_count>\n${formatComments(counted)}\n</comment_count>\n` : "");
+  const note = noteFor(comments);
   const main = options.base ? withDiff(read(options.prompt), root, options.base) : { text: read(options.prompt), whole: true };
   const fresh = options.freshPrompt ? withDiff(read(options.freshPrompt), root, options.fullBase) : null;
-  const prompt = main.text;
+  const prompt = main.text + note;
   let resume = null;
   if (options.resume) {
     const earlier = findCall(options.resume, readEvents());
@@ -182,9 +202,9 @@ async function main() {
   const effort = options.effort ?? routeEffort(route, { role: options.role, resuming: Boolean(resume) });
   const started = Date.now();
   const { final, attempts } = await dispatch({
-    front, role: options.role, prompt: resume ? fresh?.text ?? null : prompt, root, effort,
+    front, role: options.role, prompt: resume ? (fresh ? fresh.text + noteFor(freshComments) : null) : prompt, root, effort,
     unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
-    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route),
+    authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route), comments: counts(resume ? freshComments : comments), resumeComments: resume ? counts(comments) : null,
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),
   });
 

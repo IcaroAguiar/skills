@@ -221,7 +221,7 @@ export function diffSize(route) {
 //
 // `unfit(provider, resuming)` returns a reason to skip a provider for this call
 // (for example a prompt it cannot read whole), or null.
-export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, unfit = () => null, onAttempt = () => {} }) {
+export async function dispatch({ front, role, slot = 0, prompt, root, effort = null, authorModel = null, headSha = "", timeoutMs, label = null, resume = null, size = null, comments = null, resumeComments = null, unfit = () => null, onAttempt = () => {} }) {
   const cooled = cooldowns();
   let list = candidates(front, role, { slot, authorModel, headSha, cooled });
   if (resume) {
@@ -260,7 +260,7 @@ export async function dispatch({ front, role, slot = 0, prompt, root, effort = n
       const env = { ...process.env, [PROMPT_HASH_ENV]: promptHash(sent) };
       const result = await callProvider(candidate.provider, { role, prompt: sent, root, effort: level, resume: resuming ? resume.sessionId : null, timeoutMs, env });
       const record = {
-        type: "call", call, ...meta, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
+        type: "call", call, ...meta, comments: (resuming ? resumeComments : comments) ?? undefined, provider: candidate.id, kind: candidate.provider.kind, model: candidate.provider.model ?? null,
         resolvedModel: result.resolvedModel ?? null, effort: level, experiment: candidate.experiment, arm: candidate.arm,
         status: result.status, until: result.status === "limit" || result.status === "auth" ? result.resetAt ?? new Date(Date.now() + DEFAULT_COOLDOWN_MS[result.status]).toISOString() : undefined,
         error: result.status === "ok" ? undefined : result.summary ?? result.status, durationMs: result.durationMs, turns: result.turns ?? null,

@@ -265,9 +265,14 @@ try {
   write("src/a.ts", documented(12) + code(100));
   for (const test of ["src/a.test.ts", "src/flow.e2e.ts", "e2e/login.ts", "scripts/test-run.mjs"]) write(test, "// a test may explain itself\n".repeat(50));
   write("src/b.ts", "// eslint-disable-next-line no-console\n// @ts-expect-error legacy\n*[Symbol.iterator]() {}\nimport eslint from 'eslint';\n" + code(10));
-  const noisy = routed();
-  assert.deepEqual([noisy.comments.lines, noisy.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
-  assert.match(noisy.output, /COMMENTS 12 of 136 added source lines \(9%\) are comments \(most in src\/a\.ts 12\)/);
+  const noisy = reviewT0(["--no-checks"]);
+  assert.equal(noisy.status, 1, "past 5% the comments block T0");
+  assert.deepEqual([noisy.report.comments.lines, noisy.report.comments.sourceLines], [12, 136], "tests and lint directives count on neither side; code naming a linter does");
+  assert.match(noisy.output, /COMMENTS 12 new comment lines in 136 added source lines \(9%; 12 added, 0 removed; most in src\/a\.ts 12\): over the 5% limit/);
+  assert.match(noisy.output, /RESULT BLOCKED \(comments: 12 new in 136 added source lines\)/);
+  write("src/a.ts", documented(12) + code(300));
+  const advised = routed();
+  assert.match(advised.output, /COMMENTS 12 new comment lines in 336 added source lines \(4%.*the reviewer reports the rest/, "between 3% and 5% T0 only advises");
   write("src/a.ts", documented(3) + code(100));
   assert.doesNotMatch(routed().output, /COMMENTS/, "a few comments are no signal");
   // A cleanup that shortens comments adds a few while deleting more: no line.
@@ -280,6 +285,43 @@ try {
   const cleanup = routed();
   assert.ok(cleanup.comments.removed >= 40, "removed comment lines are counted");
   assert.doesNotMatch(cleanup.output, /COMMENTS/, "a net comment cleanup gets no COMMENTS line");
+  // Splitting a commented module adds its comments in new files and removes them from the old one.
+  const notes = (from, to) => Array.from({ length: to - from }, (_, index) => `// note ${from + index}\nexport const m${from + index} = ${from + index};\n`).join("");
+  write("src/notes.ts", notes(0, 30));
+  commit("notes");
+  rmSync(join(repo, "src/notes.ts"));
+  write("src/notes-a.ts", notes(0, 15) + code(40));
+  write("src/notes-b.ts", notes(15, 30) + code(40).replaceAll("value", "other"));
+  const split = routed();
+  assert.deepEqual([split.comments.lines, split.comments.removed], [30, 30], "comments deleted from another file count as removed");
+  assert.doesNotMatch(split.output, /COMMENTS/, "moving commented code to new files adds no comments on net");
+  // A rename that rewrites its comments in place removes as many as it adds.
+  rmSync(join(repo, "src/notes-a.ts"));
+  rmSync(join(repo, "src/notes-b.ts"));
+  write("src/notes.ts", notes(0, 30) + code(100));
+  commit("long notes");
+  sh("git", ["mv", "src/notes.ts", "src/renamed.ts"]);
+  write("src/renamed.ts", notes(0, 30).replaceAll("// note", "// reworded") + code(100));
+  const renamed = routed();
+  assert.deepEqual([renamed.comments.lines, renamed.comments.removed], [30, 30], "a rename's removed comments are counted through its old path");
+  assert.doesNotMatch(renamed.output, /COMMENTS/);
+  // Lexical context: `//` inside a template literal is code, the body of a block comment is comment.
+  commit("renamed");
+  write("src/template.ts", "export const page = `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "`;\n" + code(40));
+  assert.equal(routed().comments.lines, 0, "lines inside a template literal are not comments");
+  write("src/template.ts", "/*\n" + "plain block comment line\n".repeat(12) + "*/\n" + code(40));
+  const block = reviewT0(["--no-checks"]);
+  assert.equal(block.report.comments.lines, 14, "every line of a block comment counts");
+  assert.equal(block.status, 1, block.output);
+  write("src/template.ts", "const tick = \"`\";\n" + "// a real comment\n".repeat(12) + "export const page = `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "${ { a: 1 }.a }\n`;\n" + code(40));
+  const quoted = reviewT0(["--no-checks"]).report.comments;
+  assert.equal(quoted.lines, 12, "a backtick in quotes opens no template; the template's lines are code");
+  write("src/template.ts", "/*\n" + "\n".repeat(12) + "*/\n" + code(40));
+  assert.equal(routed().comments.lines, 2, "blank lines inside a block comment are blank");
+  write("src/template.ts", "export const special = /[/*]/;\nexport const half = 4 / 2; // why: halves\n" + code(40));
+  assert.equal(routed().comments.lines, 0, "a regex literal opens no block comment; a trailing comment is a code line");
+  write("src/template.ts", "export const n = count++ / 2; /*\n" + "a real block comment\n".repeat(12) + "*/\nexport const w = 4 /* scale */ / `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "`;\n" + code(400));
+  assert.equal(reviewT0(["--no-checks"]).report.comments.lines, 13, "a division after a value or a comment is no regex");
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
