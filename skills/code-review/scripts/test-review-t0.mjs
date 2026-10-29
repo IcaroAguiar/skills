@@ -305,6 +305,14 @@ try {
   const renamed = routed();
   assert.deepEqual([renamed.comments.lines, renamed.comments.removed], [30, 30], "a rename's removed comments are counted through its old path");
   assert.doesNotMatch(renamed.output, /COMMENTS/);
+  // Lexical context: `//` inside a template literal is code, the body of a block comment is comment.
+  commit("renamed");
+  write("src/template.ts", "export const page = `\n" + "//cdn.example.com/lib.js\n".repeat(12) + "`;\n" + code(40));
+  assert.equal(routed().comments.lines, 0, "lines inside a template literal are not comments");
+  write("src/template.ts", "/*\n" + "plain block comment line\n".repeat(12) + "*/\n" + code(40));
+  const block = reviewT0(["--no-checks"]);
+  assert.equal(block.report.comments.lines, 14, "every line of a block comment counts");
+  assert.equal(block.status, 1, block.output);
   newRepo("route-size-files");
   write("README.md", "# size\n");
   for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));

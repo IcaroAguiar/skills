@@ -203,9 +203,11 @@ export function resolveBase(root, requested) {
 // Paths come from -z output. The patch is one diff split on "diff --git" lines,
 // in the same order as the path list; content lines always start with +, -, space
 // or "\\", so file headers never need parsing. "all" marks files to scan whole:
-// untracked files and text that git shows as binary (a -diff attribute).
-export function collectChanges(root, base) {
-  const fields = git(root, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", base, "--"]).split("\0");
+// untracked files and text that git shows as binary (a -diff attribute). With
+// `head`, the change ends at that commit instead of the working tree.
+export function collectChanges(root, base, head = null) {
+  const range = head ? [base, head] : [base];
+  const fields = git(root, ["diff", "--name-status", "-z", "-M", "--no-ext-diff", ...range, "--"]).split("\0");
   const entries = [];
   for (let index = 0; index < fields.length && fields[index];) {
     const code = fields[index++];
@@ -213,7 +215,7 @@ export function collectChanges(root, base) {
     else entries.push({ code: code[0], path: fields[index++] });
   }
   const patches = entries.length
-    ? git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", "-M", base, "--"]).split(/^(?=diff --git )/m).filter((piece) => piece.startsWith("diff --git "))
+    ? git(root, ["diff", "-U0", "--no-color", "--no-ext-diff", "-M", ...range, "--"]).split(/^(?=diff --git )/m).filter((piece) => piece.startsWith("diff --git "))
     : [];
   if (patches.length !== entries.length) throw new Error(`diff has ${patches.length} file patches for ${entries.length} changed paths`);
   const changed = [];
@@ -221,7 +223,7 @@ export function collectChanges(root, base) {
   const renamed = new Map();
   entries.forEach((entry, index) => {
     changed.push(entry.path);
-    if (entry.from) renamed.set(entry.path, entry.from);
+    if (entry.code === "R") renamed.set(entry.path, entry.from);
     if (entry.code === "D") return;
     const lines = new Set();
     let binary = false;
@@ -234,7 +236,7 @@ export function collectChanges(root, base) {
     }
     added.set(entry.path, binary ? "all" : lines);
   });
-  for (const file of git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) {
+  for (const file of head ? [] : git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) {
     changed.push(file);
     added.set(file, "all");
   }

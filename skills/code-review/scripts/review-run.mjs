@@ -132,16 +132,16 @@ function withDiff(prompt, root, base) {
   return { text: `${prompt.trimEnd()}\n\n<fixed_diff range="${range}">\n<commits>\n${log}\n</commits>\n${body}</fixed_diff>\n`, whole };
 }
 
-// Counted here as well as in T0, because a review can start without T0 having run.
+// Counted here as well as in T0, because a review can start without T0 having run,
+// over the committed range the prompt carries.
 function countComments(root, ref) {
   let base;
   try {
     base = resolveBase(root, ref);
   } catch (error) {
-    if (ref) throw error;
-    return null; // no default branch and no --base: nothing to count against
+    stop(ref ? error.message : "no default branch found; pass --base so the comment count can run");
   }
-  return commentShare(root, base.sha, collectChanges(root, base.sha));
+  return commentShare(root, base.sha, collectChanges(root, base.sha, "HEAD"), { head: "HEAD" });
 }
 
 const SHELL_KINDS = new Set(["codex"]);
@@ -181,8 +181,11 @@ async function main() {
     }
   };
   const comments = options.role === "review" ? countComments(root, options.base) : null;
-  if (commentLevel(comments) === "block") stop(`${formatComments(comments)}. No reviewer runs on this diff until then.`, 1);
-  const note = commentLevel(comments) === "advise" ? `\n<comment_count>\n${formatComments(comments)}\n</comment_count>\n` : "";
+  const freshComments = options.role === "review" && options.fullBase ? countComments(root, options.fullBase) : null;
+  const blocked = [comments, freshComments].find((counted) => commentLevel(counted) === "block");
+  if (blocked) stop(`${formatComments(blocked)}. No reviewer runs on this diff until then.`, 1);
+  const noteFor = (counted) => (commentLevel(counted) === "advise" ? `\n<comment_count>\n${formatComments(counted)}\n</comment_count>\n` : "");
+  const note = noteFor(comments);
   const main = options.base ? withDiff(read(options.prompt), root, options.base) : { text: read(options.prompt), whole: true };
   const fresh = options.freshPrompt ? withDiff(read(options.freshPrompt), root, options.fullBase) : null;
   const prompt = main.text + note;
@@ -198,7 +201,7 @@ async function main() {
   const effort = options.effort ?? routeEffort(route, { role: options.role, resuming: Boolean(resume) });
   const started = Date.now();
   const { final, attempts } = await dispatch({
-    front, role: options.role, prompt: resume ? (fresh ? fresh.text + note : null) : prompt, root, effort,
+    front, role: options.role, prompt: resume ? (fresh ? fresh.text + noteFor(freshComments) : null) : prompt, root, effort,
     unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
     authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route), comments: comments && { lines: comments.lines, sourceLines: comments.sourceLines },
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),

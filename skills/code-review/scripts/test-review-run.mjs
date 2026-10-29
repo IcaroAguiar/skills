@@ -692,19 +692,45 @@ try {
   // ---- comments: a comment-heavy diff never reaches a reviewer, with or without T0 ----
   newRepo("comments");
   chain({ "codex-ok": codex("m-ok") }, ["codex-ok"]);
+  sh("git", ["checkout", "-q", "-b", "feature"]);
   const commented = (count, plain) => Array.from({ length: count }, (_, index) => `// value ${index}\nexport const v${index} = ${index};\n`).join("") + Array.from({ length: plain }, (_, index) => `export const p${index} = ${index};\n`).join("");
+  const commitAll = (message) => {
+    sh("git", ["add", "-A"]);
+    sh("git", ["commit", "-q", "--no-verify", "-m", message]);
+  };
   write("src/a.ts", commented(12, 50));
+  commitAll("documented");
+  write("src/a.ts", commented(0, 62));
   reset({ "m-ok": "ok" });
   const heavy = rr();
   assert.equal(heavy.status, 1, heavy.output);
-  assert.match(heavy.output, /COMMENTS 12 new comment lines in 74 added source lines \(16%.*over the 5% limit.*No reviewer runs/);
+  assert.match(heavy.output, /COMMENTS 12 new comment lines in 74 added source lines \(16%.*over the 5% limit.*No reviewer runs/, "an uncommitted cleanup does not clear the committed diff the reviewer gets");
   assert.equal(calls().length, 0, "no provider sees a diff past the comment limit");
   write("src/a.ts", commented(12, 300));
+  commitAll("more code");
   reset({ "m-ok": "ok" });
-  const advised = rr();
+  const advised = rr(["--base", "main"]);
   assert.equal(advised.status, 0, advised.output);
   assert.match(calls()[0].stdin, /<comment_count>\nCOMMENTS 12 new comment lines in 324 added source lines \(4%/, "between 3% and 5% the reviewer gets the count");
   assert.deepEqual(callEvents()[0].comments, { lines: 12, sourceLines: 324 }, "the ledger keeps the count for calibration");
+  // A delta without comments still cannot carry a full fallback past the limit.
+  write("src/a.ts", commented(12, 50));
+  commitAll("back to heavy");
+  const head = sh("git", ["rev-parse", "HEAD"]).trim();
+  write("src/b.ts", commented(0, 30));
+  commitAll("delta");
+  writeFileSync(join(workspace, "fresh.txt"), "FRESH\n");
+  reset({ "m-ok": "ok" });
+  const fallback = node("review-run.mjs", ["-C", repo, "--role", "review", "--prompt", promptFile, "--out", outFile, "--author-model", "human", "--base", head, "--resume", "nope", "--fresh-prompt", join(workspace, "fresh.txt"), "--full-base", "main"]);
+  assert.equal(fallback.status, 1, fallback.output);
+  assert.match(fallback.output, /over the 5% limit/, "the full range a fresh fallback would get is counted too");
+  newRepo("comments-no-default");
+  sh("git", ["branch", "-m", "trunk"]);
+  reset({ "m-ok": "ok" });
+  const baseless = rr();
+  assert.equal(baseless.status, 2, baseless.output);
+  assert.match(baseless.output, /pass --base so the comment count can run/);
+  assert.equal(calls().length, 0, "without a base nothing is sent");
 
   console.log("PASS review-run contract");
 } finally {
