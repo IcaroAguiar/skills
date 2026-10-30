@@ -1,4 +1,0 @@
-interface:
-  display_name: "Approval Canvas"
-  short_description: "Approve a visual change on real components before implementing it"
-  default_prompt: "Use $approval-canvas to show me this visual change on the real screens, with the real design-system components, so I can approve it before implementation."
