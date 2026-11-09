@@ -72,12 +72,20 @@ class DeliveredLeftoversTests(unittest.TestCase):
         self.git("commit", "-m", "ignore")
         self.git("update-ref", "refs/remotes/origin/main", "HEAD")
         done = self.worktree("done")
+        self.commit("done.txt", cwd=done)
+        self.git("update-ref", "refs/remotes/origin/main", "done")
         (done / "node_modules").mkdir()
         (done / "node_modules" / "x.js").write_text("")
         self.assertEqual(self.actions(leftovers.classify(str(self.repo), fetch=False))[str(done)][0], "remove")
         (done / ".env").write_text("TOKEN=fake")
         plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
         self.assertEqual(plan[str(done)], ("keep", "ignored files worth checking: .env"))
+
+    def test_keeps_fresh_worktree_without_commits(self):
+        fresh = self.worktree("fresh")
+        plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
+        self.assertEqual(plan[str(fresh)], ("keep", "no commit since it was created; may be in use"))
+        self.assertEqual(plan["fresh"][0], "keep")
 
     def test_apply_bundles_before_deleting(self):
         done = self.worktree("done")

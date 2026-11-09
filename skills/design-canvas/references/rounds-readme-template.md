@@ -15,7 +15,7 @@ Protótipo estático para aprovar o redesenho de <área> antes da implementaçã
 
 ```sh
 UI_ROOT=<...> WEB_APP=<app> node $UI_ROOT/$WEB_APP/node_modules/vite/bin/vite.js build -c vite.config.mjs
-UI_ROOT=<...> WEB_APP=<app> node shoot.mjs            # ou: node shoot.mjs A1,A2
+UI_ROOT=<...> WEB_APP=<app> SHOTS=<tmp-da-tarefa>/shots node shoot.mjs   # ou: ... node shoot.mjs A1,A2
 UI_ROOT=<...> WEB_APP=<app> node $UI_ROOT/$WEB_APP/node_modules/vite/bin/vite.js preview -c vite.config.mjs --host 127.0.0.1 --port <porta>
 ```
 
@@ -59,4 +59,4 @@ Diferenças entre o canvas aprovado e o produto implementado que o usuário acei
 
 ## Limites
 
-O canvas prova composição, textos e aparência (com os componentes reais, sem retoques locais), não persistência, permissão, auditoria ou transações. Diálogos e painéis laterais funcionam, mas não aparecem nas capturas automáticas. As capturas ficam em `/tmp/<area>-canvas-shots/`, fora do Git.
+O canvas prova composição, textos e aparência (com os componentes reais, sem retoques locais), não persistência, permissão, auditoria ou transações. Diálogos e painéis laterais funcionam, mas não aparecem nas capturas automáticas. As capturas ficam em `<tmp-da-tarefa>/shots/`, fora do Git.

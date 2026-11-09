@@ -4,7 +4,8 @@
 Squash merges never make a branch an ancestor of the default branch, so
 "merged" is proven by either ancestry of the remote default branch or a merged
 PR whose head contains the local tip. A worktree is removable only when that
-proof exists, `git status` is empty, and its ignored files are all regenerable
+proof exists, `git status` is empty, it has a commit of its own (a fresh
+worktree is an ancestor too, and may be about to be used), and its ignored files are all regenerable
 (dependencies and build output). Everything else is kept with its reason.
 
 Dry run by default. `--apply` first writes a bundle of every branch it deletes,
@@ -69,6 +70,12 @@ def delivery(repo, tip, branch, base, prs):
     return None
 
 
+def never_committed(path, branch):
+    ref = f"refs/heads/{branch}" if branch else "HEAD"
+    entries = (git(path, "reflog", "show", "--format=%gs", ref) or "").splitlines()
+    return len(entries) == 1
+
+
 def valuable_ignored(path):
     listed = git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory") or ""
     return [entry for entry in listed.splitlines() if entry and not REGENERABLE.search(entry)]
@@ -108,6 +115,8 @@ def classify(repo, fetch=True):
                 entry.update(action="keep", reason=f"{len(status.splitlines())} uncommitted changes")
             elif not proof:
                 entry.update(action="keep", reason="no proof it was delivered")
+            elif never_committed(path, branch):
+                entry.update(action="keep", reason="no commit since it was created; may be in use")
             elif ignored:
                 entry.update(action="keep", reason=f"ignored files worth checking: {', '.join(ignored[:3])}")
             else:
