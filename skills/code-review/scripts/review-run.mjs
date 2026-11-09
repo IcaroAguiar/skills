@@ -190,8 +190,7 @@ async function main() {
   const note = noteFor(comments);
   const main = options.base ? withDiff(read(options.prompt), root, options.base) : { text: read(options.prompt), whole: true };
   const fresh = options.freshPrompt ? withDiff(read(options.freshPrompt), root, options.fullBase) : null;
-  // A resumed session already read the block in its full review.
-  const block = options.role === "review" ? knownMistakesBlock({ root, front: front.name }) : "";
+  const block = options.role === "review" ? knownMistakesBlock({ root, front: front.name, base: options.base }) : "";
   const known = block && `\n${block}`;
   const prompt = main.text + note + (options.resume ? "" : known);
   let resume = null;

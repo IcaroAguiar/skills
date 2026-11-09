@@ -106,6 +106,16 @@ function lensFront(root, options) {
   return resolveFront(policy, root, options.front);
 }
 
+// The catalog follows the policy front, not the one-off front of --claude or --reviewer.
+function catalogFront(root, options, front) {
+  try {
+    const policy = loadPolicy();
+    return policy ? resolveFront(policy, root, options.front).name : front.name;
+  } catch {
+    return front.name;
+  }
+}
+
 function usage(message) {
   console.error(`review-t1: ${message}\n\n${USAGE}`);
   process.exit(2);
@@ -387,7 +397,7 @@ async function main() {
   const spec = (options.spec ? readFileSync(options.spec, "utf8") : git(root, ["log", "--format=%B", `${t0.base.sha}..HEAD`])).trim()
     || "No description was given; infer the intent from the diff.";
   const context = options.context ? contextFiles(root, shownFiles) : [];
-  const prompt = buildPrompt({ t0, spec, diff, omitted, context, known: knownMistakesBlock({ root, front: front.name }) });
+  const prompt = buildPrompt({ t0, spec, diff, omitted, context, known: knownMistakesBlock({ root, front: catalogFront(root, options, front), base: t0.base.sha }) });
   if (options.prompt) {
     writePrivateFile(options.prompt, prompt);
     console.log(`review-t1 ${report.repo}: prompt written to ${options.prompt} (${Math.round(Buffer.byteLength(prompt) / 1024)} KB)`);
