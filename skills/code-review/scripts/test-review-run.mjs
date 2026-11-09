@@ -739,6 +739,27 @@ try {
   assert.match(fellBack.output, /FRESH/);
   assert.match(invoked("m-other")[0].stdin, /<comment_count>\nCOMMENTS 12 new comment lines/, "the fresh prompt carries the full range's count");
   assert.deepEqual(callEvents().at(-1).comments, { lines: 12, removed: 0, sourceLines: 384 }, "and so does its ledger event");
+  // ---- 13. known mistakes: the front's catalog reaches the deep reviewer, not the fixer -------------
+  newRepo("known-run");
+  write("REVIEW.md", "RUN-REVIEW-MD-MARKER\n");
+  commitAll("docs: review notes");
+  chain({ "claude-ok": claude("m-ok") }, ["claude-ok"], { fix: ["claude-ok"] });
+  reset({ "m-ok": "ok" });
+  mkdirSync(join(state, "patterns"), { recursive: true });
+  writeFileSync(join(state, "patterns", "main.md"), "## retry-unbounded: retry without a budget\n- seen: 2026-11-01 known-run src/private/SEEN-PATH.ts:9\n- check: pitfall known-run: AGENTS.md\n\n## elsewhere: OTHER-FRONT-REPO\n- seen: 2026-11-01 front-elsewhere x.ts:1\n- check: candidate\n");
+  const reviewed2 = rr();
+  assert.equal(reviewed2.status, 0, reviewed2.output);
+  const sentPrompt = calls().at(-1).stdin;
+  assert.match(sentPrompt, /^REVIEW-PROMPT\n[\s\S]*<known_mistakes front="main">[\s\S]*- \[pitfall\] retry-unbounded: retry without a budget[\s\S]*RUN-REVIEW-MD-MARKER/);
+  for (const absent of ["SEEN-PATH", "OTHER-FRONT-REPO"]) assert.ok(!sentPrompt.includes(absent), `the prompt carries ${absent}`);
+  assert.equal(readFileSync(promptFile, "utf8"), "REVIEW-PROMPT\n", "the --prompt file is left as it was");
+  const fixed = rr([], { role: "fix" });
+  assert.equal(fixed.status, 0, fixed.output);
+  assert.ok(!calls().at(-1).stdin.includes("<known_mistakes"), "a fixer does not get the review block");
+  const delta2 = rr(["--resume", reviewed2.result.call]);
+  assert.equal(delta2.status, 0, delta2.output);
+  assert.ok(!calls().at(-1).stdin.includes("<known_mistakes"), "a resumed session already has it");
+
   newRepo("comments-no-default");
   sh("git", ["branch", "-m", "trunk"]);
   reset({ "m-ok": "ok" });

@@ -8,6 +8,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, sy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { knownMistakesBlock, MAX_BLOCK_BYTES } from "./lib/known-mistakes.mjs";
 
 const scripts = dirname(fileURLToPath(import.meta.url));
 const workspace = mkdtempSync(join(tmpdir(), "review-t1-fixture-"));
@@ -180,6 +181,75 @@ try {
   assert.deepEqual([capped.status, capped.findings, capped.dropped, capped.overCap], ["ok", 10, 0, 2], "the cap is not reported as malformed");
   const lastCall = readFileSync(join(workspace, "state", "ledger.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line)).filter((event) => event.type === "call").at(-1);
   assert.deepEqual(lastCall.size, { lines: 40, files: 1 }, "each call records the change's reviewable size");
+
+  // ---- known mistakes: the front's catalog and REVIEW.md reach the prompt -----------------------
+  newRepo("known-repo");
+  write("REVIEW.md", "REVIEW-MD-MARKER keep the retry budget bounded.\n");
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "docs: review notes"]);
+  sh("git", ["checkout", "-q", "-b", "feature"]);
+  write("src/known.ts", code(30));
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "feat: known"]);
+  const patterns = join(workspace, "state", "patterns");
+  mkdirSync(patterns, { recursive: true });
+  const entry = (id, title, repos, check) => `## ${id}: ${title}\n- seen: 2026-11-01 ${repos} src/secret/SEEN-PATH.ts:41 (P2); head deadbeefcafe1234 SEEN-EXCERPT\n- check: ${check}\n\n`;
+  writeFileSync(join(patterns, "known.md"), [
+    "# Catalog\n\nPreamble that is not an entry.\n\n",
+    entry("caught-by-lint", "already linted", "known-repo", "enforced known-repo: rule `x` (PR #1)"),
+    entry("other-repo-only", "OTHER-REPO-TITLE", "front-elsewhere", "candidate"),
+    entry("prefix-lookalike", "LOOKALIKE-TITLE", "known-repo-extra", "candidate"),
+    entry("open-candidate", "needs a bounded retry in src/lib/retry.ts:12 at abcdef1234", "known-repo", "candidate"),
+    entry("documented", "domain rule", "known-repo", "pitfall known-repo: AGENTS.md#retries"),
+    entry("cited-in-check", "named only in check", "front-elsewhere", "pitfall known-repo: docs/solutions/x.md"),
+    entry("old", "SUPERSEDED-TITLE", "known-repo", "superseded by another"),
+  ].join(""));
+  const state = process.env.AGENT_REVIEW_STATE;
+  process.env.AGENT_REVIEW_STATE = join(workspace, "state");
+  try {
+    const block = knownMistakesBlock({ root: repo, front: "known" });
+    const titles = [...block.matchAll(/^- \[(\w+)\] (\S+)/gm)].map((match) => `${match[1]} ${match[2]}`);
+    assert.deepEqual(titles, ["candidate open-candidate:", "pitfall documented:", "pitfall cited-in-check:", "enforced caught-by-lint:"], "only this repository's entries, open ones before enforced");
+    assert.match(block, /already caught by T0 or lint/);
+    for (const absent of ["OTHER-REPO-TITLE", "LOOKALIKE-TITLE", "SUPERSEDED-TITLE", "SEEN-PATH", "SEEN-EXCERPT", "deadbeefcafe1234", "abcdef1234", "src/lib/retry.ts", "AGENTS.md#retries", "PR #1"]) {
+      assert.ok(!block.includes(absent), `the block carries ${absent}`);
+    }
+    assert.match(block, /needs a bounded retry in \[path\] at \[sha\]/);
+    assert.match(block, /REVIEW-MD-MARKER/);
+
+    // A long catalog stays inside the limit and says what it left out.
+    writeFileSync(join(patterns, "known.md"), Array.from({ length: 300 }, (_, index) => entry(`m${index}`, `mechanism number ${index} ${"x".repeat(60)}`, "known-repo", "candidate")).join(""));
+    const capped = knownMistakesBlock({ root: repo, front: "known" });
+    assert.ok(Buffer.byteLength(capped) <= MAX_BLOCK_BYTES, `block is ${Buffer.byteLength(capped)} bytes`);
+    assert.match(capped, /- \d+ more entries omitted for size/);
+    assert.ok(capped.includes("REVIEW-MD-MARKER") && capped.endsWith("</known_mistakes>\n"), "REVIEW.md still fits when the catalog is long");
+
+    // Nothing to say, or nowhere to read it: an empty block, never an error.
+    assert.equal(knownMistakesBlock({ root: repo, front: "no-such-front" }).includes("REVIEW-MD-MARKER"), true, "REVIEW.md alone still counts");
+    assert.equal(knownMistakesBlock({ root: repo, front: "../escape" }).includes("<known_mistakes"), true);
+    sh("git", ["rm", "-q", "REVIEW.md"]);
+    sh("git", ["commit", "-q", "--no-verify", "-m", "drop review notes"]);
+    assert.equal(knownMistakesBlock({ root: repo, front: "no-such-front" }), "");
+    assert.equal(knownMistakesBlock({ root: repo, front: "../escape" }), "");
+    process.env.AGENT_REVIEW_STATE = join(workspace, "no-state-at-all");
+    assert.equal(knownMistakesBlock({ root: repo, front: "known" }), "");
+  } finally {
+    process.env.AGENT_REVIEW_STATE = state;
+  }
+
+  // The T1 prompt carries the block; the front comes from the policy.
+  writeFileSync(join(patterns, "known.md"), entry("open-candidate", "needs a bounded retry", "known-repo", "candidate"));
+  write("REVIEW.md", "REVIEW-MD-MARKER again\n");
+  sh("git", ["add", "-A"]);
+  sh("git", ["commit", "-q", "--no-verify", "-m", "docs: review notes again"]);
+  writeFileSync(env.AGENT_REVIEW_POLICY, JSON.stringify({ version: 1, fronts: [{ name: "known", match: { any: true }, providers: { stub: { kind: "command", command: "exit 1" } }, roles: { t1: [["stub"]] } }] }));
+  reviewT0();
+  const knownPrompt = join(workspace, "known-prompt.md");
+  assert.equal(reviewT1(["--prompt", knownPrompt, "--force"]).status, 0);
+  const sent = readFileSync(knownPrompt, "utf8");
+  assert.match(sent, /<known_mistakes front="known">[\s\S]*\[candidate\] open-candidate: needs a bounded retry[\s\S]*REVIEW-MD-MARKER again[\s\S]*<\/known_mistakes>/);
+  assert.ok(sent.indexOf("<known_mistakes") > sent.indexOf("</t0_findings>") && sent.indexOf("<known_mistakes") < sent.indexOf("You are a fast pre-reviewer"));
+  rmSync(env.AGENT_REVIEW_POLICY);
 
   newRepo("empty");
   reviewT0();
