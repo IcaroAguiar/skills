@@ -9,7 +9,8 @@ worktree is an ancestor too, and may be about to be used), and its ignored files
 (dependencies and build output). Everything else is kept with its reason.
 
 Dry run by default. `--apply` first writes a bundle of every branch it deletes,
-then runs `git worktree remove` (never `--force`) and `git branch -D`.
+then runs `git worktree remove` (never `--force`) and `git branch -D`. It never
+prunes: a missing worktree folder may be on an unmounted volume.
 """
 import argparse
 import json
@@ -51,7 +52,7 @@ def default_ref(repo):
 def merged_prs(repo):
     try:
         code, out, _ = run(["gh", "pr", "list", "--state", "merged", "--limit", "1000",
-                            "--json", "headRefName,headRefOid,number"], repo)
+                            "--json", "baseRefName,headRefName,headRefOid,number"], repo)
     except (OSError, subprocess.TimeoutExpired):
         return {}
     prs = {}
@@ -63,7 +64,10 @@ def merged_prs(repo):
 def delivery(repo, tip, branch, base, prs):
     if base and is_ancestor(repo, tip, base):
         return "in the default branch"
+    base_name = base.rsplit("/", 1)[-1] if base else None
     for pr in prs.get(branch or "", []):
+        if pr.get("baseRefName") != base_name:
+            continue
         oid = pr["headRefOid"]
         if tip == oid or (git(repo, "cat-file", "-e", oid) is not None and is_ancestor(repo, tip, oid)):
             return f"PR #{pr['number']} merged"
@@ -73,7 +77,7 @@ def delivery(repo, tip, branch, base, prs):
 def never_committed(path, branch):
     ref = f"refs/heads/{branch}" if branch else "HEAD"
     entries = (git(path, "reflog", "show", "--format=%gs", ref) or "").splitlines()
-    return len(entries) == 1
+    return len(entries) <= 1
 
 
 def valuable_ignored(path):
@@ -103,7 +107,7 @@ def classify(repo, fetch=True):
             continue
         entry = {"path": path, "branch": branch}
         if not os.path.isdir(path):
-            entry.update(action="remove", reason="folder no longer exists")
+            entry.update(action="keep", reason="folder missing (unmounted volume?); prune it by hand once confirmed")
         else:
             status = git(path, "status", "--porcelain", "--untracked-files=all")
             tip = git(path, "rev-parse", "HEAD")
@@ -133,6 +137,8 @@ def classify(repo, fetch=True):
         proof = delivery(repo, tip, branch, base, prs)
         if branch in checked_out:
             entry = {"branch": branch, "action": "keep", "reason": f"checked out at {checked_out[branch]}"}
+        elif proof and never_committed(repo, branch):
+            entry = {"branch": branch, "action": "keep", "reason": "no commit since it was created; may be in use"}
         elif proof:
             entry = {"branch": branch, "action": "remove", "reason": proof}
         else:
@@ -155,7 +161,6 @@ def apply(plan, backup_dir):
         if worktree["action"] == "remove":
             code, _, err = run(["git", "worktree", "remove", worktree["path"]], repo)
             done.append(f"worktree {worktree['path']}: " + ("removed" if code == 0 else f"kept ({err[-160:]})"))
-    run(["git", "worktree", "prune"], repo)
     for branch in doomed:
         code, _, err = run(["git", "branch", "-D", branch], repo)
         done.append(f"branch {branch}: " + ("deleted" if code == 0 else f"kept ({err[-120:]})"))

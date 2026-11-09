@@ -64,7 +64,7 @@ class DeliveredLeftoversTests(unittest.TestCase):
         self.assertEqual(plan["pending"][0], "keep")
         self.assertEqual(plan[str(dirty)], ("keep", "1 uncommitted changes"))
         self.assertEqual(plan["dirty"][0], "keep")
-        self.assertEqual(plan["loose"][0], "remove")
+        self.assertEqual(plan["loose"], ("keep", "no commit since it was created; may be in use"))
 
     def test_keeps_delivered_worktree_with_valuable_ignored_files(self):
         (self.repo / ".gitignore").write_text(".env\nnode_modules/\n")
@@ -86,6 +86,22 @@ class DeliveredLeftoversTests(unittest.TestCase):
         plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
         self.assertEqual(plan[str(fresh)], ("keep", "no commit since it was created; may be in use"))
         self.assertEqual(plan["fresh"][0], "keep")
+
+    def test_merged_pr_counts_only_when_it_targets_the_default_branch(self):
+        squashed = self.worktree("squashed")
+        self.commit("squashed.txt", cwd=squashed)
+        tip = self.git("rev-parse", "squashed")
+        pr = {"headRefName": "squashed", "headRefOid": tip, "number": 7}
+        original = leftovers.merged_prs
+        self.addCleanup(setattr, leftovers, "merged_prs", original)
+
+        leftovers.merged_prs = lambda repo: {"squashed": [{**pr, "baseRefName": "parent-layer"}]}
+        plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
+        self.assertEqual(plan[str(squashed)], ("keep", "no proof it was delivered"))
+
+        leftovers.merged_prs = lambda repo: {"squashed": [{**pr, "baseRefName": "main"}]}
+        plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
+        self.assertEqual(plan[str(squashed)], ("remove", "PR #7 merged"))
 
     def test_apply_bundles_before_deleting(self):
         done = self.worktree("done")

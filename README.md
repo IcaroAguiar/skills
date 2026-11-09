@@ -60,6 +60,7 @@ These are part of the same daily workflow but maintained upstream. Install them 
 | [`rafaelquintanilha/skills`](https://github.com/rafaelquintanilha/skills) | `better-portuguese`, `orchestrate` |
 | [`github/gh-stack`](https://github.com/github/gh-stack) | `gh-stack` |
 | [`emilkowalski/skills`](https://github.com/emilkowalski/skills) | `improve-animations` |
+| [`pbakaus/impeccable`](https://github.com/pbakaus/impeccable) | `impeccable` |
 
 ## License
 
