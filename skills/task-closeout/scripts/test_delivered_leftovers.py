@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -102,6 +103,18 @@ class DeliveredLeftoversTests(unittest.TestCase):
         leftovers.merged_prs = lambda repo: {"squashed": [{**pr, "baseRefName": "main"}]}
         plan = self.actions(leftovers.classify(str(self.repo), fetch=False))
         self.assertEqual(plan[str(squashed)], ("remove", "PR #7 merged"))
+
+    def test_keeps_worktree_whose_folder_is_missing_and_never_prunes(self):
+        gone = self.worktree("gone")
+        self.commit("gone.txt", cwd=gone)
+        self.git("update-ref", "refs/remotes/origin/main", "gone")
+        shutil.rmtree(gone)
+
+        plan = leftovers.classify(str(self.repo), fetch=False)
+        leftovers.apply(plan, str(self.root / "backups"))
+
+        self.assertEqual(self.actions(plan)[str(gone)][0], "keep")
+        self.assertIn(str(gone), self.git("worktree", "list"))
 
     def test_apply_bundles_before_deleting(self):
         done = self.worktree("done")

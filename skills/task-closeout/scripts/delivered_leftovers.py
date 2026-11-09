@@ -2,8 +2,8 @@
 """Lists a repo's linked worktrees and local branches, and removes the delivered ones.
 
 Squash merges never make a branch an ancestor of the default branch, so
-"merged" is proven by either ancestry of the remote default branch or a merged
-PR whose head contains the local tip. A worktree is removable only when that
+"merged" is proven by either ancestry of the remote default branch or a PR
+merged into the default branch whose head contains the local tip. A worktree is removable only when that
 proof exists, `git status` is empty, it has a commit of its own (a fresh
 worktree is an ancestor too, and may be about to be used), and its ignored files are all regenerable
 (dependencies and build output). Everything else is kept with its reason.
@@ -64,7 +64,7 @@ def merged_prs(repo):
 def delivery(repo, tip, branch, base, prs):
     if base and is_ancestor(repo, tip, base):
         return "in the default branch"
-    base_name = base.rsplit("/", 1)[-1] if base else None
+    base_name = base.removeprefix("refs/remotes/origin/") if base else None
     for pr in prs.get(branch or "", []):
         if pr.get("baseRefName") != base_name:
             continue
@@ -128,7 +128,7 @@ def classify(repo, fetch=True):
         if branch and entry["action"] == "keep":
             checked_out[branch] = path
         worktrees.append(entry)
-    base_name = base.rsplit("/", 1)[-1] if base else None
+    base_name = base.removeprefix("refs/remotes/origin/") if base else None
     refs = git(repo, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads") or ""
     for line in refs.splitlines():
         branch, tip = line.split(" ")
