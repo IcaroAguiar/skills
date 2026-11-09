@@ -47,7 +47,6 @@ Repository instructions define catalogue maintenance. The repository is the cano
 | `design-direction` | Art-direct and review interfaces: disciplined structure plus a domain-specific expression per screen |
 | `exploratory-qa` | Test what shipped the way people use it, with parallel persona agents |
 | `pr-demo-video` | Record a short captioned demo of a change running in the real app |
-| `record-real-dev-e2e` | Record real application workflows when a video is part of the evidence |
 | `task-closeout` | Close a task with a reviewable delivery and every workspace artifact accounted for |
 
 ## Recommended from other catalogues

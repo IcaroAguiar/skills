@@ -6,8 +6,8 @@ Protótipo estático para aprovar o redesenho de <área> antes da implementaçã
 
 - UI de `<branch padrão>` em `<commit>`. `UI_ROOT` aponta para um checkout atualizado e com dependências instaladas. Se o checkout local estiver atrás ou for servido, use um snapshot:
   ```sh
-  git archive origin/<branch> | tar -x -C /tmp/<nome>-snapshot
-  cd /tmp/<nome>-snapshot && <instalar dependências do app e do pacote UI>
+  git archive origin/<branch> | tar -x -C <tmp-da-tarefa>/<nome>-snapshot
+  cd <tmp-da-tarefa>/<nome>-snapshot && <instalar dependências do app e do pacote UI>
   ```
 - Receita: `<docs do design system / área de referência>`, codificada em `src/kit.tsx`.
 
