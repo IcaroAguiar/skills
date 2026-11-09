@@ -58,6 +58,16 @@ gives the reviewer the dismissed findings, which it may re-raise. Like T0, T1 is
 the author's tool, not a reviewer wave: it never approves or blocks, and it runs
 once, before the first full review. Details: `references/t1.md`.
 
+## Known mistakes
+
+T1 and the deep reviewer receive a `<known_mistakes>` block without being asked,
+built from the front's pattern catalog and the repository's committed
+`REVIEW.md` (up to 6 KB). The catalog entries that cite the repository appear as a title and
+a check state, open ones first; `enforced` ones are marked as already caught by T0 or lint.
+The reviewer checks the diff against the block first and reports a match as a
+normal finding only when the diff contains it. It exists because `AGENTS.md` is
+git-ignored in some repositories and absent from a worktree. Without a catalog entry for the repository and without a `REVIEW.md`, there is no block. Details: `references/patterns.md`.
+
 ## Accounts, providers and fallback
 
 If `~/.config/agent-review/local.md` (or `$AGENT_REVIEW_LOCAL`) exists, read it

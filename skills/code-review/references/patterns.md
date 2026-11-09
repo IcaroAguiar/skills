@@ -22,6 +22,15 @@ entry per mechanism:
 - check: candidate
 ```
 
+The catalog is also the patterns file the reviewers receive. `scripts/lib/known-mistakes.mjs` selects the
+entries whose `seen` or `check` line names the repository under review (by checkout, main checkout of a
+worktree, or remote name), keeps only each entry's title line and the first word of its check state, and
+injects them into the T1 prompt and the deep review prompt as a `<known_mistakes>` block of at most 6 KB. Open
+entries (`pitfall`, `not checkable`, `candidate`) come first; `enforced` ones come last and are marked as already
+caught by T0 or lint. `seen` lines, with their paths, heads and excerpts, never leave the catalog. The repository's
+committed `REVIEW.md` rides in the same block, and stays optional. Write each entry's title so it still reads
+well alone, without a path, and name the repository in `seen` or `check`, or the entry reaches no review.
+
 `check` is one of:
 
 - `candidate`;
