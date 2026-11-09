@@ -24,7 +24,7 @@ These are the decisions a worker cannot make. Get them right before any scene is
 - **Environment:** the local stack running the change's code (top of the stack for stacked PRs). Follow the project's rules for servers, database and ports. Production only read-only and only when the user asks.
 - **Account:** a test account only. Check it is not a personal one without printing it: compare a hash with the user's known e-mail. The login happens **once, off camera** (`demo.sh login`); scenes reuse the stored session.
 - **Data:** find, read-only, the organization or records that make the feature visible. For example, choose the org that already has published items so a "copy from previous" control appears. Prefer filling screens **through the product itself**: copy features, local-draft recovery, imports. Seeding directly is a last resort. Writes to the server are allowed only in non-production, with clearly labeled test data, and only when the storyboard says so. Never click publish, delete or anything irreversible on camera.
-- **Look:** light theme, a 1280×800 viewport (capture settings follow the demo-video row in `record-real-dev-e2e`), the user's locale and timezone. Mask e-mails by default (built in) and add `extraMasks` for other personal data.
+- **Look:** light theme, a 1280×800 viewport at `deviceScaleFactor: 1` (`post.py` encodes at `-crf 24`; raise it if the file passes 10 MB), the user's locale and timezone. Mask e-mails by default (built in) and add `extraMasks` for other personal data.
 
 ## 3. Storyboard (you)
 

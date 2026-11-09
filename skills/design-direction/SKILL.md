@@ -1,6 +1,6 @@
 ---
 name: design-direction
-description: Design, redesign, review, or art-direct web and mobile interfaces in the user's house style, disciplined structure plus a domain-specific expression for each screen. Use to create or redesign a screen, flow, or component; audit a screen, screenshot, or implementation; give an interface a visual direction or make it less generic; or capture a visual reference or stated preference.
+description: Art-direct and review interfaces in the user's house style (disciplined structure plus a domain-specific expression per screen). Use for visual direction, design review or audit of a screen, screenshot or implementation, making an interface less generic, or capturing a visual reference or stated preference. For hands-on frontend polish passes use impeccable; for a static approval mock use design-canvas; for a throwaway design or state experiment use prototype.
 ---
 
 # Design Direction
@@ -17,8 +17,8 @@ Read [taste-profile.md](references/taste-profile.md) on every run. It is the use
 
 - **Create**: a new interface, flow, or component.
 - **Redesign**: replace an existing interface's structure or look.
-- **Review**: audit evidence and issue a verdict without editing.
-- **Implement**: apply an approved or authorized design and prove it.
+- **Review**: audit evidence and issue a verdict without editing. Follow [audit.md](workflows/audit.md).
+- **Implement**: apply an approved or authorized design and prove it. Follow [execute.md](workflows/execute.md).
 - **Refine**: polish a sound interface (typography, spacing, surfaces, icons, motion, responsive behavior) without changing its product contract. Follow [refine.md](workflows/refine.md).
 - **Explore**: compare at most two credible directions on equivalent prototypes before production changes. Follow [explore.md](workflows/explore.md).
 - **Translate reference**: extract the functional relationships of a reference, then route to another branch. Follow [translate-reference.md](workflows/translate-reference.md).
@@ -72,6 +72,9 @@ Load the modules for the elements you change or the problems you observe. For di
 | Status, feedback, alerts, metadata, or async behavior | [states-and-feedback.md](references/states-and-feedback.md) |
 | Lists, tables, repeated actions, overflow, or lifecycle transitions | [operational-collections.md](references/operational-collections.md) |
 | Several screens of one journey | [multi-screen-coherence.md](references/multi-screen-coherence.md) |
+| Authorial hierarchy rules (surfaces versus sections, page versus section titles) | [design-direction.md](references/design-direction.md) |
+| Handoff of the expression layer onto a passing context lock | [foundations-and-handoff.md](references/foundations-and-handoff.md) |
+| Translating a reference | [reference-translation.md](references/reference-translation.md) and [templates/reference-translation.md](templates/reference-translation.md) |
 
 For a scored review, read [evaluation.md](references/evaluation.md) and, when authorship is judged, [authorship-evaluation.md](references/authorship-evaluation.md). Read [output-templates.md](references/output-templates.md) or the files in `templates/` when the deliverable needs that structure. Read [portability.md](references/portability.md) only when adapting the skill to another harness.
 

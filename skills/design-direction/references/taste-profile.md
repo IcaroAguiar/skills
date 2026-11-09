@@ -62,6 +62,10 @@ without discipline reads as noise. The user has rejected both.
   much as famous apps.
 - **One signature element per screen,** born from the domain; everything else
   stays quiet. Reuse a signature the product already has before inventing one.
+- **Living over static.** A record screen shows the live system around the
+  record (health, counts and trends from other modules, its place in the chain)
+  with one hero block carrying the answer. Typing the client's spreadsheet into
+  equal cards is "simples e cru", even when every field is right.
 - **Bold structure over decoration.** The user celebrates structural ideas, such
   as a rail that makes area switching one click, and rejects ornament.
 
@@ -81,3 +85,5 @@ a screen, and update the rules above when a pattern repeats.
 | 2026-10-23 | Platform redesign as implemented, compared with the approved canvas | "Uma borda a mais"; "por que não conseguimos perfeição nos detalhes?" | Detail parity is part of the approval: a shared empty state and a decision tile drew boxes the canvas did not have, the app's global CSS (which the canvas never loaded) restyled table headers and badges, a reused badge added a border, and fonts differed. Start the canvas from the product's baseline and check side by side in the same conditions |
 | 2026-10-24 | Capacity queues (prequalification, plans, conformity) reusing the candidate-queue passport | "Se for igual, vai causar confusão"; "telas muito parecidas" | A metaphor belongs to one task. Screens that sit side by side need distinct shapes: a rule matrix, a stage board, a review inbox |
 | 2026-10-24 | Review inbox with an accent side border on the highlighted row | "Há muito tempo quero dizer, não gosto dessa borda colorida… tem muita cara de IA" | Accent stripes and tinted outlines as emphasis are banned; use a neutral surface lift, weight, and a text label |
+| 2026-11-07 | Process sheet (macrofluxo) of a quality-management product, map and per-role view, round 1: eight equal cards mirroring the client's spreadsheet | "Esse é o melhor design que podemos chegar? Tão simples e cru?" | Correct content and organization is not enough; a digitized spreadsheet with equal boxes and static text reads as crude |
+| 2026-11-07 | Same screens, round 2: navy hero (inputs → expected result → outputs), health strip from other modules, chain breadcrumb, process house map, service blueprint by role | "Excelente design. É assim que você precisa me ofertar na primeira oportunidade" | Domain form + one hero + live system + neighbours is the bar for the first round, not a second one |

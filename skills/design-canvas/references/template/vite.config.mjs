@@ -1,4 +1,4 @@
-// Approval canvas: renders the proposal with the REAL design-system components.
+// Design canvas: renders the proposal with the REAL design-system components.
 // Required env: UI_ROOT = checkout of the up-to-date main with dependencies installed.
 // Optional env: WEB_APP (app whose node_modules provide vite/react/tailwind; default apps/web),
 //               OUT (build dir; default out).

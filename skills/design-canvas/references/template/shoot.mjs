@@ -12,10 +12,11 @@ import { captureJobs } from './capture-jobs.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 if (!process.env.UI_ROOT) throw new Error('Set UI_ROOT.');
+if (!process.env.SHOTS) throw new Error('Set SHOTS to a directory in the task temp folder.');
 const root = `${process.env.UI_ROOT.replace(/\/$/, '')}/`;
 const require = createRequire(`${root}${process.env.WEB_APP ?? 'apps/web'}/package.json`);
 const { chromium } = require('@playwright/test');
-const output = process.env.SHOTS ?? '/tmp/canvas-shots';
+const output = process.env.SHOTS;
 const only = process.argv[2]?.split(',');
 await mkdir(output, { recursive: true });
 const port = Number(process.env.PORT ?? 4183);
