@@ -63,11 +63,10 @@ once, before the first full review. Details: `references/t1.md`.
 T1 and the deep reviewer receive a `<known_mistakes>` block without being asked,
 built from the front's pattern catalog and the repository's committed
 `REVIEW.md` (up to 6 KB). The catalog entries that cite the repository appear as a title and
-a check state, open ones first; `enforced` ones are marked as already caught by T0.
+a check state, open ones first; `enforced` ones are marked as already caught by T0 or lint.
 The reviewer checks the diff against the block first and reports a match as a
 normal finding only when the diff contains it. It exists because `AGENTS.md` is
-git-ignored in some repositories and absent from a worktree. A missing state
-directory or catalog gives no block. Details: `references/patterns.md`.
+git-ignored in some repositories and absent from a worktree. Without a catalog entry for the repository and without a `REVIEW.md`, there is no block. Details: `references/patterns.md`.
 
 ## Accounts, providers and fallback
 

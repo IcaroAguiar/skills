@@ -13,7 +13,7 @@ const MAX_REVIEW_MD_BYTES = 2 * 1024;
 const STATES = [
   [/^(pitfall|not checkable|candidate)\b/, "$1", 0],
   [/^(proposed|draft|promoted|structural|regra)\b/, "$1", 1],
-  [/^(enforced|implemented)\b/, "$1", 2],
+  [/^(enforced|implemented)\b/, "enforced", 2],
   [/^superseded\b/, "superseded", 3],
 ];
 const CAUGHT_BY_T0 = 2;

@@ -190,8 +190,11 @@ async function main() {
   const note = noteFor(comments);
   const main = options.base ? withDiff(read(options.prompt), root, options.base) : { text: read(options.prompt), whole: true };
   const fresh = options.freshPrompt ? withDiff(read(options.freshPrompt), root, options.fullBase) : null;
-  const block = options.role === "review" ? knownMistakesBlock({ root, front: front.name, base: options.base }) : "";
-  const known = block && `\n${block}`;
+  const knownFor = (ref) => {
+    const block = options.role === "review" ? knownMistakesBlock({ root, front: front.name, base: resolveBase(root, ref).sha }) : "";
+    return block && `\n${block}`;
+  };
+  const known = knownFor(options.base);
   const prompt = main.text + note + (options.resume ? "" : known);
   let resume = null;
   if (options.resume) {
@@ -205,7 +208,7 @@ async function main() {
   const effort = options.effort ?? routeEffort(route, { role: options.role, resuming: Boolean(resume) });
   const started = Date.now();
   const { final, attempts } = await dispatch({
-    front, role: options.role, prompt: resume ? (fresh ? fresh.text + noteFor(freshComments) + known : null) : prompt, root, effort,
+    front, role: options.role, prompt: resume ? (fresh ? fresh.text + noteFor(freshComments) + knownFor(options.fullBase) : null) : prompt, root, effort,
     unfit: (provider, resuming) => (!SHELL_KINDS.has(provider.kind) && !(resuming ? main : fresh ?? main).whole ? "the diff is too large to include and this reviewer has no shell to read it" : null),
     authorModel: options.authorModel, headSha, timeoutMs: options.timeout * 1000, label: options.label, resume, size: diffSize(route), comments: counts(resume ? freshComments : comments), resumeComments: resume ? counts(comments) : null,
     onAttempt: (attempt) => console.error(`review-run: ${attempt.provider} ${attempt.status}${attempt.until ? ` until ${attempt.until}` : ""}${attempt.error ? `: ${attempt.error.split("\n").at(-1)}` : ""}`),

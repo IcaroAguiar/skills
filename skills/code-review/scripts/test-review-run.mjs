@@ -753,6 +753,12 @@ try {
   assert.match(sentPrompt, /^REVIEW-PROMPT\n[\s\S]*<known_mistakes front="main">[\s\S]*- \[pitfall\] retry-unbounded: retry without a budget[\s\S]*RUN-REVIEW-MD-MARKER/);
   for (const absent of ["SEEN-PATH", "OTHER-FRONT-REPO"]) assert.ok(!sentPrompt.includes(absent), `the prompt carries ${absent}`);
   assert.equal(readFileSync(promptFile, "utf8"), "REVIEW-PROMPT\n", "the --prompt file is left as it was");
+  // REVIEW.md comes from the base, even when the change edits it and no --base is given.
+  sh("git", ["checkout", "-q", "-b", "feature"]);
+  write("REVIEW.md", "PR-OWN-INSTRUCTIONS\n");
+  commitAll("docs: the change rewrites REVIEW.md");
+  assert.equal(rr().status, 0);
+  assert.ok(calls().at(-1).stdin.includes("RUN-REVIEW-MD-MARKER") && !/<known_mistakes[\s\S]*PR-OWN-INSTRUCTIONS/.test(calls().at(-1).stdin));
   const fixed = rr([], { role: "fix" });
   assert.equal(fixed.status, 0, fixed.output);
   assert.ok(!calls().at(-1).stdin.includes("<known_mistakes"), "a fixer does not get the review block");
