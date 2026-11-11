@@ -2,3 +2,5 @@
 .o11y/
 node_modules/
 eval/private/
+__pycache__/
+*.pyc
