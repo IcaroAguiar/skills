@@ -48,6 +48,7 @@ Repository instructions define catalogue maintenance. The repository is the cano
 | `exploratory-qa` | Test what shipped the way people use it, with parallel persona agents |
 | `pr-demo-video` | Record a short captioned demo of a change running in the real app |
 | `task-closeout` | Close a task with a reviewable delivery and every workspace artifact accounted for |
+| `video-editor` | Turn photos, clips and a song into a beat-synced vertical video with 3D parallax, velocity and kinetic lyrics |
 
 ## Recommended from other catalogues
 
