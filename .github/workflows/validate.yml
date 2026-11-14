@@ -2,16 +2,26 @@ name: Validate catalogue
 
 on:
   pull_request:
+  # Push direto à main existe neste catálogo (AGENTS.md manda commitar e dar push do que foi validado),
+  # então a main segue validada.
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+# Um commit novo no mesmo PR torna a rodada anterior inútil: cancelá-la poupa minutos da cota.
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Orçamento de trabalho de 5 minutos: se estourar, a correção é tirar peso do job, nunca aumentar o orçamento.
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.ACTIONS_RUNNER_LABELS_CI || '["ubuntu-latest"]') }}
+    timeout-minutes: 10
     steps:
+      - run: echo "VALIDATE_STARTED=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -22,3 +32,9 @@ jobs:
       - run: node scripts/test-design-canvas-contracts.mjs
       - run: python3 skills/task-closeout/scripts/test_inspect_checkout.py
       - run: python3 skills/task-closeout/scripts/test_delivered_leftovers.py
+      - name: Work budget
+        if: github.event_name == 'pull_request'
+        run: |
+          elapsed=$(( $(date +%s) - VALIDATE_STARTED ))
+          echo "validate trabalhou ${elapsed}s (orçamento: 300s)"
+          [[ $elapsed -le 300 ]]
