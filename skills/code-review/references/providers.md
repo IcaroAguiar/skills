@@ -192,7 +192,7 @@ arm: calls, successes, limits, p50/p90 time, median turns, cost per review
 reviews it delivered),
 cache-read share of the prompt, decisions, the **acted-on rate** (`fixed` ÷
 decided), the `wrong` rate, and serious fixed findings per review. `--by size`
-splits each row by the change's reviewable lines (`<=400`, `401-800`, `>800`, `?`
+splits each row by the change's reviewable lines (`<=1000`, `1001-2000`, `>2000`, `?`
 for calls without a size), to check the marks in [pr-size.md](pr-size.md). The authors'
 edits are the signal Cloudflare used. Two caveats apply: an edit does not prove a
 finding right, and small groups (tens of findings) have wide error bars. Compare

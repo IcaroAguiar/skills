@@ -45,7 +45,7 @@ Repository instructions define catalogue maintenance. The repository is the cano
 | `codebase-guardrails` | Keep a codebase healthy when agents write most of the code and tests |
 | `codebase-health` | Run an evidence-based repository check-up that ends in a sequenced roadmap |
 | `design-direction` | Art-direct and review interfaces: disciplined structure plus a domain-specific expression per screen |
-| `exploratory-qa` | Test what shipped the way people use it, with parallel persona agents |
+| `qa-crew` | Use a change as a person before it ships: persona agents find defects and form friction, fixes land in the same PR with a before/after video |
 | `pr-demo-video` | Record a short captioned demo of a change running in the real app |
 | `task-closeout` | Close a task with a reviewable delivery and every workspace artifact accounted for |
 | `video-editor` | Turn photos, clips and a song into a beat-synced vertical video with 3D parallax, velocity and kinetic lyrics |

@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from qa_scope import MARKER, classify, fingerprint, on_screen, record_exercised, stamp  # noqa: E402
+
+
+def patch(*files):
+    out = []
+    for path, lines in files:
+        out.append(f"diff --git a/{path} b/{path}")
+        out.append(f"--- a/{path}")
+        out.append(f"+++ b/{path}")
+        out.extend(f"+{line}" for line in lines)
+    return "\n".join(out)
+
+
+class Scope(unittest.TestCase):
+    def test_backend_only_skips(self):
+        scope = classify(patch(("apps/api/src/billing/invoice.service.ts", ["const total = sum(items)"])))
+        self.assertEqual(scope["decision"], "skip")
+
+    def test_tests_and_docs_skip(self):
+        scope = classify(patch(
+            ("apps/web/src/Form.test.tsx", ["<input />"]),
+            ("apps/web/e2e/login.spec.ts", ["await page.goto('/')"]),
+            ("README.md", ["text"]),
+            (".design-sync/previews/Button.tsx", ["<button />"]),
+        ))
+        self.assertEqual(scope["decision"], "skip")
+        self.assertEqual(scope["reasons"], ["only tests, stories or docs"])
+
+    def test_small_visual_change_is_light(self):
+        scope = classify(patch(("apps/web/src/Header.tsx", ["<h1 className=\"text-lg\">Painel</h1>"])))
+        self.assertEqual((scope["decision"], scope["size"], scope["lenses"]), ("run", "light", ["hurry"]))
+
+    def test_form_adds_inputs_lens(self):
+        scope = classify(patch(("apps/web/src/Signup.tsx", ["<Input name=\"cpf\" />", "const form = useForm()"])))
+        self.assertEqual(scope["lenses"], ["hurry", "inputs"])
+        self.assertEqual(scope["size"], "full")
+
+    def test_backend_access_rule_runs_wrong_person(self):
+        scope = classify(patch(("apps/api/src/projects/projects.guard.ts", ["return user.orgId === project.orgId"])))
+        self.assertEqual(scope["decision"], "run")
+        self.assertEqual(scope["lenses"], ["hurry", "wrong-person"])
+
+    def test_aria_role_and_author_are_not_access(self):
+        scope = classify(patch(("apps/web/src/AuthorCard.tsx", ['<div role="button">{author.name}</div>'])))
+        self.assertEqual(scope["lenses"], ["hurry"])
+
+    def test_permission_check_in_interface(self):
+        scope = classify(patch(("apps/web/src/Toolbar.tsx", ["{user.role === 'admin' && <Delete />}"])))
+        self.assertIn("wrong-person", scope["lenses"])
+
+    def test_visible_text_counts_as_interface(self):
+        scope = classify(patch(("apps/web/messages/pt-BR.json", ['"save": "Salvar"'])))
+        self.assertEqual(scope["decision"], "run")
+
+    def test_large_visual_change_is_full(self):
+        scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 60)))
+        self.assertEqual(scope["size"], "full")
+
+    def test_marker(self):
+        match = MARKER.search("text\n<!-- qa-crew: head=abc1234 findings=3 fixed=2 proposals=1 -->")
+        self.assertEqual(match.group(1), "abc1234")
+
+
+class Stamp(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name) / "repo"
+        self.run = Path(self.tmp.name) / "run"
+        (self.repo / "web").mkdir(parents=True)
+        self.git("init", "-q", "-b", "main")
+        (self.repo / "api.ts").write_text("one")
+        self.commit("base")
+        self.git("checkout", "-q", "-b", "feature")
+        (self.repo / "web" / "Form.tsx").write_text("<input />")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+                       cwd=self.repo, check=True, capture_output=True)
+
+    def commit(self, message):
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+
+    def test_stamp_follows_what_the_crew_used(self):
+        record = record_exercised(str(self.repo), "main", self.run, ["hurry"])
+        self.assertEqual(list(record["files"]), ["web/Form.tsx"])
+        self.commit("screen")
+        code, result = stamp(str(self.repo), "main", self.run, {"findings": 1, "fixed": 1, "proposals": 0})
+        self.assertEqual(code, 0)
+        fields = MARKER.search(result["marker"]).group(2)
+        self.assertIn(f"screens={record['screens']} lenses=hurry findings=1", fields)
+
+    def test_review_fix_on_a_screen_refuses_the_stamp(self):
+        record_exercised(str(self.repo), "main", self.run, ["hurry"])
+        self.commit("screen")
+        (self.repo / "web" / "Form.tsx").write_text("<input aria-label='x' />")
+        (self.repo / "api.ts").write_text("two")
+        self.commit("review fix")
+        code, result = stamp(str(self.repo), "main", self.run, {})
+        self.assertEqual((code, result["changed_since"]), (3, ["web/Form.tsx"]))
+        record = record_exercised(str(self.repo), "main", self.run, ["inputs"])
+        self.assertEqual(record["lenses"], ["hurry", "inputs"])
+        self.assertEqual(stamp(str(self.repo), "main", self.run, {})[0], 0)
+
+    def test_stamp_without_a_recorded_run_is_refused(self):
+        self.commit("screen")
+        self.assertEqual(stamp(str(self.repo), "main", self.run, {})[0], 3)
+
+    def test_screen_set_is_decided_by_path(self):
+        self.assertTrue(on_screen("apps/web/src/Form.tsx"))
+        self.assertTrue(on_screen("apps/api/src/auth/guard.ts"))
+        self.assertFalse(on_screen("apps/api/src/billing/invoice.service.ts"))
+        self.assertFalse(on_screen("apps/web/src/Form.test.tsx"))
+        self.assertNotEqual(fingerprint({"a.tsx": "1"}), fingerprint({"a.tsx": "2"}))
+
+
+if __name__ == "__main__":
+    unittest.main()

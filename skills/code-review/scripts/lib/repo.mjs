@@ -36,8 +36,11 @@ export function git(root, args, { allowFailure = false, okStatus = [0] } = {}) {
 // Lines a person reads: lockfiles, generated or vendored files and snapshots do not count.
 export const reviewable = (file) => !isGenerated(file) && !LOCKFILES.has(basename(file)) && !/\.snap$/.test(file);
 
+// Flutter codegen output: gen-l10n tables, build_runner, freezed and mockito files.
+const FLUTTER_GENERATED = /(^|\/)app_localizations(_[a-z]{2}(_[A-Za-z0-9]+)?)?\.dart$|\.(g|freezed|mocks|gr|config)\.dart$/;
+
 export function isGenerated(file) {
-  return file.split("/").some((segment) => GENERATED_DIRS.has(segment)) || /\.min\.[a-z]+$|\.map$/.test(file);
+  return file.split("/").some((segment) => GENERATED_DIRS.has(segment)) || /\.min\.[a-z]+$|\.map$/.test(file) || FLUTTER_GENERATED.test(file);
 }
 
 // `output` interleaves stdout and stderr, keeping the last 4 MB; `stdout` is kept apart

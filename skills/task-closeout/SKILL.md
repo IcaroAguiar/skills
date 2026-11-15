@@ -37,7 +37,7 @@ Siga somente as etapas que pertencem ao pedido e à autorização existente:
 
 | Ponto de parada | Confirmação necessária |
 | --- | --- |
-| Código pronto | Commit focado da tarefa e verificações relevantes; se o pedido exigir manter um diff sem commit, deixe esse estado explícito. Se houve code review, `node <code-review-skill-dir>/scripts/review-ledger.mjs untriaged --repo <repo>` não lista nenhuma chamada. |
+| Código pronto | Commit focado da tarefa e verificações relevantes; se a tarefa tocou `.github/workflows`, `python3 ~/.agents/skills/codebase-guardrails/scripts/ci_rule_check.py <repo>` passa; se o pedido exigir manter um diff sem commit, deixe esse estado explícito. Se houve code review, `node <code-review-skill-dir>/scripts/review-ledger.mjs untriaged --repo <repo>` não lista nenhuma chamada. |
 | PR solicitada | Commit publicado, base/head corretos e PR aberta verificada. |
 | Merge solicitado | Revisão e checks aplicáveis, head conferido e merge confirmado remotamente. |
 | Deploy previsto | Gatilho conhecido, resultado do pipeline, versão no ambiente e fronteira afetada verificados. |
@@ -51,6 +51,7 @@ Depois da entrega, dê destino aos recursos da tarefa. Para worktrees e branches
 - **Principal:** sincronize com a base adequada sem sobrescrever pendências. Prefira fast-forward; reconcilie divergências. Termine limpo quando esse for o destino combinado. Nunca force limpeza enquanto outro escritor usar o checkout.
 - **Artefatos e fixtures:** guarde apenas evidência útil e entregáveis no destino esperado. Remova temporários que a tarefa comprovadamente criou e que não estejam em uso. Para dados ou recursos compartilhados, siga o escopo autorizado, não o nome ou a idade.
 - **Runtime:** encerre processos temporários próprios; mantenha o ambiente principal reutilizável conforme as regras do repo e seu gerenciador. Não deixe dependências apontando para diretórios temporários que serão removidos.
+- **Simulador e emulador:** se a tarefa abriu um dispositivo (`device_open`), feche-o com `device_close`; use `xcrun simctl shutdown <id>` ou `adb emu kill` só se o dispositivo continuar ligado depois disso, salvo se outra tarefa ativa usa o mesmo dispositivo. Um iOS Simulator ligado ocupa cerca de 1,5 GB. O LaunchAgent `com.icaroaguiar.sim-idle-guard` desliga simuladores ociosos por 15 min, mas só como rede de segurança.
 - **Docker:** se a tarefa usou Docker, pare e remova os containers que ela mesma criou. Para o resto, levante candidatos e pergunte antes de agir: containers de outros trabalhos sem conexão ativa (`lsof -iTCP -sTCP:ESTABLISHED` nas portas publicadas) e seu início automático, cache de build, imagens sem container e volumes anônimos sem referência. Mostre o espaço recuperável com `docker system df`. `docker builder prune -a`, `docker image prune -a` e `docker update --restart=no` só rodam com a aprovação do usuário. Volumes nomeados guardam dados de projeto: liste-os e só apague com autorização explícita.
 
 Se houver pendências anteriores, leia o protocolo abaixo. Se não houver, não crie backup, stash, inventário persistente ou nova pasta apenas para comprovar limpeza.

@@ -161,6 +161,17 @@ the scope expands materially, reviewers disagree, or the correction crosses
 auth, tenancy, credentials, migrations, transactions, concurrency, or public
 contracts.
 
+A delta is owed after a blocking finding, and after any correction that crosses
+one of those areas. After a verdict of `APPROVE` or `APPROVE_WITH_RESIDUAL_RISK`,
+a correction of the remaining medium or low findings owes none when it stays
+inside the files the findings named and under 50 changed lines. The author
+applies it and reruns the affected checks and T0. The orchestrator, or the author
+when there is none, reads `git diff <old-head>..<new-head>` and records
+`no delta: <reason>` in the triage. Measured on 2026-11-12 across five
+orchestration windows, 22 of 69 delta rounds found nothing, against 2 of 87
+full reviews. A bug traced to a skipped delta becomes a `review-eval` case, and
+that kind of correction gets its delta back.
+
 Continue in the same reviewer session while blockers converge; another in-scope
 correction does not need permission. Rounds that keep finding blockers are a
 signal, not progress: Anthropic found that most code flagged again had been

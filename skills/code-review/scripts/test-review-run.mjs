@@ -552,9 +552,9 @@ try {
   const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-sol");
   assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-6.1-sol", "high", 300_000, 4, 0.5, 0.75]);
   // --by size splits each row by the change's reviewable lines; calls without a size land in "?".
-  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "900", "--lines", "1200", "--files", "40").status, 0);
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "900", "--lines", "2400", "--files", "40").status, 0);
   const bySize = JSON.parse(ledgerCli("stats", "--by", "size", "--json").stdout).rows.filter((entry) => entry.provider === "t3-sol");
-  assert.deepEqual(bySize.map((entry) => [entry.size, entry.calls, entry.p50]), [[">800", 1, 900_000], ["?", 1, 300_000]]);
+  assert.deepEqual(bySize.map((entry) => [entry.size, entry.calls, entry.p50]), [[">2000", 1, 900_000], ["?", 1, 300_000]]);
   assert.match(ledgerCli("stats", "--by", "size").stdout, /effort\s+size\s+calls/);
   assert.equal(ledgerCli("stats", "--by", "repo").status, 2, "--by takes only size");
   assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "x", "--status", "ok", "--lines", "-1").status, 2);
