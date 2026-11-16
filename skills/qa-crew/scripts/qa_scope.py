@@ -100,7 +100,7 @@ def classify(patch: str) -> dict:
         "size": "light" if light else "full",
         "reasons": reasons,
         "lenses": lenses,
-        "workers": len(lenses),
+        "workers": len([lens for lens in lenses if lens != "inputs"]),  # inputs is the form probe, a script
         "files": {"interface": sorted(ui), "forms": forms, "access": access},
     }
 

@@ -45,7 +45,27 @@ except (OSError, subprocess.CalledProcessError):
 PYMODULE
 )" || return 1
   (export NODE_PATH="$module_path${NODE_PATH:+:$NODE_PATH}"
-   cd "$PW_CWD" && "${args[@]}" test -c "$run/playwright.config.ts")
+   cd "$PW_CWD" && browser_lane "${args[@]}" test -c "$run/playwright.config.ts")
+}
+# Recordings take their own lane; HEAVY_SLOT lets them through a queue that wraps the package manager.
+browser_lane() {
+  command -v lockf >/dev/null 2>&1 || { HEAVY_SLOT=browser "$@"; return; }
+  local state="${XDG_STATE_HOME:-$HOME/.local/state}/demo-browser" slots="${DEMO_BROWSER_SLOTS:-2}"
+  local marker started waited level i rc
+  mkdir -p "$state"; marker="$state/.acq.$$"; started=$(date +%s)
+  while :; do
+    waited=$(( $(date +%s) - started ))
+    level=$(sysctl -n kern.memorystatus_level 2>/dev/null || echo 100)
+    if [ "$level" -lt 25 ] && [ "$waited" -lt 300 ]; then sleep 5; continue; fi
+    for ((i = 0; i < slots; i++)); do
+      rm -f "$marker"
+      # A busy slot exits 75 without running; the marker tells that from the command exiting 75.
+      lockf -s -k -t 0 "$state/slot.$i" /bin/sh -c ': > "$0"; HEAVY_SLOT=browser "$@"' "$marker" "$@" && rc=0 || rc=$?
+      if [ -f "$marker" ]; then rm -f "$marker"; return "$rc"; fi
+    done
+    if [ "$waited" -ge 600 ]; then HEAVY_SLOT=browser "$@"; return; fi
+    sleep 2
+  done
 }
 execute() {
   local report="$1" status=0
@@ -69,7 +89,7 @@ case "$cmd" in
     done
     [ -n "$cwd" ] && [ -n "$playwright" ] || { echo "--cwd and --playwright are required" >&2; exit 2; }
     mkdir -p "$run/scenes"
-    cp "$here/harness/"{harness.ts,overlay.ts,playwright.config.ts,login.spec.ts,record.spec.ts,diagnostics.cjs} "$run/"
+    cp "$here/harness/"{harness.ts,overlay.ts,probe.ts,playwright.config.ts,login.spec.ts,record.spec.ts,diagnostics.cjs} "$run/"
     [ -f "$run/project.ts" ] || cp "$here/harness/project.template.ts" "$run/project.ts"
     [ -f "$run/scenes/index.ts" ] || cp "$here/harness/scenes/index.ts" "$run/scenes/index.ts"
     cp "$here/harness/scenes/_template.ts" "$run/scenes/_template.ts"

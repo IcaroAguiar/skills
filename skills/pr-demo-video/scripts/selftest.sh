@@ -231,6 +231,58 @@ check before
 index 'first, second'
 invoke record-good ok record "$run"
 check good
+# The form probe: counts fields and reports what each one kept, then leaves the form as it was.
+cat > "$run/scenes/probe.ts" <<'TS'
+import type { Scene } from '../harness';
+const html = `<form>
+  <label for="c">CPF</label><input id="c" type="text">
+  <label for="q">Quantidade</label><input id="q" type="text" inputmode="numeric" maxlength="4">
+  <label for="n">Nome completo</label><input id="n" type="text" required value="Ana">
+  <input id="x" type="text" placeholder="Buscar">
+  <label for="d">Cidade</label><input id="d" type="text" maxlength="60">
+  <label for="h">CNPJ</label><input id="h" type="text" aria-describedby="hh"><span id="hh">Informe o documento da empresa</span>
+  <label for="v">Valor</label><input id="v" type="text" inputmode="decimal">
+  <select aria-label="Prioridade"><option>1</option></select>
+  <div id="rich" contenteditable="true" aria-label="Observações"><b>Ana</b><br>Silva</div>
+  <input id="u" type="text" aria-label="Apelido %22curto%22" maxlength="20">
+</form>`;
+export const scene: Scene = {
+  id: 'probe', title: 'Form probe',
+  async play({ page, probe, note }) {
+    await page.setContent(html);
+    await page.evaluate(() => document.getElementById('q')!.addEventListener('input', (event) => {
+      const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
+    }));
+    await page.evaluate(() => document.getElementById('v')!.addEventListener('input', (event) => {
+      const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
+    }));
+    await probe();
+    const rich = await page.locator('#rich').innerHTML();
+    note(`restored=${(await page.locator('#n').inputValue()) === 'Ana' && rich === '<b>Ana</b><br>Silva'}`);
+  },
+};
+TS
+invoke probe-scene ok scene "$run" probe --fast
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+run = pathlib.Path(sys.argv[1])
+result = json.loads((run / 'probe' / 'probe-1.json').read_text())
+ruler, found = result['ruler'], {(f['field'], f['kind']) for f in result['findings']}
+assert (ruler['fieldsShown'], ruler['required'], ruler['withoutLabel']) == (10, 1, 1), ruler
+assert ruler['wrongKeyboard'] == 2 and ruler['fixedFormatWithoutMaskOrExample'] == 3, ruler
+shapes = {f['label']: f['shape'] for f in result['fields']}
+assert any('curto' in label for label in shapes), 'an encoded quote in a label must survive as valid JSON'
+assert shapes['Cidade'] is None and shapes['Prioridade'] == 'number', shapes
+assert ('CNPJ', 'aceita letras') in found, 'help text must not hide a finding'
+assert ('Valor', 'muda o valor em silêncio') in found, 'a decimal or a sign lost is a silent change'
+assert not any(field in ('Cidade', 'Observações', 'Prioridade') for field, _ in found), found
+assert ('CPF', 'aceita letras') in found, found
+assert ('Quantidade', 'muda o valor em silêncio') in found, found
+assert not any(field == 'Quantidade' and kind == 'apaga sem avisar' for field, kind in found), found
+assert 'restored=true' in (run / 'report-probe.json').read_text()
+print('PASS probe: ruler counted, letters and silent change reported, form restored')
+PY
+
 # A newer invalid webm makes choosing the newest video fail deterministically.
 printf 'not a video\n' > "$run/video/newest-decoy.webm"
 invoke post-report-video ok post "$run"
@@ -268,4 +320,5 @@ for p in files:
 print('PASS privacy: reports + stdout/stderr contain no fixture email or token')
 PY
 echo 'PASS masks: inserted Text, changed title/aria-label/placeholder, email inputs (boolean notes)'
+
 echo 'SELFTEST PASS: exit 0; temporary run removed on exit'
