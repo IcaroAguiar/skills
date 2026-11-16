@@ -166,7 +166,7 @@ contracts.
 A delta is owed after a blocking finding, and after any correction that crosses
 one of those areas. After a verdict of `APPROVE` or `APPROVE_WITH_RESIDUAL_RISK`,
 a correction of the remaining medium or low findings owes none when it stays
-inside the files the findings named and under 50 changed lines. The author
+inside the files the findings named and under 50 changed lines, unless the round also carried `qa-crew` fixes. The author
 applies it and reruns the affected checks and T0. The orchestrator, or the author
 when there is none, reads `git diff <old-head>..<new-head>` and records
 `no delta: <reason>` in the triage. Measured on 2026-11-12 across five

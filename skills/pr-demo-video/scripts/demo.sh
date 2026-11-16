@@ -60,7 +60,7 @@ browser_lane() {
     for ((i = 0; i < slots; i++)); do
       rm -f "$marker"
       # A busy slot exits 75 without running; the marker tells that from the command exiting 75.
-      lockf -s -k -t 0 "$state/slot.$i" /bin/sh -c ': > "$0"; HEAVY_SLOT=browser "$@"' "$marker" "$@"; rc=$?
+      lockf -s -k -t 0 "$state/slot.$i" /bin/sh -c ': > "$0"; HEAVY_SLOT=browser "$@"' "$marker" "$@" && rc=0 || rc=$?
       if [ -f "$marker" ]; then rm -f "$marker"; return "$rc"; fi
     done
     if [ "$waited" -ge 600 ]; then HEAVY_SLOT=browser "$@"; return; fi

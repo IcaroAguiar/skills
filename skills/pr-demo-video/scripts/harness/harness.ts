@@ -134,6 +134,7 @@ export async function runScenes(options: RunOptions) {
       current = report.scenes[index];
       current.startMs = Date.now() - t0;
       current.status = 'ok';
+      let probes = 0;
       const ctx: SceneCtx = {
         caption: async (text, holdMs = 2600) => {
           await setCaption(page, text);
@@ -145,8 +146,8 @@ export async function runScenes(options: RunOptions) {
           const result = await probeForms(page);
           const folder = path.join(runDir, 'probe');
           fs.mkdirSync(folder, { recursive: true });
-          const taken = fs.readdirSync(folder).filter((name) => name.startsWith(`${scene.id}-`)).length;
-          fs.writeFileSync(path.join(folder, `${scene.id}-${taken + 1}.json`), clean(JSON.stringify(result, null, 2)));
+          probes += 1;
+          fs.writeFileSync(path.join(folder, `${scene.id}-${probes}.json`), clean(JSON.stringify(result, null, 2)));
           current?.notes.push(`probe: ${result.ruler.fieldsShown} field(s), ${result.findings.length} candidate(s)`);
           return result;
         },
