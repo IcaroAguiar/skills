@@ -147,12 +147,15 @@ def local_blobs(repo: str, base: str) -> dict[str, str]:
     """Blob of every changed screen file as it is on disk, committed or not."""
     fork = sh(["git", "merge-base", base, "HEAD"], repo).strip()
     # -z keeps accented names unquoted; --no-renames lists a moved file as gone plus new, like pr_blobs does.
-    names = sh(["git", "diff", "--name-only", "--no-renames", "-z", fork], repo).split("\0")
-    names += sh(["git", "ls-files", "--others", "--exclude-standard", "-z"], repo).split("\0")
+    # Deletions come from git's status: on a case-insensitive disk Kit.tsx still "exists" after a move to kit.tsx.
+    fields = sh(["git", "diff", "--name-status", "--no-renames", "-z", fork], repo).split("\0")
+    changed = dict(zip(fields[1::2], fields[0::2]))
+    for name in sh(["git", "ls-files", "--others", "--exclude-standard", "-z"], repo).split("\0"):
+        changed.setdefault(name, "A")
     blobs = {}
-    for name in sorted(name for name in set(names) if name and on_screen(name)):
-        exists = (Path(repo) / name).is_file()
-        blobs[name] = sh(["git", "hash-object", "--", name], repo).strip() if exists else "gone"
+    for name in sorted(name for name in changed if name and on_screen(name)):
+        gone = changed[name] == "D"
+        blobs[name] = "gone" if gone else sh(["git", "hash-object", "--", name], repo).strip()
     return blobs
 
 

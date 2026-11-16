@@ -139,6 +139,26 @@ class Stamp(unittest.TestCase):
         ]
         self.assertEqual(blobs_from_rows(rows), local)
 
+    def test_case_only_rename_counts_the_old_spelling_as_gone(self):
+        (self.repo / "web" / "Kit.tsx").write_text("<i />")
+        self.commit("screens")
+        self.git("mv", "web/Kit.tsx", "web/kit.tsx")
+        staged = local_blobs(str(self.repo), "main")
+        self.commit("case rename")
+        self.assertEqual(staged, local_blobs(str(self.repo), "main"))
+        self.assertNotIn("web/Kit.tsx", staged)
+        self.git("checkout", "-q", "main")
+        (self.repo / "web").mkdir(exist_ok=True)
+        (self.repo / "web" / "Nav.tsx").write_text("<nav />")
+        self.commit("base screen")
+        self.git("checkout", "-q", "feature")
+        self.git("rebase", "-q", "main")
+        self.git("mv", "web/Nav.tsx", "web/nav.tsx")
+        staged = local_blobs(str(self.repo), "main")
+        self.commit("case rename of a base file")
+        self.assertEqual(staged, local_blobs(str(self.repo), "main"))
+        self.assertEqual((staged["web/Nav.tsx"], staged["web/nav.tsx"]), ("gone", self.blob("web/nav.tsx")))
+
     def test_marker_with_every_lens_is_present(self):
         blobs = {"web/Form.tsx": "abc"}
         body = f"text\n<!-- qa-crew: head=1234567 screens={fingerprint(blobs)} lenses=hurry+wrong-person findings=0 fixed=0 proposals=0 -->"
