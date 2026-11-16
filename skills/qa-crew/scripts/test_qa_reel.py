@@ -36,6 +36,12 @@ class Reel(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_before_only_run_plays_every_scene_as_a_proposal(self):
+        before = run_dir(self.root, "before", "1280x800", [("01-fluxo", 0, 2000), ("02-menu", 2000, 4000)])
+        manifest = build(self.root / "out", [(before, None)], 90)
+        self.assertEqual([(clip["side"], clip["fixed"]) for clip in manifest["clips"]], [("antes", False)] * 2)
+        self.assertEqual((manifest["findings"], manifest["fixed"]), (2, 0))
+
     def test_pairs_before_and_after_and_keeps_proposals(self):
         before = run_dir(self.root, "before", "1280x800", [("01-cpf", 0, 2000), ("02-fluxo", 2000, 4000)])
         after = run_dir(self.root, "after", "1280x800", [("01-cpf", 1000, 3000)])

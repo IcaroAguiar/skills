@@ -36,4 +36,4 @@ One worker per journey, in parallel, on the cheapest capable model. Fill `worker
 
 ## 6. Report, briefly
 
-Per journey: what was attacked, what broke (confirmed), and what stayed **unverified and why**. Then the correction list, most harmful first, and the proposed correction task. When the user wants to see the findings, record them as scenes and cut them with `scripts/qa_reel.py` (a before run only: every scene plays as a proposal). End with the issue links and the cleanup confirmation: sessions closed, test data removed, temporary files deleted.
+Per journey: what was attacked, what broke (confirmed), and what stayed **unverified and why**. Then the correction list, most harmful first, and the proposed correction task. When the user wants to see the findings, record them as scenes and cut them with `scripts/qa_reel.py --out <dir> --before <run>` (no after run: every scene plays as a proposal). End with the issue links and the cleanup confirmation: sessions closed, test data removed, temporary files deleted.

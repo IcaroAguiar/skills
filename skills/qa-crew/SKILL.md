@@ -42,7 +42,7 @@ Read the project's QA profile: the `QA` section of the repository's `AGENTS.md`,
 
 ## 3. Brief the crew
 
-Spawn the workers in parallel on the cheapest capable model (Claude Code: `Agent`, `general-purpose`, `model: haiku`; other harnesses: their parallel worker). At most 2 browsers at once on this machine.
+Spawn the workers in parallel on the cheapest capable model (Claude Code: `Agent`, `general-purpose`, `model: haiku`; other harnesses: their parallel worker). At most 2 browsers at once.
 
 Fill `references/worker-brief.md` for each. Every worker gets its lens, the screens the diff touches (`files.interface` from step 1, translated to routes), the promises the change makes, a 10-minute time box and an output folder.
 
@@ -80,7 +80,7 @@ The video is the proof, and the same scene replayed on the fixed code is the re-
 
 1. **Before.** Make a run directory `<run>/before`. Write one scene per finding routed to fix or proposal: 5 to 20 seconds, starting where the person starts. Captions say what the person was trying to do and what happened, in the user's language, at most 90 characters. Record on the code **as it is now**: `DEMO_BADGE=Antes demo.sh record <run>/before`. Findings found at the phone width go in a second pair of runs with a phone viewport.
 2. **Fix.** One round. Defects get the regression check at the cheapest level that catches the cause; friction fixes follow `impeccable`. Rebuild and restart the server.
-3. **After.** Copy the run (`cp -R <run>/before <run>/after`), delete the proposal scenes, and adjust each remaining scene only where the fix changed the screen. Change the captions to say what is different for the person. Record: `DEMO_BADGE=Depois demo.sh record <run>/after`. A scene that still shows the problem means the fix failed: fix again, once.
+3. **After.** Copy the run (`cp -R <run>/before <run>/after`), delete the proposal scenes, and adjust each remaining scene only where the fix changed the screen. Change the captions to say what is different for the person. Record: `DEMO_BADGE=Depois demo.sh record <run>/after`. A scene that still shows the problem means the fix failed: fix again, once. When every finding is a proposal there is no after run: cut the reel with `--before <run>/before` in place of `--pair`.
 4. **Reel.**
 
 ```bash

@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from qa_scope import MARKER, classify, fingerprint, on_screen, record_exercised, stamp  # noqa: E402
+from qa_scope import MARKER, blobs_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
+import qa_scope  # noqa: E402
 
 
 def patch(*files):
@@ -113,6 +114,46 @@ class Stamp(unittest.TestCase):
         record = record_exercised(str(self.repo), "main", self.run, ["inputs"])
         self.assertEqual(record["lenses"], ["hurry", "inputs"])
         self.assertEqual(stamp(str(self.repo), "main", self.run, {})[0], 0)
+
+    def blob(self, name):
+        return subprocess.run(["git", "rev-parse", f"HEAD:{name}"], cwd=self.repo, capture_output=True, text=True).stdout.strip()
+
+    def test_local_and_pr_sides_agree_on_renames_and_accents(self):
+        (self.repo / "web" / "Usuário.tsx").write_text("<p />")
+        self.commit("screens")
+        self.git("checkout", "-q", "main")
+        (self.repo / "web").mkdir(exist_ok=True)
+        (self.repo / "web" / "Old.tsx").write_text("<b />")
+        self.commit("old screen on base")
+        self.git("checkout", "-q", "feature")
+        self.git("rebase", "-q", "main")
+        self.git("mv", "web/Old.tsx", "web/New.tsx")
+        before_commit = local_blobs(str(self.repo), "main")
+        self.commit("rename")
+        local = local_blobs(str(self.repo), "main")
+        self.assertEqual(before_commit, local)
+        rows = [
+            {"filename": "web/Form.tsx", "status": "added", "sha": self.blob("web/Form.tsx")},
+            {"filename": "web/Usuário.tsx", "status": "added", "sha": self.blob("web/Usuário.tsx")},
+            {"filename": "web/New.tsx", "status": "renamed", "sha": self.blob("web/New.tsx"), "previous_filename": "web/Old.tsx"},
+        ]
+        self.assertEqual(blobs_from_rows(rows), local)
+
+    def test_marker_with_every_lens_is_present(self):
+        blobs = {"web/Form.tsx": "abc"}
+        body = f"text\n<!-- qa-crew: head=1234567 screens={fingerprint(blobs)} lenses=hurry+wrong-person findings=0 fixed=0 proposals=0 -->"
+        real = (qa_scope.sh, qa_scope.pr_blobs)
+        qa_scope.sh = lambda *a, **k: json.dumps({"body": body, "headRefOid": "f" * 40})
+        qa_scope.pr_blobs = lambda pr, repo: blobs
+        try:
+            scope = {"lenses": ["hurry", "wrong-person"], "files": {}}
+            self.assertEqual(evidence("1", None, scope)["state"], "present")
+            scope["lenses"].append("inputs")
+            self.assertEqual(evidence("1", None, scope), {"state": "partial", "head": "1234567", "lenses_owed": ["inputs"]})
+            qa_scope.pr_blobs = lambda pr, repo: {"web/Form.tsx": "changed"}
+            self.assertEqual(evidence("1", None, scope)["state"], "stale")
+        finally:
+            qa_scope.sh, qa_scope.pr_blobs = real
 
     def test_stamp_without_a_recorded_run_is_refused(self):
         self.commit("screen")

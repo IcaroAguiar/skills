@@ -146,10 +146,11 @@ def pr_patch(pr: str, repo: str | None) -> str:
 def local_blobs(repo: str, base: str) -> dict[str, str]:
     """Blob of every changed screen file as it is on disk, committed or not."""
     fork = sh(["git", "merge-base", base, "HEAD"], repo).strip()
-    names = sh(["git", "diff", "--name-only", fork], repo).splitlines()
-    names += sh(["git", "ls-files", "--others", "--exclude-standard"], repo).splitlines()
+    # -z keeps accented names unquoted; --no-renames lists a moved file as gone plus new, like pr_blobs does.
+    names = sh(["git", "diff", "--name-only", "--no-renames", "-z", fork], repo).split("\0")
+    names += sh(["git", "ls-files", "--others", "--exclude-standard", "-z"], repo).split("\0")
     blobs = {}
-    for name in sorted(set(filter(on_screen, names))):
+    for name in sorted(name for name in set(names) if name and on_screen(name)):
         exists = (Path(repo) / name).is_file()
         blobs[name] = sh(["git", "hash-object", "--", name], repo).strip() if exists else "gone"
     return blobs
@@ -157,10 +158,17 @@ def local_blobs(repo: str, base: str) -> dict[str, str]:
 
 def pr_blobs(pr: str, repo: str | None) -> dict[str, str]:
     rows = sh(["gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/pulls/{pr}/files",
-               "--jq", ".[] | {filename, sha, status} | @json"], repo)
-    items = [json.loads(row) for row in filter(None, rows.splitlines())]
-    return {item["filename"]: "gone" if item["status"] == "removed" else item["sha"]
-            for item in items if on_screen(item["filename"])}
+               "--jq", ".[] | {filename, sha, status, previous_filename} | @json"], repo)
+    return blobs_from_rows(json.loads(row) for row in filter(None, rows.splitlines()))
+
+
+def blobs_from_rows(rows) -> dict[str, str]:
+    blobs = {}
+    for row in rows:
+        blobs[row["filename"]] = "gone" if row["status"] == "removed" else row["sha"]
+        if row.get("previous_filename"):
+            blobs.setdefault(row["previous_filename"], "gone")
+    return {path: blob for path, blob in blobs.items() if on_screen(path)}
 
 
 def record_exercised(repo: str, base: str, run: Path, lenses: list[str]) -> dict:
@@ -198,7 +206,7 @@ def evidence(pr: str, repo: str | None, scope: dict) -> dict:
     if not match:
         return {"state": "missing"}
     marked, head = match.group(1), view["headRefOid"]
-    counts = dict(re.findall(r"(\w+)=([\w+]+)", match.group(2)))
+    counts = dict(re.findall(r"(\w+)=([\w+-]+)", match.group(2)))
     if "screens" in counts:
         # The marker carries what the crew used; a stamp on a newer head cannot stand in for a rerun.
         if counts["screens"] != fingerprint(pr_blobs(pr, repo)):

@@ -2,6 +2,7 @@
 """Cut one QA video per PR from recorded runs: each finding before, then after.
 
   qa_reel.py --out <dir> --pair <before-run> <after-run> [--pair ...] [--max-seconds 90]
+  qa_reel.py --out <dir> --before <run> [--before ...]      nothing was fixed: every scene is a proposal
 
 A run is a pr-demo-video run directory recorded with `demo.sh record` (the
 "before" one with DEMO_BADGE=Antes on the defective code, the "after" one with
@@ -61,14 +62,14 @@ def frame(source: Path, seconds: float, target: Path) -> None:
         raise RuntimeError(f"frame {target.name} was not produced")
 
 
-def build(out: Path, pairs: list[tuple[Path, Path]], max_seconds: float) -> dict:
+def build(out: Path, pairs: list[tuple[Path, Path | None]], max_seconds: float) -> dict:
     clips_dir, frames = out / "clips", out / "frames"
     for folder in (clips_dir, frames):
         folder.mkdir(parents=True, exist_ok=True)
     clips, at = [], 0.0
     for before_run, after_run in pairs:
         before_video, before = scenes(before_run)
-        after_video, after = scenes(after_run)
+        after_video, after = scenes(after_run) if after_run else (None, {})
         orphans = sorted(set(after) - set(before))
         if orphans:
             raise RuntimeError(f"{after_run.name}: scenes with no before clip: {', '.join(orphans)}")
@@ -111,11 +112,14 @@ def build(out: Path, pairs: list[tuple[Path, Path]], max_seconds: float) -> dict
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", required=True, type=Path)
-    parser.add_argument("--pair", nargs=2, action="append", required=True, type=Path, metavar=("BEFORE", "AFTER"))
+    parser.add_argument("--pair", nargs=2, action="append", default=[], type=Path, metavar=("BEFORE", "AFTER"))
+    parser.add_argument("--before", action="append", default=[], type=Path, metavar="RUN")
     parser.add_argument("--max-seconds", type=float, default=90)
     args = parser.parse_args()
+    if not (args.pair or args.before):
+        parser.error("pass --pair or --before")
     try:
-        manifest = build(args.out, [tuple(pair) for pair in args.pair], args.max_seconds)
+        manifest = build(args.out, [tuple(pair) for pair in args.pair] + [(run, None) for run in args.before], args.max_seconds)
     except (RuntimeError, OSError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as error:
         print(f"qa_reel failed: {error if isinstance(error, RuntimeError) else type(error).__name__}", file=sys.stderr)
         return 1
