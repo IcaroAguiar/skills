@@ -38,9 +38,6 @@ ACCESS = re.compile(
     r"\b(permissions?|rbac|acl|authoriz\w+|unauthori[sz]ed|forbidden|isAdmin|hasRole|hasPermission|requireAuth"
     r"|can[A-Z]\w+\(|user\.roles?|session\.|roles?\.(includes|some|has))"
 )
-ACCESS_PATH = re.compile(
-    r"auth(?!or)|(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|sessions?|grants?)([/._-]|$)", re.I
-)
 # A folder named auth or session says little; a guard, policy or permission file is the rule itself.
 RULE_PATH = re.compile(r"(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|grants?)([/._-]|$)", re.I)
 DATA_FILE = re.compile(r"\.(json|ya?ml|sql|snap|lock)$|(^|/)migrations?/", re.I)
@@ -126,7 +123,7 @@ def classify(patch: str) -> dict:
 
 def on_screen(path: str) -> bool:
     """Path-only test, so the local tree and the PR files API agree on the set."""
-    return not NOT_PRODUCT.search(path) and (is_ui(path) or bool(ACCESS_PATH.search(path)))
+    return not NOT_PRODUCT.search(path) and (is_ui(path) or bool(RULE_PATH.search(path)))
 
 
 def fingerprint(blobs: dict[str, str]) -> str:
@@ -212,13 +209,14 @@ def stamp(repo: str, base: str, run: Path, counts: dict[str, int]) -> tuple[int,
     if sh(["git", "status", "--porcelain", "--untracked-files=no"], repo).strip():
         return 3, {"state": "dirty", "why": "commit the work first: the marker names a commit"}
     blobs = local_blobs(repo, base)
-    changed = sorted(name for name in set(blobs) | set(record["files"]) if blobs.get(name) != record["files"].get(name))
+    used = {name: blob for name, blob in record["files"].items() if on_screen(name)}
+    changed = sorted(name for name in set(blobs) | set(used) if blobs.get(name) != used.get(name))
     if changed:
         return 3, {"state": "stale", "changed_since": changed,
                    "why": "these screens changed after the crew used them: run one worker on them, then --exercised again"}
     head = sh(["git", "rev-parse", "HEAD"], repo).strip()
     fields = " ".join(f"{key}={value}" for key, value in counts.items())
-    marker = f"<!-- qa-crew: head={head} screens={record['screens']} lenses={'+'.join(record['lenses'])} {fields} -->"
+    marker = f"<!-- qa-crew: head={head} screens={fingerprint(blobs)} lenses={'+'.join(record['lenses'])} {fields} -->"
     return 0, {"state": "ok", "marker": marker}
 
 

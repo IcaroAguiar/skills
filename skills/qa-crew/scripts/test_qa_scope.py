@@ -215,6 +215,7 @@ class Stamp(unittest.TestCase):
     def test_screen_set_is_decided_by_path(self):
         self.assertTrue(on_screen("apps/web/src/Form.tsx"))
         self.assertTrue(on_screen("apps/api/src/auth/guard.ts"))
+        self.assertFalse(on_screen("apps/api/src/auth/session.service.ts"))
         self.assertFalse(on_screen("apps/api/src/billing/invoice.service.ts"))
         self.assertFalse(on_screen("apps/web/src/Form.test.tsx"))
         self.assertNotEqual(fingerprint({"a.tsx": "1"}), fingerprint({"a.tsx": "2"}))
