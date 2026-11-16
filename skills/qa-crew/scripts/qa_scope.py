@@ -151,7 +151,7 @@ def local_blobs(repo: str, base: str) -> dict[str, str]:
     fields = sh(["git", "diff", "--name-status", "--no-renames", "-z", fork], repo).split("\0")
     changed = dict(zip(fields[1::2], fields[0::2]))
     for name in sh(["git", "ls-files", "--others", "--exclude-standard", "-z"], repo).split("\0"):
-        changed.setdefault(name, "A")
+        changed[name] = "A"  # on disk now, whatever the index says
     blobs = {}
     for name in sorted(name for name in changed if name and on_screen(name)):
         gone = changed[name] == "D"

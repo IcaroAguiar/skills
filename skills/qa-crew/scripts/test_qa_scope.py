@@ -159,6 +159,22 @@ class Stamp(unittest.TestCase):
         self.assertEqual(staged, local_blobs(str(self.repo), "main"))
         self.assertEqual((staged["web/Nav.tsx"], staged["web/nav.tsx"]), ("gone", self.blob("web/nav.tsx")))
 
+    def test_recreating_a_deleted_screen_refuses_the_stamp(self):
+        self.git("checkout", "-q", "main")
+        (self.repo / "web").mkdir(exist_ok=True)
+        (self.repo / "web" / "Nav.tsx").write_text("<nav />")
+        self.commit("base screen")
+        self.git("checkout", "-q", "feature")
+        self.git("rebase", "-q", "main")
+        self.git("rm", "-q", "web/Nav.tsx")
+        record = record_exercised(str(self.repo), "main", self.run, ["hurry"])
+        self.assertEqual(record["files"]["web/Nav.tsx"], "gone")
+        self.commit("remove screen")
+        self.assertEqual(stamp(str(self.repo), "main", self.run, {})[0], 0)
+        (self.repo / "web" / "Nav.tsx").write_text("<nav>back</nav>")
+        code, result = stamp(str(self.repo), "main", self.run, {})
+        self.assertEqual((code, result["changed_since"]), (3, ["web/Nav.tsx"]))
+
     def test_marker_with_every_lens_is_present(self):
         blobs = {"web/Form.tsx": "abc"}
         body = f"text\n<!-- qa-crew: head=1234567 screens={fingerprint(blobs)} lenses=hurry+wrong-person findings=0 fixed=0 proposals=0 -->"
