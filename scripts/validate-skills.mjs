@@ -35,6 +35,7 @@ const retiredSkillNames = new Set([
   ["antigravity", "executor"].join("-"),
   ["summar", "ize"].join(""),
   ["record", "real", "dev", "e2e"].join("-"),
+  ["exploratory", "qa"].join("-"),
 ]);
 const requiredSkillNames = new Set(["design-direction", "pr-demo-video"]);
 const publicTextExtensions = new Set([".json", ".md", ".mjs", ".py", ".toml", ".ts", ".yaml", ".yml"]);

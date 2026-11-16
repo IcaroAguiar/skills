@@ -465,10 +465,10 @@ const SENSITIVE_AREAS = Object.entries({
 }).map(([area, words]) => [area, new Set(words.split(" "))]);
 const MIGRATION_FILE = /(^|\/)migrations?\/|\.sql$|(^|\/)schema\.prisma$|\.migration\.[cm]?[jt]s$/i;
 const T1_MIN_CHANGED_LINES = 20;
-// The PR size rule (references/pr-size.md): a layer of about 400 reviewable lines,
-// and past 800 lines or 30 files the change is split into a stack or says why.
-const LARGE_DIFF = { lines: 800, files: 30 };
-const TARGET_LINES = 400;
+// The PR size rule (references/pr-size.md): a layer of about 1,000 reviewable lines,
+// and past 2,000 lines or 60 files the change is split into a stack or says why.
+const LARGE_DIFF = { lines: 2000, files: 60 };
+const TARGET_LINES = 1000;
 
 // Deterministic routing for the model tiers: the deep review's starting effort,
 // whether the fast pre-pass (T1) is worth running, and the diff's size.

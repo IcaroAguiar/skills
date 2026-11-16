@@ -196,11 +196,11 @@ function findings(options) {
 }
 
 // Reviewable lines of the change, in the PR size rule's bands (references/pr-size.md).
-const SIZE_BUCKETS = ["<=400", "401-800", ">800", "?"];
+const SIZE_BUCKETS = ["<=1000", "1001-2000", ">2000", "?"];
 function sizeBucket(size) {
   const lines = size?.lines;
   if (!Number.isFinite(lines)) return "?";
-  return lines <= 400 ? "<=400" : lines <= 800 ? "401-800" : ">800";
+  return lines <= 1000 ? "<=1000" : lines <= 2000 ? "1001-2000" : ">2000";
 }
 
 function stats(options) {

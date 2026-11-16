@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import { sanitize, diagnosticURL } from './diagnostics.cjs';
-import { outline, overlayInitScript, setCaption } from './overlay';
+import { badgeInitScript, outline, overlayInitScript, setCaption } from './overlay';
 
 /**
  * One scene = one improvement shown on screen. `play` is what the video
@@ -105,6 +105,8 @@ export async function runScenes(options: RunOptions) {
       ...(record ? { recordVideo: { dir: videoDir, size: project.viewport } } : {}),
     });
     await context.addInitScript(overlayInitScript, project.extraMasks ?? []);
+    // DEMO_BADGE labels a whole recording (qa-crew: "Antes" / "Depois").
+    if (process.env.DEMO_BADGE) await context.addInitScript(badgeInitScript, process.env.DEMO_BADGE);
     const page = await context.newPage();
     video = page.video();
     t0 = Date.now();

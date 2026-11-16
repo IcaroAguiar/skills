@@ -248,15 +248,15 @@ try {
   commit("base");
   write("src/__snapshots__/a.test.ts.snap", code(2000));
   write("dist/bundle.js", code(1000));
-  write("src/a.ts", code(500));
+  write("src/a.ts", code(1200));
   const target = routed();
-  assert.deepEqual([target.route.size, target.route.reviewLines, target.route.reviewFiles], ["medium", 500, 1], "snapshots and build output do not count");
+  assert.deepEqual([target.route.size, target.route.reviewLines, target.route.reviewFiles], ["medium", 1200, 1], "snapshots and build output do not count");
   assert.ok(target.route.changedLines > 3000, "changed lines still count everything");
-  assert.match(target.output, /SIZE 500 reviewable lines in 1 files: over the 400-line layer target/);
-  write("src/b.ts", code(400));
+  assert.match(target.output, /SIZE 1200 reviewable lines in 1 files: over the 1000-line layer target/);
+  write("src/b.ts", code(900));
   const large = routed();
   assert.equal(large.route.size, "large");
-  assert.match(large.output, /SIZE 900 reviewable lines in 2 files: over 800 lines or 30 files\. Split it into a stack/);
+  assert.match(large.output, /SIZE 2100 reviewable lines in 2 files: over 2000 lines or 60 files\. Split it into a stack/);
   // ---- comments: a diff that documents every declaration gets a COMMENTS line ----
   newRepo("comments");
   write("README.md", "# comments\n");
@@ -324,13 +324,13 @@ try {
   assert.equal(reviewT0(["--no-checks"]).report.comments.lines, 13, "a division after a value or a comment is no regex");
   newRepo("route-size-files");
   write("README.md", "# size\n");
-  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
+  for (let index = 0; index < 61; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index]));
   write("src/generated\tmodule.ts", code(1));
   commit("base");
-  for (let index = 0; index < 31; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index, 1]));
+  for (let index = 0; index < 61; index += 1) writeFileSync(join(repo, `asset${index}.bin`), Buffer.from([0, index, 1]));
   rmSync(join(repo, "src/generated\tmodule.ts"));
   const binaries = routed().route;
-  assert.deepEqual([binaries.size, binaries.reviewFiles, binaries.reviewLines], ["large", 32, 1], "binary edits count as files; a tab in a path keeps the whole path");
+  assert.deepEqual([binaries.size, binaries.reviewFiles, binaries.reviewLines], ["large", 62, 1], "binary edits count as files; a tab in a path keeps the whole path");
   commit("binary edits");
   for (let index = 0; index < 31; index += 1) sh("git", ["mv", `asset${index}.bin`, `moved${index}.bin`]);
   const movedBinaries = routed().route;

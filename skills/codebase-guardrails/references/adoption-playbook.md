@@ -31,13 +31,13 @@ Run one read-only diagnosis per repository and keep the report on persistent sto
 
 ## 2. Restore the safety net first
 
-- Make the quality workflow run on pull requests and make the production workflow `needs` it (`workflow_call`).
+- Make one short quality job run on pull requests, on a GitHub-hosted runner (self-hosted only as the quota fallback), and let main skip it when the tree equals the validated PR tree. `scripts/ci_rule_check.py` must pass.
 - Keep it within budget:
   - cancel superseded runs;
-  - parallelize only when it cuts wall time;
+  - one job per PR; split only behind a label;
   - cache dependencies;
   - estimate monthly minutes.
-- Run tests that need a database against a service container, and run all of them. A spec gated behind an env flag that no script sets is dead weight: enable it, or quarantine it explicitly.
+- Run tests that need a database against a service container, on a label or on the push that publishes, and run all of them there. A spec gated behind an env flag that no script sets is dead weight: enable it, or quarantine it explicitly.
 - Replace bespoke "agentic" gates (fingerprints, auto-improvement queues, bot comments) with deterministic checks.
 
 ## 3. Add checks behind a ratchet

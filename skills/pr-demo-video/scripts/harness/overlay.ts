@@ -70,6 +70,20 @@ export function overlayInitScript(extraMasks: string[]) {
   else document.addEventListener('DOMContentLoaded', start);
 }
 
+/** A fixed pill in the top-left corner naming the recording, kept across navigations. */
+export function badgeInitScript(label: string) {
+  const start = () => {
+    const badge = document.createElement('div');
+    badge.setAttribute('aria-hidden', 'true');
+    badge.textContent = label;
+    badge.style.cssText =
+      'position:fixed;left:16px;top:16px;background:rgba(16,24,29,.94);color:#fff;font:700 15px Inter,system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase;padding:6px 14px;border-radius:999px;z-index:2147483647;pointer-events:none';
+    document.body.appendChild(badge);
+  };
+  if (document.body) start();
+  else document.addEventListener('DOMContentLoaded', start);
+}
+
 export async function setCaption(page: Page, text: string) {
   await page
     .evaluate((value) => {
