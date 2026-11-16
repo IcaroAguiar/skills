@@ -6,6 +6,12 @@ export type Seen = { method: string; url: string; data: string | null; bearer: b
 export type Verdict = 'enforced' | 'same' | 'differs' | 'error';
 export type AccessRow = { method: string; url: string; unasked?: string; as: Record<string, { status: number; verdict: Verdict; error?: string }> };
 
+function within<T>(ms: number, work: Promise<T>): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
+
 const digest = (body: Buffer) => crypto.createHash('sha256').update(body).digest('hex');
 const LIMIT = 60;
 // A stream or a long poll never finishes; its body is then unknown, not awaited forever.
@@ -19,17 +25,11 @@ export function seen(response: Response): Seen | null {
     url: response.url(),
     data: request.postData(),
     bearer: 'authorization' in request.headers(),
-    body: Promise.race([
-      response.body().then(digest, () => null),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), BODY_WAIT_MS)),
-    ]),
+    body: within(BODY_WAIT_MS, response.body().then(digest, () => null)),
   };
 }
 
-/**
- * `sessions` maps a persona to its storageState file; undefined asks with no session at all. `control` is the
- * scene's own session: a call it cannot repeat proves nothing about anyone else, so that row is left unasked.
- */
+/** `control` is the scene's own session: a call it cannot repeat proves nothing about anyone else. */
 export async function replay(
   browser: Browser, calls: Seen[], control: string, sessions: Record<string, string | undefined>, writes = false,
 ): Promise<AccessRow[]> {
