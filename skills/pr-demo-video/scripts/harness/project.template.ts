@@ -13,6 +13,16 @@ export const profile: ProjectProfile = {
     // e.g. open the start route and switch to the light theme.
     await page.goto('/');
   },
+  // With a kit, a session that still opens the app is kept instead of logging in again.
+  async signedIn(page) {
+    await page.goto('/');
+    return !new URL(page.url()).pathname.startsWith('/login');
+  },
+};
+
+/** One entry per persona the scenes use: the main account, then for example `nopriv` (no permission). */
+const ACCOUNTS: Record<string, [string, string]> = {
+  main: ['<TEST_ACCOUNT_EMAIL_KEY>', '<TEST_ACCOUNT_PASSWORD_KEY>'],
 };
 
 /** Reads only the named keys from the credential file. Never print them. */
@@ -29,11 +39,10 @@ function credentials(file: string, keys: [string, string]) {
   return { secret, user };
 }
 
-export async function login(page: Page) {
-  const { user, secret } = credentials(process.env.DEMO_CREDENTIALS_FILE ?? '<path to the project test-account env file>', [
-    '<TEST_ACCOUNT_EMAIL_KEY>',
-    '<TEST_ACCOUNT_PASSWORD_KEY>',
-  ]);
+export async function login(page: Page, persona = 'main') {
+  const keys = ACCOUNTS[persona];
+  if (!keys) throw new Error(`No account for persona ${persona}.`);
+  const { user, secret } = credentials(process.env.DEMO_CREDENTIALS_FILE ?? '<path to the project test-account env file>', keys);
   await page.goto('/login');
   await page.getByLabel('Email').fill(user);
   await page.locator('input[type="password"]').first().fill(secret);
