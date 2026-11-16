@@ -231,6 +231,42 @@ check before
 index 'first, second'
 invoke record-good ok record "$run"
 check good
+# The form probe: counts fields and reports what each one kept, then leaves the form as it was.
+cat > "$run/scenes/probe.ts" <<'TS'
+import type { Scene } from '../harness';
+const html = `<form>
+  <label for="c">CPF</label><input id="c" type="text">
+  <label for="q">Quantidade</label><input id="q" type="text" inputmode="numeric" maxlength="4">
+  <label for="n">Nome completo</label><input id="n" type="text" required value="Ana">
+  <input id="x" type="text" placeholder="Buscar">
+</form>`;
+export const scene: Scene = {
+  id: 'probe', title: 'Form probe',
+  async play({ page, probe, note }) {
+    await page.setContent(html);
+    await page.evaluate(() => document.getElementById('q')!.addEventListener('input', (event) => {
+      const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
+    }));
+    await probe();
+    note(`restored=${(await page.locator('#n').inputValue()) === 'Ana'}`);
+  },
+};
+TS
+invoke probe-scene ok scene "$run" probe --fast
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+run = pathlib.Path(sys.argv[1])
+result = json.loads((run / 'probe' / 'probe-1.json').read_text())
+ruler, found = result['ruler'], {(f['field'], f['kind']) for f in result['findings']}
+assert (ruler['fieldsShown'], ruler['required'], ruler['withoutLabel']) == (4, 1, 1), ruler
+assert ruler['wrongKeyboard'] == 1 and ruler['fixedFormatWithoutMaskOrExample'] == 1, ruler
+assert ('CPF', 'aceita letras') in found, found
+assert ('Quantidade', 'muda o valor em silêncio') in found, found
+assert not any(field == 'Quantidade' and kind == 'apaga sem avisar' for field, kind in found), found
+assert 'restored=true' in (run / 'report-probe.json').read_text()
+print('PASS probe: ruler counted, letters and silent change reported, form restored')
+PY
+
 # A newer invalid webm makes choosing the newest video fail deterministically.
 printf 'not a video\n' > "$run/video/newest-decoy.webm"
 invoke post-report-video ok post "$run"
@@ -268,4 +304,5 @@ for p in files:
 print('PASS privacy: reports + stdout/stderr contain no fixture email or token')
 PY
 echo 'PASS masks: inserted Text, changed title/aria-label/placeholder, email inputs (boolean notes)'
+
 echo 'SELFTEST PASS: exit 0; temporary run removed on exit'

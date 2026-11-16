@@ -19,6 +19,8 @@ pushes, CI updates, comments, and local corrections do not start another review.
 
 An explicit review request may supply a fixed branch or PR before this gate.
 
+When the change also owes the `qa-crew` gate, both start on the same commit and run side by side. Their findings are corrected in one round, and that round gets one delta review, whatever the first verdict was, because the QA fixes are code no reviewer has read.
+
 ## Deterministic pre-review (T0)
 
 Before any model reviewer, the author runs T0 on the checkout under review:

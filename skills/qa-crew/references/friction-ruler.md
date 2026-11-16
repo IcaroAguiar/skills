@@ -1,6 +1,6 @@
 # Friction ruler
 
-Fill one block per form and per flow you cross. Count; do not rate. A count lets the orchestrator compare before and after and tells a fix from an opinion.
+In the gate, the form probe (`probe()` in a scene) counts the per-form block from the screen; workers fill only the per-flow block. In a sweep, fill one block per form and per flow you cross. Count; do not rate. A count lets the orchestrator compare before and after and tells a fix from an opinion.
 
 ## Per form
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from '@playwright/test';
 import { sanitize, diagnosticURL } from './diagnostics.cjs';
 import { badgeInitScript, outline, overlayInitScript, setCaption } from './overlay';
+import { probeForms, type ProbeResult } from './probe';
 
 /**
  * One scene = one improvement shown on screen. `play` is what the video
@@ -27,6 +28,8 @@ export type SceneCtx = {
   hold(ms: number): Promise<void>;
   /** Records a fact for the orchestrator (what the screen said, a count…). Never log personal data. */
   note(message: string): void;
+  /** qa-crew: counts and types into every field on screen now; writes probe/<scene>-<n>.json. */
+  probe(): Promise<ProbeResult>;
 };
 
 export type ProjectProfile = {
@@ -138,6 +141,15 @@ export async function runScenes(options: RunOptions) {
         },
         fast, hold, page,
         note: (text) => current?.notes.push(clean(text)),
+        probe: async () => {
+          const result = await probeForms(page);
+          const folder = path.join(runDir, 'probe');
+          fs.mkdirSync(folder, { recursive: true });
+          const taken = fs.readdirSync(folder).filter((name) => name.startsWith(`${scene.id}-`)).length;
+          fs.writeFileSync(path.join(folder, `${scene.id}-${taken + 1}.json`), clean(JSON.stringify(result, null, 2)));
+          current?.notes.push(`probe: ${result.ruler.fieldsShown} field(s), ${result.findings.length} candidate(s)`);
+          return result;
+        },
         show: async (target, holdMs = 2200) => {
           await target.first().scrollIntoViewIfNeeded().catch(() => undefined);
           await outline(target, Math.max(800, holdMs - 200));

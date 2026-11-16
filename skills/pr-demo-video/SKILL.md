@@ -9,7 +9,7 @@ Goal: a 1–3 minute video of the **real app** where each improvement of the cha
 
 Quality comes from your decisions, cost from the workers. You decide what to show and with which data, and you judge the result. Workers (the cheapest capable model, parallel when supported) write and debug one scene each. Keep scene authorship separate from orchestration: a lone worker took 2h17 and shipped a weak video with a false claim.
 
-Harness: `scripts/demo.sh` and `scripts/harness/` (Playwright, run with the project's own Playwright). `qa-crew` records its before/after clips with the same harness; `DEMO_BADGE=<label>` puts a fixed label on a recording. Everything lives in a run directory outside the repository, for example `/tmp/pr-demo/<slug>`.
+Harness: `scripts/demo.sh` and `scripts/harness/` (Playwright, run with the project's own Playwright). `qa-crew` records its before/after clips with the same harness; `DEMO_BADGE=<label>` puts a fixed label on a recording, and `probe()` in a scene checks every field on screen for `qa-crew`. Everything lives in a run directory outside the repository, for example `/tmp/pr-demo/<slug>`.
 
 ## 1. Inventory the promises (you)
 
