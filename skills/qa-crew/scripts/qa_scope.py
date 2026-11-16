@@ -259,12 +259,13 @@ def ledger(repo: str) -> Path:
     if branch == "HEAD":
         top = sh(["git", "rev-parse", "--show-toplevel"], repo).strip()
         branch = "detached-" + hashlib.sha256(top.encode()).hexdigest()[:10]
-    return common / "qa-crew" / (re.sub(r"[^\w.-]+", "-", branch) + ".json")
+    key = hashlib.sha256(branch.encode()).hexdigest()[:8]  # feature/foo and feature-foo are two branches
+    return common / "qa-crew" / f"{re.sub(r'[^\w.-]+', '-', branch)}-{key}.json"
 
 
-def budget(rounds: list[dict], now: float) -> dict:
+def budget(rounds: list[dict], now: float, opening: str = "quick") -> dict:
     minutes = sum(min(ROUND_CAP, ((entry.get("ended") or now) - entry["started"]) / 60) for entry in rounds)
-    limit = BUDGET_MINUTES["full" if any(entry["size"] == "full" for entry in rounds) else "quick"]
+    limit = BUDGET_MINUTES["full" if "full" in [opening, *(entry["size"] for entry in rounds)] else "quick"]
     return {"rounds": len(rounds), "minutes": round(minutes), "limit_rounds": MAX_ROUNDS, "limit_minutes": limit,
             "spent": len(rounds) >= MAX_ROUNDS or minutes >= limit}
 
@@ -278,7 +279,7 @@ def begin(repo: str, size: str, now: float, approved: bool = False) -> tuple[int
     rounds = read_rounds(repo)
     for entry in rounds:
         entry.setdefault("ended", now)
-    state = budget(rounds, now)
+    state = budget(rounds, now, size)
     if state["spent"] and not approved:
         return 4, {**state, "why": "budget spent: open findings become issues; a confirmed defect in the change "
                                    "goes to the user, and --approved opens the round they allow"}

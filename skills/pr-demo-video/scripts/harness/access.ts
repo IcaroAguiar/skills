@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 import type { Browser, Response } from '@playwright/test';
 
 // qa-crew access check: what the scene's account fetched, asked again as someone else. Rows are candidates to triage.
-export type Seen = { method: string; url: string; data: string | null; bearer: boolean; body: Promise<string | null> };
-export type Verdict = 'enforced' | 'same' | 'differs' | 'error';
+export type Seen = { method: string; url: string; data: string | null; headers: Record<string, string>; bearer: boolean; body: Promise<string | null> };
+export type Verdict = 'enforced' | 'same' | 'differs' | 'redirected' | 'error';
 export type AccessRow = { method: string; url: string; unasked?: string; as: Record<string, { status: number; verdict: Verdict; error?: string }> };
 
 function within<T>(ms: number, work: Promise<T>): Promise<T | null> {
@@ -14,6 +14,8 @@ function within<T>(ms: number, work: Promise<T>): Promise<T | null> {
 
 const digest = (body: Buffer) => crypto.createHash('sha256').update(body).digest('hex');
 const LIMIT = 60;
+// The session is what changes between askers; everything else the page sent goes again, or a scoped call is not the same call.
+const NOT_REPLAYED = /^(:|cookie$|authorization$|host$|content-length$|connection$|accept-encoding$|origin$|referer$|sec-)/i;
 // A stream or a long poll never finishes; its body is then unknown, not awaited forever.
 const BODY_WAIT_MS = 5000;
 
@@ -24,15 +26,20 @@ export function seen(response: Response): Seen | null {
     method: request.method(),
     url: response.url(),
     data: request.postData(),
+    headers: Object.fromEntries(Object.entries(request.headers()).filter(([name]) => !NOT_REPLAYED.test(name))),
     bearer: 'authorization' in request.headers(),
     body: within(BODY_WAIT_MS, response.body().then(digest, () => null)),
   };
 }
 
+const ask = (call: Seen) => ({
+  method: call.method, data: call.data ?? undefined, headers: call.headers, maxRedirects: 0, failOnStatusCode: false,
+});
+
 /** `control` is the scene's own session: a call it cannot repeat proves nothing about anyone else. */
 export async function replay(
   browser: Browser, calls: Seen[], control: string, sessions: Record<string, string | undefined>, writes = false,
-): Promise<AccessRow[]> {
+): Promise<{ rows: AccessRow[]; dropped: number }> {
   if (calls.some((call) => call.bearer)) {
     throw new Error('access(): this app sends an Authorization header, which a stored session cannot replace. Use the wrong-person worker.');
   }
@@ -46,11 +53,10 @@ export async function replay(
   const repeatable: boolean[] = [];
   try {
     for (const [index, call] of kept.entries()) {
-      const again = await own.request
-        .fetch(call.url, { method: call.method, data: call.data ?? undefined, maxRedirects: 0, failOnStatusCode: false })
-        .then((answer) => answer.status(), () => 0);
-      repeatable.push(again >= 200 && again < 300 && (await call.body) !== null);
-      if (!repeatable[index]) rows[index].unasked = `the scene's own stored session got ${again || 'no answer'} or the first answer could not be read`;
+      const original = await call.body;
+      const again = await own.request.fetch(call.url, ask(call)).then(async (answer) => answer.ok() && digest(await answer.body()), () => false);
+      repeatable.push(original !== null && again === original);
+      if (!repeatable[index]) rows[index].unasked = 'the scene\'s own stored session did not get the first answer again';
     }
   } finally {
     await own.close();
@@ -67,12 +73,13 @@ export async function replay(
         let status = 0;
         let verdict: Verdict = 'error';
         try {
-          const answer = await context.request.fetch(call.url, {
-            method: call.method, data: call.data ?? undefined, maxRedirects: 0, failOnStatusCode: false,
-          });
+          const answer = await context.request.fetch(call.url, ask(call));
           status = answer.status();
-          if ([401, 403, 404].includes(status) || (status >= 300 && status < 400)) verdict = 'enforced';
-          else if (status < 300) verdict = digest(await answer.body()) === original ? 'same' : 'differs';
+          // The body decides before the status does: a 403 that still carries the data is a leak.
+          if (digest(await answer.body()) === original) verdict = 'same';
+          else if ([401, 403, 404].includes(status)) verdict = 'enforced';
+          else if (status >= 300 && status < 400) verdict = 'redirected';
+          else if (status < 300) verdict = 'differs';
         } catch (error) {
           rows[index].as[persona] = { status, verdict, error: String(error).split('\n')[0].slice(0, 120) };
           continue;
@@ -83,5 +90,5 @@ export async function replay(
       await context.close();
     }
   }
-  return rows;
+  return { rows, dropped: unique.size - kept.length };
 }

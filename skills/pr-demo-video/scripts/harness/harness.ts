@@ -75,7 +75,6 @@ export type RunOptions = {
   record?: boolean;
 };
 
-/** A kit keeps sessions between runs (DEMO_AUTH_DIR); otherwise they live in the run. */
 export function sessionFile(runDir: string, persona?: string) {
   if (persona && !/^[a-z0-9-]+$/.test(persona)) throw new Error('Persona names use a-z, 0-9 and "-".');
   return path.join(process.env.DEMO_AUTH_DIR || runDir, persona ? `.auth-${persona}.json` : '.auth.json');
@@ -136,9 +135,11 @@ export async function runScenes(options: RunOptions) {
     });
     page.on('pageerror', (error) => diagnostics()?.consoleErrors.push(clean(`pageerror: ${error.message}`).slice(0, 300)));
     let calls: Seen[] = [];
+    let overflow = 0;
     page.on('response', (response) => {
       const call = seen(response);
       if (call && calls.length < 300) calls.push(call);
+      else if (call) overflow += 1;
       if (response.status() >= 400) {
         diagnostics()?.failedRequests.push(clean(`${response.status()} ${response.request().method()} ${diagnosticURL(response.url())}`));
       }
@@ -158,6 +159,7 @@ export async function runScenes(options: RunOptions) {
       let stills = 0;
       let checks = 0;
       calls = [];
+      overflow = 0;
       const ctx: SceneCtx = {
         caption: async (text, holdMs = 2600) => {
           await setCaption(page, text);
@@ -182,18 +184,19 @@ export async function runScenes(options: RunOptions) {
         access: async (personas, accessOptions = {}) => {
           const sessions: Record<string, string | undefined> = { nobody: undefined };
           for (const persona of personas) sessions[persona] = authState(runDir, persona);
-          const rows = await replay(browser, calls, authState(runDir, persona), sessions, accessOptions.writes ?? false);
+          const { rows, dropped } = await replay(browser, calls, authState(runDir, persona), sessions, accessOptions.writes ?? false);
           const safe = rows.map((row) => ({
             ...row, url: clean(diagnosticURL(row.url)),
             as: Object.fromEntries(Object.entries(row.as).map(([who, answer]) => [who, answer.error ? { ...answer, error: clean(answer.error) } : answer])),
           }));
           const open = safe.filter((row) => Object.values(row.as).some((answer) => answer.verdict === 'same'));
-          const unverified = safe.filter((row) => row.unasked || Object.values(row.as).some((answer) => answer.verdict === 'error'));
+          const unverified = safe.filter((row) => row.unasked || Object.values(row.as).some((answer) => ['error', 'redirected'].includes(answer.verdict)));
           const folder = path.join(runDir, 'access');
           fs.mkdirSync(folder, { recursive: true });
           checks += 1;
-          fs.writeFileSync(path.join(folder, `${scene.id}-${checks}.json`), JSON.stringify({ asked: Object.keys(sessions), candidates: open, unverified, rows: safe }, null, 2));
-          current?.notes.push(`access: ${safe.length} call(s) asked again, ${open.length} answered the same to someone else, ${unverified.length} unverified`);
+          fs.writeFileSync(path.join(folder, `${scene.id}-${checks}.json`), JSON.stringify({ asked: Object.keys(sessions), candidates: open, unverified, notAsked: dropped + overflow, rows: safe }, null, 2));
+          current?.notes.push(`access: ${safe.length} call(s) asked again, ${open.length} answered the same to someone else, ${unverified.length + dropped + overflow} unverified`);
+          if (dropped + overflow > 0) throw new Error(`access(): ${dropped + overflow} call(s) beyond the limit were not asked. Call access() earlier in the scene, or split it.`);
           return rows;
         },
         show: async (target, holdMs = 2200) => {

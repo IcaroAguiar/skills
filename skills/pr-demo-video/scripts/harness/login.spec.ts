@@ -5,7 +5,6 @@ import { login, profile } from './project';
 
 const runDir = process.env.DEMO_RUN_DIR ?? process.cwd();
 
-// Logs in once per persona, off camera, and stores the session for every scene run.
 test('login', async ({ browser }) => {
   if (process.env.DEMO_STEP !== 'login') test.skip();
   const persona = process.env.DEMO_PERSONA || undefined;

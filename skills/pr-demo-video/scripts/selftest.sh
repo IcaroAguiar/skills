@@ -299,7 +299,10 @@ export const scene: Scene = {
       const role = /role=(\w+)/.exec(request.headers.cookie ?? '')?.[1];
       const send = (status: number, body: string) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(body); };
       if (request.url === '/') { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<h1>Access</h1>'); }
-      else if (request.url === '/api/open') send(200, '{"open":true}');
+      else if (request.url?.startsWith('/api/open')) send(200, '{"open":true}');
+      else if (request.url === '/api/scoped') request.headers['x-scope'] === '7' ? send(200, '{"scoped":7}') : send(role ? 200 : 403, '{"scoped":0}');
+      else if (request.url === '/api/loud') send(role === 'admin' ? 200 : 403, '{"loud":1}');
+      else if (request.url === '/api/moved') { role === 'admin' ? send(200, '{"moved":1}') : (response.writeHead(302, { location: '/' }), response.end()); }
       else if (request.url === '/api/once') { once += 1; once === 1 ? send(200, '{}') : send(409, '{}'); }
       else if (request.url === '/api/stream') { response.writeHead(200, { 'content-type': 'text/event-stream' }); response.write('data: 1\n\n'); }
       else if (!role) send(401, '{}');
@@ -314,7 +317,8 @@ export const scene: Scene = {
     try {
       await page.goto(origin);
       await page.evaluate(async () => {
-        for (const path of ['/api/open', '/api/secret', '/api/leak?id=7', '/api/me', '/api/once']) await fetch(path);
+        for (const path of ['/api/open', '/api/secret', '/api/leak?id=7', '/api/me', '/api/once', '/api/loud', '/api/moved']) await fetch(path);
+        await fetch('/api/scoped', { headers: { 'x-scope': '7' } });
         void fetch('/api/stream');
         await fetch('/api/write', { method: 'POST', body: '{}' });
       });
@@ -341,17 +345,28 @@ run = pathlib.Path(sys.argv[1])
 result = json.loads((run / 'access' / 'access-1.json').read_text())
 rows = {row['url'].split('/api/')[1].split('?')[0]: {who: answer['verdict'] for who, answer in row['as'].items()} for row in result['rows']}
 assert rows.pop('once') == {} and rows.pop('stream') == {}, 'a call the own session cannot repeat, or whose body never ends, is asked of nobody'
-assert sorted(row['url'].split('/api/')[1] for row in result['unverified']) == ['once', 'stream'], result['unverified']
+assert sorted(row['url'].split('/api/')[1] for row in result['unverified']) == ['moved', 'once', 'stream'], result['unverified']
+assert rows.pop('moved') == {'nobody': 'redirected', 'nopriv': 'redirected'}, 'a redirect proves nothing'
+assert rows.pop('loud') == {'nobody': 'same', 'nopriv': 'same'}, 'a 403 that carries the data is a leak'
+assert rows.pop('scoped') == {'nobody': 'same', 'nopriv': 'same'}, 'the headers the page sent are sent again'
+assert result['notAsked'] == 0
 assert rows == {
     'open': {'nobody': 'same', 'nopriv': 'same'},
     'secret': {'nobody': 'enforced', 'nopriv': 'enforced'},
     'leak': {'nobody': 'enforced', 'nopriv': 'same'},
     'me': {'nobody': 'enforced', 'nopriv': 'differs'},
 }, rows
-assert sorted(row['url'].split('/api/')[1].split('?')[0] for row in result['candidates']) == ['leak', 'open']
+assert sorted(row['url'].split('/api/')[1].split('?')[0] for row in result['candidates']) == ['leak', 'loud', 'open', 'scoped']
 assert 'id=7' not in json.dumps(result), 'query values stay out of the report'
 assert 'writes=1' in (run / 'report-access.json').read_text(), 'a write is never asked again by default'
 print('PASS access: a call answered the same to another account is a candidate; refusals and writes are not')
+PY
+sed -e "s/id: 'access'/id: 'flood'/" -e "s#void fetch('/api/stream');#for (let n = 0; n < 70; n += 1) await fetch('/api/open?n=' + n);#" "$run/scenes/access.ts" > "$run/scenes/flood.ts"
+invoke access-past-the-limit fail scene "$run" flood --fast
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+assert json.loads(pathlib.Path(sys.argv[1], 'access', 'flood-1.json').read_text())['notAsked'] > 0
+print('PASS access limit: calls that were not asked fail the scene and are counted')
 PY
 
 # A kit carries project.ts, the Playwright command, scenes and sessions to the next run.
