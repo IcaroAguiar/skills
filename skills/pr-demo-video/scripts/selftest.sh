@@ -244,7 +244,7 @@ const html = `<form>
   <label for="v">Valor</label><input id="v" type="text" inputmode="decimal">
   <select aria-label="Prioridade"><option>1</option></select>
   <div id="rich" contenteditable="true" aria-label="Observações"><b>Ana</b><br>Silva</div>
-  <input id="u" type="text" aria-label="Apelido" maxlength="20" value="%22aspas%22">
+  <input id="u" type="text" aria-label="Apelido %22curto%22" maxlength="20">
 </form>`;
 export const scene: Scene = {
   id: 'probe', title: 'Form probe',
@@ -271,6 +271,7 @@ ruler, found = result['ruler'], {(f['field'], f['kind']) for f in result['findin
 assert (ruler['fieldsShown'], ruler['required'], ruler['withoutLabel']) == (10, 1, 1), ruler
 assert ruler['wrongKeyboard'] == 2 and ruler['fixedFormatWithoutMaskOrExample'] == 3, ruler
 shapes = {f['label']: f['shape'] for f in result['fields']}
+assert any('curto' in label for label in shapes), 'an encoded quote in a label must survive as valid JSON'
 assert shapes['Cidade'] is None and shapes['Prioridade'] == 'number', shapes
 assert ('CNPJ', 'aceita letras') in found, 'help text must not hide a finding'
 assert ('Valor', 'muda o valor em silêncio') in found, 'a decimal or a sign lost is a silent change'

@@ -98,7 +98,7 @@ const IDENTIFIER = new Set(['cpf', 'cnpj', 'cep', 'phone']);
 /** "1.234,56", "1,5" and "1.5" as numbers; NaN when the text is not one. */
 function amount(text: string): number {
   const plain = text.replace(/[\sR$]/g, '');
-  if (!/^-?[\d.,]+$/.test(plain)) return NaN;
+  if (!/^-?[\d.,]+$/.test(plain) || plain.replace(/\D/g, '').length > 15) return NaN;
   const decimal = Math.max(plain.lastIndexOf(','), plain.lastIndexOf('.'));
   const whole = decimal < 0 ? plain : plain.slice(0, decimal).replace(/[.,]/g, '');
   return Number(decimal < 0 ? whole : `${whole}.${plain.slice(decimal + 1)}`);
