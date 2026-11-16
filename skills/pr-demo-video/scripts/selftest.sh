@@ -285,6 +285,110 @@ assert (run / 'shots' / 'probe-1.png').stat().st_size > 1000, 'shot() must save 
 print('PASS probe: ruler counted, letters and silent change reported, form restored')
 PY
 
+# The access check: what the scene fetched, asked again as another account and as nobody. Reads only.
+cat > "$run/scenes/access.ts" <<'TS'
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { Scene } from '../harness';
+export const scene: Scene = {
+  id: 'access', title: 'Access check', persona: 'admin',
+  async play({ page, access, note }) {
+    let writes = 0;
+    let once = 0;
+    const server = http.createServer((request, response) => {
+      const role = /role=(\w+)/.exec(request.headers.cookie ?? '')?.[1];
+      const send = (status: number, body: string) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(body); };
+      if (request.url === '/') { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<h1>Access</h1>'); }
+      else if (request.url?.startsWith('/api/open')) send(200, '{"open":true}');
+      else if (request.url === '/api/scoped') request.headers['x-scope'] === '7' ? send(200, '{"scoped":7}') : send(role ? 200 : 403, '{"scoped":0}');
+      else if (request.url === '/api/loud') send(role === 'admin' ? 200 : 403, '{"loud":1}');
+      else if (request.url === '/api/moved') { role === 'admin' ? send(200, '{"moved":1}') : (response.writeHead(302, { location: '/' }), response.end()); }
+      else if (request.url === '/api/once') { once += 1; once === 1 ? send(200, '{}') : send(409, '{}'); }
+      else if (request.url === '/api/stream') { response.writeHead(200, { 'content-type': 'text/event-stream' }); response.write('data: 1\n\n'); }
+      else if (!role) send(401, '{}');
+      else if (request.url === '/api/secret') role === 'admin' ? send(200, '{"secret":1}') : send(403, '{}');
+      else if (request.url === '/api/leak?id=7') send(200, '{"leak":1}');
+      else if (request.url === '/api/me') send(200, JSON.stringify({ role }));
+      else if (request.url === '/api/write') { writes += 1; send(200, '{}'); }
+      else send(404, '{}');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      await page.goto(origin);
+      await page.evaluate(async () => {
+        for (const path of ['/api/open', '/api/secret', '/api/leak?id=7', '/api/me', '/api/once', '/api/loud', '/api/moved']) await fetch(path);
+        await fetch('/api/scoped', { headers: { 'x-scope': '7' } });
+        void fetch('/api/stream');
+        await fetch('/api/write', { method: 'POST', body: '{}' });
+      });
+      await page.waitForTimeout(300);
+      await access(['nopriv']);
+      note(`writes=${writes}`);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  },
+};
+TS
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+for persona, role in (('admin', 'admin'), ('nopriv', 'user')):
+    cookie = {'name': 'role', 'value': role, 'domain': '127.0.0.1', 'path': '/', 'expires': -1, 'httpOnly': False, 'secure': False, 'sameSite': 'Lax'}
+    pathlib.Path(sys.argv[1], f'.auth-{persona}.json').write_text(json.dumps({'cookies': [cookie], 'origins': []}))
+PY
+invoke access-scene ok scene "$run" access --fast
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+run = pathlib.Path(sys.argv[1])
+result = json.loads((run / 'access' / 'access-1.json').read_text())
+rows = {row['url'].split('/api/')[1].split('?')[0]: {who: answer['verdict'] for who, answer in row['as'].items()} for row in result['rows']}
+assert rows.pop('once') == {} and rows.pop('stream') == {}, 'a call the own session cannot repeat, or whose body never ends, is asked of nobody'
+assert sorted(row['url'].split('/api/')[1] for row in result['unverified']) == ['moved', 'once', 'stream'], result['unverified']
+assert rows.pop('moved') == {'nobody': 'redirected', 'nopriv': 'redirected'}, 'a redirect proves nothing'
+assert rows.pop('loud') == {'nobody': 'same', 'nopriv': 'same'}, 'a 403 that carries the data is a leak'
+assert rows.pop('scoped') == {'nobody': 'same', 'nopriv': 'same'}, 'the headers the page sent are sent again'
+assert result['notAsked'] == 0
+assert rows == {
+    'open': {'nobody': 'same', 'nopriv': 'same'},
+    'secret': {'nobody': 'enforced', 'nopriv': 'enforced'},
+    'leak': {'nobody': 'enforced', 'nopriv': 'same'},
+    'me': {'nobody': 'enforced', 'nopriv': 'differs'},
+}, rows
+assert sorted(row['url'].split('/api/')[1].split('?')[0] for row in result['candidates']) == ['leak', 'loud', 'open', 'scoped']
+assert 'id=7' not in json.dumps(result), 'query values stay out of the report'
+assert 'writes=1' in (run / 'report-access.json').read_text(), 'a write is never asked again by default'
+print('PASS access: a call answered the same to another account is a candidate; refusals and writes are not')
+PY
+sed -e "s/id: 'access'/id: 'flood'/" -e "s#void fetch('/api/stream');#for (let n = 0; n < 70; n += 1) await fetch('/api/open?n=' + n);#" "$run/scenes/access.ts" > "$run/scenes/flood.ts"
+invoke access-past-the-limit fail scene "$run" flood --fast
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+assert json.loads(pathlib.Path(sys.argv[1], 'access', 'flood-1.json').read_text())['notAsked'] > 0
+print('PASS access limit: calls that were not asked fail the scene and are counted')
+PY
+sed -e "s/id: 'access'/id: 'bound'/" -e "s#void fetch('/api/stream');#await fetch('/api/open', { headers: { 'x-xsrf-token': 't' } });#" "$run/scenes/access.ts" > "$run/scenes/bound.ts"
+invoke access-session-bound-header fail scene "$run" bound --fast
+test ! -e "$run/access/bound-1.json"
+grep -q 'x-xsrf-token' "$run/report-bound.json"
+echo 'PASS access refuses a header tied to one session instead of reading its rejection as enforced'
+
+# A kit carries project.ts, the Playwright command, scenes and sessions to the next run.
+kit="$root/kit"
+bash "$here/demo.sh" new "$root/run2" --cwd "$cwd" --playwright "$playwright" --kit "$kit" > "$root/kit.log"
+cp "$run/project.ts" "$root/run2/project.ts"
+cp "$run/scenes/access.ts" "$root/run2/scenes/reach.ts"
+invoke kit-keep ok keep "$root/run2" reach
+invoke kit-keep-without-kit fail keep "$run"
+bash "$here/demo.sh" new "$root/run3" --cwd "$cwd" --kit "$kit" >> "$root/kit.log"
+cmp -s "$run/project.ts" "$root/run3/project.ts" && test -f "$root/run3/scenes/reach.ts" && cmp -s "$root/run2/playwright.args" "$root/run3/playwright.args"
+invoke kit-login ok login "$root/run3" nopriv
+python3 -c 'import os, sys; sys.exit(os.stat(sys.argv[1]).st_mode & 0o777 != 0o600)' "$kit/.auth-nopriv.json"
+test ! -e "$root/run3/.auth-nopriv.json"
+if bash "$here/demo.sh" new "$root/run4" --cwd "$cwd" --kit "$root/empty-kit" >> "$root/kit.log" 2>&1; then echo 'FAIL an empty kit must still ask for --playwright' >&2; exit 1; fi
+echo 'PASS kit: project, command and scene reused; the persona session is stored in the kit, mode 600'
+
 # A newer invalid webm makes choosing the newest video fail deterministically.
 printf 'not a video\n' > "$run/video/newest-decoy.webm"
 invoke post-report-video ok post "$run"

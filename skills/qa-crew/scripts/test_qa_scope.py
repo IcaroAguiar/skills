@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from qa_scope import MARKER, declares_no_interface, waiver, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
+from qa_scope import begin, budget, end_round, read_rounds, MARKER, declares_no_interface, waiver, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
 import qa_scope  # noqa: E402
 
 
@@ -267,6 +267,41 @@ class Stamp(unittest.TestCase):
             self.assertFalse(waiver(None, pr="7"), "malformed base64 is no waiver")
         finally:
             qa_scope.sh = real
+
+    def test_wrong_person_worker_only_for_a_rule_file_or_a_new_screen(self):
+        line = ("apps/api/src/exams/exams.controller.ts", ["if (!user.roles.includes('vet')) throw new Error()"])
+        scope = classify(patch(line))
+        self.assertEqual((scope["lenses"], scope["worker_lenses"]), (["hurry", "wrong-person"], ["hurry"]))
+        rule = classify(patch(("apps/api/src/exams/exam.policy.ts", ["export const canRead = true"])))
+        self.assertEqual(rule["worker_lenses"], ["hurry", "wrong-person"])
+        new = classify(patch(line) + "\ndiff --git a/web/New.tsx b/web/New.tsx\nnew file mode 100644\n@@ -0,0 +1 @@\n+<div />")
+        self.assertEqual((new["worker_lenses"], new["workers"]), (["hurry", "wrong-person"], 2))
+
+    def test_a_branch_gets_three_rounds_and_a_time_budget(self):
+        repo, minute = str(self.repo), 60
+        self.assertEqual(begin(repo, "quick", 0)[0], 0)
+        end_round(repo, 8 * minute)
+        code, state = begin(repo, "quick", 100 * minute)
+        self.assertEqual((code, state["minutes"], state["limit_minutes"]), (0, 8, 20), "time between rounds is free")
+        end_round(repo, 115 * minute)
+        code, state = begin(repo, "quick", 200 * minute)
+        self.assertEqual((code, state["spent"]), (4, True), "23 minutes used of 20")
+        self.assertEqual(len(read_rounds(repo)), 2, "a refused round is not recorded")
+        self.assertEqual(begin(repo, "quick", 200 * minute, approved=True)[0], 0)
+        end_round(repo, 201 * minute)
+        self.assertEqual(begin(repo, "quick", 300 * minute)[0], 4, "three rounds, whatever the minutes")
+        self.git("checkout", "-q", "-b", "topic/foo")
+        self.assertEqual(begin(repo, "quick", 0)[0], 0)
+        end_round(repo, 23 * minute)
+        self.assertEqual(begin(repo, "quick", 30 * minute)[0], 4)
+        code, state = begin(repo, "full", 30 * minute)
+        self.assertEqual((code, state["limit_minutes"]), (0, 45), "a change that grew gets the larger budget")
+        self.git("checkout", "-q", "-b", "topic-foo")
+        self.assertEqual(read_rounds(repo), [], "a look-alike branch name has its own ledger")
+        self.git("checkout", "-q", "-b", "other")
+        self.assertEqual(begin(repo, "full", 0)[0], 0, "the budget belongs to the branch")
+        self.assertEqual(begin(repo, "full", 30 * minute)[1]["minutes"], 30, "a new round closes the one left open")
+        self.assertEqual(budget(read_rounds(repo), 1000 * minute)["minutes"], 30 + 90, "an abandoned round is capped")
 
     def test_stamp_without_a_recorded_run_is_refused(self):
         self.commit("screen")

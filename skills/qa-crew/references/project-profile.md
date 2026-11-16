@@ -2,6 +2,8 @@
 
 The gate needs these facts once per repository. Look first for a `QA` section in the repository's `AGENTS.md`. Otherwise keep the profile in `references/projects/<repo>.md` in this skill, which stays on this machine and out of the repository. `pr-demo-video/references/projects/` may already hold some of them for the same repository; reuse what is still true.
 
+The profile is the prose; the **kit** in `~/.local/state/qa-crew/<repo>` is the same knowledge in runnable form (`project.ts` with the login of each persona, the Playwright command, scenes that reach each screen, sessions, `findings.md`). When a fact here changes how the app is reached or entered, change `project.ts` in the kit in the same pass.
+
 Write only what you confirmed by running it, with the date. Key names and paths only, never a secret value.
 
 ```markdown

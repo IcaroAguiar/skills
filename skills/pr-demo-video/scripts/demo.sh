@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # pr-demo-video runner. Usage:
-#   demo.sh new    <run-dir> --cwd <repo-or-app-dir> --playwright "<command that runs the project's playwright>"
-#   demo.sh login  <run-dir>              # once, off camera; writes .auth.json (0600)
+#   demo.sh new    <run-dir> --cwd <repo-or-app-dir> --playwright "<command that runs the project's playwright>" [--kit <dir>]
+#   demo.sh login  <run-dir> [persona]    # once, off camera; writes .auth.json or .auth-<persona>.json (0600)
+#   demo.sh keep   <run-dir> [scene-id…]  # saves project.ts, the Playwright command and the named scenes in the kit
 #   demo.sh scene  <run-dir> <scene-id> [--fast]   # one scene alone: prepare + play, no video
 #   demo.sh record <run-dir> [--fast]     # all scenes in order, recorded
 #   demo.sh post   <run-dir>              # mp4, contact sheet, one frame per scene
@@ -14,6 +15,7 @@ load() {
   # shellcheck disable=SC1091
   source "$run/run.env"
   export DEMO_RUN_DIR="$run"
+  [ -z "${DEMO_KIT:-}" ] || export DEMO_KIT DEMO_AUTH_DIR="$DEMO_KIT"
 }
 pw() {
   # Parse configured command words once; run paths are always separate arguments.
@@ -79,33 +81,53 @@ execute() {
 
 case "$cmd" in
   new)
-    cwd=""; playwright=""
+    cwd=""; playwright=""; kit=""
     while [ $# -gt 0 ]; do
       case "$1" in
         --cwd) cwd="$2"; shift 2;;
         --playwright) playwright="$2"; shift 2;;
+        --kit) kit="$2"; shift 2;;
         *) echo "unknown option $1" >&2; exit 2;;
       esac
     done
-    [ -n "$cwd" ] && [ -n "$playwright" ] || { echo "--cwd and --playwright are required" >&2; exit 2; }
+    case "$kit" in ''|/*) ;; *) echo "kit dir must be absolute" >&2; exit 2;; esac
     mkdir -p "$run/scenes"
-    cp "$here/harness/"{harness.ts,overlay.ts,probe.ts,playwright.config.ts,login.spec.ts,record.spec.ts,diagnostics.cjs} "$run/"
+    if [ -n "$kit" ]; then
+      mkdir -p "$kit/scenes"; chmod 700 "$kit"
+      [ -f "$run/project.ts" ] || [ ! -f "$kit/project.ts" ] || cp "$kit/project.ts" "$run/project.ts"
+      for kept in "$kit/scenes/"*.ts; do [ ! -f "$kept" ] || cp "$kept" "$run/scenes/"; done
+    fi
+    [ -n "$playwright" ] || [ ! -f "$kit/playwright.args" ] || cp "$kit/playwright.args" "$run/playwright.args"
+    [ -n "$cwd" ] && { [ -n "$playwright" ] || [ -f "$run/playwright.args" ]; } || { echo "--cwd and --playwright are required (a kit remembers --playwright)" >&2; exit 2; }
+    cp "$here/harness/"{harness.ts,overlay.ts,probe.ts,access.ts,playwright.config.ts,login.spec.ts,record.spec.ts,diagnostics.cjs} "$run/"
     [ -f "$run/project.ts" ] || cp "$here/harness/project.template.ts" "$run/project.ts"
     [ -f "$run/scenes/index.ts" ] || cp "$here/harness/scenes/index.ts" "$run/scenes/index.ts"
     cp "$here/harness/scenes/_template.ts" "$run/scenes/_template.ts"
-    python3 - "$playwright" "$run/playwright.args" <<'PYARGS'
+    [ -z "$playwright" ] || python3 - "$playwright" "$run/playwright.args" <<'PYARGS'
 import shlex, sys
 words = shlex.split(sys.argv[1])
 if not words: raise SystemExit('empty Playwright command')
 with open(sys.argv[2], 'wb') as f:
     for word in words: f.write(word.encode() + b'\0')
 PYARGS
-    printf 'PW_CWD=%q\n' "$cwd" > "$run/run.env"
+    printf 'PW_CWD=%q\nDEMO_KIT=%q\n' "$cwd" "$kit" > "$run/run.env"
     echo "run ready: $run (fill project.ts, then: demo.sh login $run)"
     ;;
   login)
-    load; DEMO_STEP=login pw
-    test -f "$run/.auth.json" && chmod 600 "$run/.auth.json" && echo "session stored (not printed)"
+    load; persona="${1:-}"
+    case "$persona" in *[!a-z0-9-]*) echo "invalid persona" >&2; exit 2;; esac
+    DEMO_STEP=login DEMO_PERSONA="$persona" pw
+    stored="${DEMO_AUTH_DIR:-$run}/.auth${persona:+-$persona}.json"
+    test -f "$stored" && chmod 600 "$stored" && echo "session stored (not printed)"
+    ;;
+  keep)
+    load; [ -n "${DEMO_KIT:-}" ] || { echo "this run has no kit: create it with --kit" >&2; exit 2; }
+    cp "$run/project.ts" "$run/playwright.args" "$DEMO_KIT/"
+    for id in "$@"; do
+      case "$id" in ''|*[!a-zA-Z0-9_-]*) echo "invalid scene id" >&2; exit 2;; esac
+      cp "$run/scenes/$id.ts" "$DEMO_KIT/scenes/"
+    done
+    echo "kit updated: $DEMO_KIT"
     ;;
   scene)
     load; id="${1:?scene id}"; fast=0; [ "${2:-}" = "--fast" ] && fast=1
