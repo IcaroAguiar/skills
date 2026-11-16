@@ -4,6 +4,8 @@
   qa_scope.py --repo <path> [--base <ref>]      local branch against its base
   qa_scope.py --pr <number> [--repo <path>]     a pull request, plus its QA marker
       --require-evidence                        exit 3 when QA is owed and not recorded
+  qa_scope.py --repo <path> --begin [--approved]
+                                                open a round on this branch; exit 4 when its budget is spent
   qa_scope.py --repo <path> --exercised <run> --lenses hurry,inputs
                                                 record what the crew just used (the screens as they are now)
   qa_scope.py --repo <path> --stamp <run> --findings N --fixed N --proposals N
@@ -21,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 UI_EXT = (
@@ -130,7 +133,11 @@ def classify(patch: str) -> dict:
         "size": "full" if full else "quick",
         "reasons": reasons,
         "lenses": lenses,
-        "workers": len([lens for lens in lenses if lens != "inputs"]),  # inputs is the form probe, a script
+        # inputs is the form probe and wrong-person the access check, both scripts. A person-like worker joins
+        # the access check where a script sees least: a rule file itself, or a screen nobody has used yet.
+        "worker_lenses": (crew := ["hurry"] + (
+            ["wrong-person"] if access and (new_screens or any(RULE_PATH.search(path) for path in access)) else [])),
+        "workers": len(crew),
         "files": {"interface": sorted(ui), "forms": forms, "access": access},
     }
 
@@ -241,6 +248,52 @@ def stamp(repo: str, base: str, run: Path, counts: dict[str, int]) -> tuple[int,
     return 0, {"state": "ok", "marker": marker}
 
 
+# A branch gets three rounds and a number of minutes for all of them; past either, a person decides.
+BUDGET_MINUTES = {"quick": 20, "full": 45}
+MAX_ROUNDS = 3
+ROUND_CAP = 90  # a round left open by a crash does not eat the budget forever
+
+
+def ledger(repo: str) -> Path:
+    common = Path(repo, sh(["git", "rev-parse", "--git-common-dir"], repo).strip()).resolve()
+    branch = sh(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo).strip()
+    return common / "qa-crew" / (re.sub(r"[^\w.-]+", "-", branch) + ".json")
+
+
+def budget(rounds: list[dict], now: float) -> dict:
+    minutes = sum(min(ROUND_CAP, ((entry.get("ended") or now) - entry["started"]) / 60) for entry in rounds)
+    limit = BUDGET_MINUTES["full" if any(entry["size"] == "full" for entry in rounds) else "quick"]
+    return {"rounds": len(rounds), "minutes": round(minutes), "limit_rounds": MAX_ROUNDS, "limit_minutes": limit,
+            "spent": len(rounds) >= MAX_ROUNDS or minutes >= limit}
+
+
+def read_rounds(repo: str) -> list[dict]:
+    target = ledger(repo)
+    return json.loads(target.read_text()) if target.is_file() else []
+
+
+def begin(repo: str, size: str, now: float, approved: bool = False) -> tuple[int, dict]:
+    rounds = read_rounds(repo)
+    for entry in rounds:
+        entry.setdefault("ended", now)
+    state = budget(rounds, now)
+    if state["spent"] and not approved:
+        return 4, {**state, "why": "budget spent: open findings become issues; a confirmed defect in the change "
+                                   "goes to the user, and --approved opens the round they allow"}
+    rounds.append({"started": now, "size": size})
+    target = ledger(repo)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(rounds))
+    return 0, budget(rounds, now)
+
+
+def end_round(repo: str, now: float) -> None:
+    rounds = read_rounds(repo)
+    if rounds and "ended" not in rounds[-1]:
+        rounds[-1]["ended"] = now
+        ledger(repo).write_text(json.dumps(rounds))
+
+
 NO_INTERFACE = {"decision": "skip", "reasons": ["the repository declares no interface (.qa-crew on the base branch)"],
                 "lenses": [], "workers": 0, "files": {}}
 
@@ -311,6 +364,8 @@ def main() -> int:
     parser.add_argument("--base")
     parser.add_argument("--pr")
     parser.add_argument("--require-evidence", action="store_true")
+    parser.add_argument("--begin", action="store_true")
+    parser.add_argument("--approved", action="store_true")
     parser.add_argument("--exercised", type=Path, metavar="RUN")
     parser.add_argument("--lenses", default="")
     parser.add_argument("--stamp", type=Path, metavar="RUN")
@@ -319,14 +374,15 @@ def main() -> int:
     args = parser.parse_args()
     if not (args.repo or args.pr):
         parser.error("pass --repo or --pr")
-    if (args.exercised or args.stamp) and not args.repo:
-        parser.error("--exercised and --stamp need --repo")
+    if (args.exercised or args.stamp or args.begin) and not args.repo:
+        parser.error("--begin, --exercised and --stamp need --repo")
     try:
         if args.exercised:
             lenses = [lens for lens in args.lenses.split(",") if lens]
             if not lenses:
                 parser.error("--exercised needs --lenses with the lenses the crew ran")
             record = record_exercised(args.repo, args.base or default_base(args.repo), args.exercised, lenses)
+            end_round(args.repo, time.time())
             print(json.dumps({key: record[key] for key in ("screens", "lenses")}))
             return 0
         if args.stamp:
@@ -342,6 +398,13 @@ def main() -> int:
             base = args.base or default_base(args.repo)
             scope = dict(NO_INTERFACE) if waiver(args.repo) else classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
             scope["base"] = base
+            if args.begin and scope["decision"] == "run":
+                code, state = begin(args.repo, scope["size"], time.time(), args.approved)
+                print(json.dumps({**scope, "budget": state}, indent=2))
+                return code
+            rounds = read_rounds(args.repo)
+            if rounds:
+                scope["budget"] = budget(rounds, time.time())
     except subprocess.CalledProcessError as error:
         print(f"qa_scope: {' '.join(error.cmd[:3])} failed: {error.stderr.strip()[:200]}", file=sys.stderr)
         return 2
