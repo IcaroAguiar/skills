@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from qa_scope import MARKER, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
+from qa_scope import MARKER, declares_no_interface, waiver, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
 import qa_scope  # noqa: E402
 
 
@@ -226,6 +226,19 @@ class Stamp(unittest.TestCase):
             self.assertEqual(evidence("1", None, scope)["state"], "stale")
         finally:
             qa_scope.sh, qa_scope.pr_blobs = real
+
+    def test_waiver_counts_only_from_the_base(self):
+        self.assertTrue(declares_no_interface("# skills only\ninterface: none\n"))
+        self.assertFalse(declares_no_interface("interface: web\n# interface: none"))
+        (self.repo / ".qa-crew").write_text("interface: none\n")
+        self.commit("a change that tries to waive itself")
+        self.assertFalse(waiver(str(self.repo), "main"))
+        self.git("checkout", "-q", "main")
+        (self.repo / ".qa-crew").write_text("interface: none\n")
+        self.commit("owner declares no interface")
+        self.git("checkout", "-q", "feature")
+        self.git("rebase", "-q", "-X", "theirs", "main")
+        self.assertTrue(waiver(str(self.repo), "main"))
 
     def test_stamp_without_a_recorded_run_is_refused(self):
         self.commit("screen")

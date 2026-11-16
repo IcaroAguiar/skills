@@ -15,6 +15,7 @@ skips the gate on its own reading of the diff.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -240,6 +241,27 @@ def stamp(repo: str, base: str, run: Path, counts: dict[str, int]) -> tuple[int,
     return 0, {"state": "ok", "marker": marker}
 
 
+NO_INTERFACE = {"decision": "skip", "reasons": ["the repository declares no interface (.qa-crew on the base branch)"],
+                "lenses": [], "workers": 0, "files": {}}
+
+
+def declares_no_interface(text: str) -> bool:
+    return any(re.fullmatch(r"interface:\s*none", line.strip()) for line in text.splitlines())
+
+
+def waiver(repo: str | None, base: str | None = None, pr: str | None = None) -> bool:
+    """`.qa-crew` is read from the base, never from the change: a PR cannot waive itself."""
+    try:
+        if pr:
+            ref = json.loads(sh(["gh", "pr", "view", pr, "--json", "baseRefName"], repo))["baseRefName"]
+            found = sh(["gh", "api", f"repos/{{owner}}/{{repo}}/contents/.qa-crew?ref={ref}", "--jq", ".content"], repo)
+            return declares_no_interface(base64.b64decode(found).decode())
+        fork = sh(["git", "merge-base", base, "HEAD"], repo).strip()
+        return declares_no_interface(sh(["git", "show", f"{fork}:.qa-crew"], repo))
+    except (subprocess.CalledProcessError, ValueError, KeyError):
+        return False
+
+
 def evidence(pr: str, repo: str | None, scope: dict) -> dict:
     """present: the marker covers the head. stale: in-scope files changed after it."""
     view = json.loads(sh(["gh", "pr", "view", pr, "--json", "body,headRefOid"], repo))
@@ -300,12 +322,12 @@ def main() -> int:
             print(result["marker"] if code == 0 else json.dumps(result, indent=2))
             return code
         if args.pr:
-            scope = classify(pr_patch(args.pr, args.repo))
+            scope = NO_INTERFACE if waiver(args.repo, pr=args.pr) else classify(pr_patch(args.pr, args.repo))
             if scope["decision"] == "run":
                 scope["evidence"] = evidence(args.pr, args.repo, scope)
         else:
             base = args.base or default_base(args.repo)
-            scope = classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
+            scope = dict(NO_INTERFACE) if waiver(args.repo, base) else classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
             scope["base"] = base
     except subprocess.CalledProcessError as error:
         print(f"qa_scope: {' '.join(error.cmd[:3])} failed: {error.stderr.strip()[:200]}", file=sys.stderr)
