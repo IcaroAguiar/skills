@@ -252,9 +252,10 @@ def declares_no_interface(text: str) -> bool:
 def remote_default(repo: str | None) -> str | None:
     """The default branch as the remote has it; a local branch or a --base the caller picked is not a policy source."""
     try:
-        return sh(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo).strip()
+        target = sh(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], repo).strip()
+        return target if target.startswith("refs/remotes/origin/") else None
     except subprocess.CalledProcessError:
-        for name in ("origin/main", "origin/master"):
+        for name in ("refs/remotes/origin/main", "refs/remotes/origin/master"):
             if subprocess.run(["git", "rev-parse", "--verify", "-q", name], cwd=repo, capture_output=True).returncode == 0:
                 return name
     return None
