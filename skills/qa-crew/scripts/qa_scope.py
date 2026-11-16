@@ -41,12 +41,16 @@ ACCESS = re.compile(
 ACCESS_PATH = re.compile(
     r"auth(?!or)|(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|sessions?|grants?)([/._-]|$)", re.I
 )
+# A folder named auth or session says little; a guard, policy or permission file is the rule itself.
+RULE_PATH = re.compile(r"(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|grants?)([/._-]|$)", re.I)
+DATA_FILE = re.compile(r"\.(json|ya?ml|sql|snap|lock)$|(^|/)migrations?/", re.I)
 FORM = re.compile(
     r"<form|<input|<select|<textarea|useForm|onSubmit|handleSubmit|<(Text)?Field|<Input|<Select|<Checkbox"
     r"|<Radio|<DatePicker|<Combobox|type=\"(file|date|number|tel|email)\"|z\.object|yup\.object",
 )
 MARKER = re.compile(r"<!--\s*qa-crew:\s*head=([0-9a-f]{7,40})([^>]*?)-->")
-LIGHT_LINES = 40
+FULL_LINES = 300
+STYLE_EXT = (".css", ".scss", ".sass", ".less")
 
 
 def is_ui(path: str) -> bool:
@@ -67,13 +71,23 @@ def split_patch(patch: str) -> dict[str, list[str]]:
     return files
 
 
+def added_files(patch: str) -> set[str]:
+    added, current = set(), None
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            current = line.split(" b/", 1)[-1]
+        elif current and line.startswith("new file mode"):
+            added.add(current)
+    return added
+
+
 def classify(patch: str) -> dict:
     files = split_patch(patch)
     product = {path: lines for path, lines in files.items() if not NOT_PRODUCT.search(path)}
     ui = {path: lines for path, lines in product.items() if is_ui(path)}
     access = sorted(
         path for path, lines in product.items()
-        if ACCESS_PATH.search(path) or any(ACCESS.search(line) for line in lines)
+        if RULE_PATH.search(path) or (not DATA_FILE.search(path) and any(ACCESS.search(line) for line in lines))
     )
     forms = sorted(path for path, lines in ui.items() if any(FORM.search(line) for line in lines))
     ui_lines = sum(len(lines) for lines in ui.values())
@@ -94,10 +108,15 @@ def classify(patch: str) -> dict:
         lenses.append("inputs")
     if access:
         lenses.append("wrong-person")
-    light = lenses == ["hurry"] and ui_lines < LIGHT_LINES
+    # Full where the day-one runs found most: a screen that did not exist, a large change, an access rule.
+    new_screens = sorted(path for path in added_files(patch) & set(ui)
+                         if not path.lower().endswith(STYLE_EXT) and not TEXT.search(path))
+    if new_screens:
+        reasons.append(f"{len(new_screens)} new screen file(s)")
+    full = bool(new_screens or access or ui_lines >= FULL_LINES)
     return {
         "decision": "run",
-        "size": "light" if light else "full",
+        "size": "full" if full else "quick",
         "reasons": reasons,
         "lenses": lenses,
         "workers": len([lens for lens in lenses if lens != "inputs"]),  # inputs is the form probe, a script
@@ -135,11 +154,12 @@ def pr_patch(pr: str, repo: str | None) -> str:
     except subprocess.CalledProcessError:
         # Over 300 files GitHub refuses the diff; the files API pages through them.
         rows = sh(["gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/pulls/{pr}/files",
-                   "--jq", ".[] | {filename, patch} | @json"], repo)
+                   "--jq", ".[] | {filename, patch, status} | @json"], repo)
         parts = []
         for row in filter(None, rows.splitlines()):
             item = json.loads(row)
-            parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{item.get('patch') or ''}")
+            new = "new file mode 100644\n" if item.get("status") == "added" else ""
+            parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{new}{item.get('patch') or ''}")
         return "\n".join(parts)
 
 

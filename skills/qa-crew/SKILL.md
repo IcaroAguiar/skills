@@ -24,7 +24,9 @@ python3 <skill-dir>/scripts/qa_scope.py --repo <repo> [--base <ref>]
 ```
 
 - `decision: skip` → write "QA: não se aplica (<reason>)" in the task summary and stop here.
-- `decision: run` → run the gate with the `lenses` it lists. `hurry` and `wrong-person` are one worker each; `inputs` is the form probe, a script, never a worker. `size: light` means the `hurry` worker alone.
+- `decision: run` → the gate runs at the `size` it gives. Nothing a person sees ships unchecked, and the check is sized to the change:
+  - `quick` (a change to a screen that already exists): the form probe when `inputs` is listed, plus one `hurry` worker with a 5-minute box on the touched screens. About 10 minutes in all.
+  - `full` (a new screen file, 300 or more changed interface lines, or an access rule): every lens listed. `hurry` and `wrong-person` are one worker each with a 10-minute box; `inputs` is the form probe, a script, never a worker.
 
 The decision is the script's. When it says `run`, the gate runs, even for a refactor: a refactor of a screen can break the screen. When the gate cannot run (no environment, no test account), ask the user with the question tool; that is the only other exit.
 
@@ -55,7 +57,7 @@ Three things read the same commit and none waits for another. Start them togethe
    ```
 
    `demo.sh scene <run>/before <id> --fast` runs it in seconds and writes `<run>/before/probe/<id>-<n>.json`: the friction ruler counted from the screen, and what each field kept after letters, pasted formats, spaces and 300 characters, without submitting. Its `findings` are candidates.
-3. **Workers.** Spawn one per remaining lens on the cheapest capable model (Claude Code: `Agent`, `general-purpose`, `model: haiku`; other harnesses: their parallel worker). Fill `references/worker-brief.md` for each: its lens, the screens the diff touches (`files.interface` from step 1, translated to routes), the promises the change makes, a 10-minute time box and the run directory. A worker returns every finding as a scene file that already replays it.
+3. **Workers.** Spawn one per remaining lens on the cheapest capable model (Claude Code: `Agent`, `general-purpose`, `model: haiku`; other harnesses: their parallel worker). Fill `references/worker-brief.md` for each: its lens, the screens the diff touches (`files.interface` from step 1, translated to routes), the promises the change makes, the time box for its size and the run directory. A worker returns every finding as a scene file that already replays it.
 
 | Lens | Who | Sections of `references/human-heuristics.md` |
 | --- | --- | --- |
@@ -65,7 +67,7 @@ Three things read the same commit and none waits for another. Start them togethe
 
 Workers fill the per-flow half of `references/friction-ruler.md`; the probe counts the per-form half.
 
-With a profile in place the whole gate fits in about 20 minutes. Past 30, say in the closing message where the time went and write the cause under "Known traps" in the profile.
+With a profile in place a `quick` gate fits in about 10 minutes and a `full` one in about 20. Past twice that, say in the closing message where the time went and write the cause under "Known traps" in the profile.
 
 **Complete when:** the probe wrote its JSON for every touched form, every worker returned or hit its time box, and the review is running or done.
 

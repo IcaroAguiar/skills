@@ -36,14 +36,23 @@ class Scope(unittest.TestCase):
         self.assertEqual(scope["decision"], "skip")
         self.assertEqual(scope["reasons"], ["only tests, stories or docs"])
 
-    def test_small_visual_change_is_light(self):
+    def test_change_to_an_existing_screen_is_quick(self):
         scope = classify(patch(("apps/web/src/Header.tsx", ["<h1 className=\"text-lg\">Painel</h1>"])))
-        self.assertEqual((scope["decision"], scope["size"], scope["lenses"]), ("run", "light", ["hurry"]))
+        self.assertEqual((scope["decision"], scope["size"], scope["lenses"]), ("run", "quick", ["hurry"]))
+        form = classify(patch(("apps/web/src/Signup.tsx", ["<Input name=\"cpf\" />"] * 50)))
+        self.assertEqual((form["size"], form["lenses"], form["workers"]), ("quick", ["hurry", "inputs"], 1))
+
+    def test_new_screen_large_change_or_access_is_full(self):
+        new = patch(("apps/web/src/Console.tsx", ["<main />"])).replace("--- a/", "new file mode 100644\n--- a/")
+        self.assertEqual(classify(new)["size"], "full")
+        style = patch(("apps/web/src/console.css", [".a{}"])).replace("--- a/", "new file mode 100644\n--- a/")
+        self.assertEqual(classify(style)["size"], "quick")
+        self.assertEqual(classify(patch(("apps/web/src/Header.tsx", ["<p />"] * 300)))["size"], "full")
+        self.assertEqual(classify(patch(("apps/web/src/Menu.tsx", ["if (user.roles.includes('admin')) show()"])))["size"], "full")
 
     def test_form_adds_inputs_lens(self):
         scope = classify(patch(("apps/web/src/Signup.tsx", ["<Input name=\"cpf\" />", "const form = useForm()"])))
         self.assertEqual(scope["lenses"], ["hurry", "inputs"])
-        self.assertEqual(scope["size"], "full")
 
     def test_backend_access_rule_runs_wrong_person(self):
         scope = classify(patch(("apps/api/src/projects/projects.guard.ts", ["return user.orgId === project.orgId"])))
@@ -63,8 +72,16 @@ class Scope(unittest.TestCase):
         self.assertEqual(scope["decision"], "run")
 
     def test_large_visual_change_is_full(self):
-        scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 60)))
+        scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 300)))
         self.assertEqual(scope["size"], "full")
+
+    def test_auth_folder_and_data_files_are_not_access_rules(self):
+        scope = classify(patch(
+            ("apps/web/src/auth/layout.tsx", ["<main />"]),
+            ("apps/api/src/errors/auth-module-error.catalog.ts", ["export const code = 'X'"]),
+            ("server/db/migrations/meta/0007_snapshot.json", ['"permissions": {']),
+        ))
+        self.assertEqual((scope["size"], scope["lenses"]), ("quick", ["hurry"]))
 
     def test_marker(self):
         match = MARKER.search("text\n<!-- qa-crew: head=abc1234 findings=3 fixed=2 proposals=1 -->")
