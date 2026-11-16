@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from qa_scope import MARKER, blobs_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
+from qa_scope import MARKER, declares_no_interface, waiver, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
 import qa_scope  # noqa: E402
 
 
@@ -17,6 +17,7 @@ def patch(*files):
         out.append(f"diff --git a/{path} b/{path}")
         out.append(f"--- a/{path}")
         out.append(f"+++ b/{path}")
+        out.append("@@ -1 +1 @@")
         out.extend(f"+{line}" for line in lines)
     return "\n".join(out)
 
@@ -36,14 +37,23 @@ class Scope(unittest.TestCase):
         self.assertEqual(scope["decision"], "skip")
         self.assertEqual(scope["reasons"], ["only tests, stories or docs"])
 
-    def test_small_visual_change_is_light(self):
+    def test_change_to_an_existing_screen_is_quick(self):
         scope = classify(patch(("apps/web/src/Header.tsx", ["<h1 className=\"text-lg\">Painel</h1>"])))
-        self.assertEqual((scope["decision"], scope["size"], scope["lenses"]), ("run", "light", ["hurry"]))
+        self.assertEqual((scope["decision"], scope["size"], scope["lenses"]), ("run", "quick", ["hurry"]))
+        form = classify(patch(("apps/web/src/Signup.tsx", ["<Input name=\"cpf\" />"] * 50)))
+        self.assertEqual((form["size"], form["lenses"], form["workers"]), ("quick", ["hurry", "inputs"], 1))
+
+    def test_new_screen_large_change_or_access_is_full(self):
+        new = patch(("apps/web/src/Console.tsx", ["<main />"])).replace("--- a/", "new file mode 100644\n--- a/")
+        self.assertEqual(classify(new)["size"], "full")
+        style = patch(("apps/web/src/console.css", [".a{}"])).replace("--- a/", "new file mode 100644\n--- a/")
+        self.assertEqual(classify(style)["size"], "quick")
+        self.assertEqual(classify(patch(("apps/web/src/Header.tsx", ["<p />"] * 300)))["size"], "full")
+        self.assertEqual(classify(patch(("apps/web/src/Menu.tsx", ["if (user.roles.includes('admin')) show()"])))["size"], "full")
 
     def test_form_adds_inputs_lens(self):
         scope = classify(patch(("apps/web/src/Signup.tsx", ["<Input name=\"cpf\" />", "const form = useForm()"])))
         self.assertEqual(scope["lenses"], ["hurry", "inputs"])
-        self.assertEqual(scope["size"], "full")
 
     def test_backend_access_rule_runs_wrong_person(self):
         scope = classify(patch(("apps/api/src/projects/projects.guard.ts", ["return user.orgId === project.orgId"])))
@@ -63,8 +73,34 @@ class Scope(unittest.TestCase):
         self.assertEqual(scope["decision"], "run")
 
     def test_large_visual_change_is_full(self):
-        scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 60)))
+        scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 300)))
         self.assertEqual(scope["size"], "full")
+
+    def test_rename_into_a_screen_and_missing_patch_stay_full(self):
+        local = "diff --git a/src/Console.ts b/src/Console.tsx\nsimilarity index 90%\nrename from src/Console.ts\nrename to src/Console.tsx\n@@ -1 +1 @@\n+<main />"
+        self.assertEqual(classify(local)["size"], "full")
+        moved = "diff --git a/src/Old.tsx b/src/New.tsx\nrename from src/Old.tsx\nrename to src/New.tsx\n@@ -1 +1 @@\n+<main />"
+        self.assertEqual(classify(moved)["size"], "quick")
+        for source in ("src/Console.css", "src/locales/console.ts", "src/Prototype.test.tsx"):
+            renamed = f"diff --git a/{source} b/src/Console.tsx\nrename from {source}\nrename to src/Console.tsx\n@@ -1 +1 @@\n+<main />"
+            self.assertEqual(classify(renamed)["size"], "full", source)
+        api = patch_from_rows([{"filename": "src/Console.tsx", "status": "renamed", "previous_filename": "src/Console.ts", "patch": "@@ -1 +1 @@\n+<main />"}])
+        self.assertEqual(classify(api)["size"], "full")
+        big = patch_from_rows([{"filename": "src/Page.tsx", "status": "modified", "changes": 350}])
+        self.assertEqual(classify(big)["size"], "full")
+
+    def test_lines_that_look_like_headers_are_counted(self):
+        body = "\n".join(["---count;"] * 150 + ["+++count;"] * 150)
+        scope = classify(f"diff --git a/src/Page.tsx b/src/Page.tsx\n--- a/src/Page.tsx\n+++ b/src/Page.tsx\n@@ -1,150 +1,150 @@\n{body}")
+        self.assertEqual(scope["size"], "full")
+
+    def test_auth_folder_and_data_files_are_not_access_rules(self):
+        scope = classify(patch(
+            ("apps/web/src/auth/layout.tsx", ["<main />"]),
+            ("apps/api/src/errors/auth-module-error.catalog.ts", ["export const code = 'X'"]),
+            ("server/db/migrations/meta/0007_snapshot.json", ['"permissions": {']),
+        ))
+        self.assertEqual((scope["size"], scope["lenses"]), ("quick", ["hurry"]))
 
     def test_marker(self):
         match = MARKER.search("text\n<!-- qa-crew: head=abc1234 findings=3 fixed=2 proposals=1 -->")
@@ -191,6 +227,47 @@ class Stamp(unittest.TestCase):
         finally:
             qa_scope.sh, qa_scope.pr_blobs = real
 
+    def test_waiver_counts_only_as_the_remote_default_branch_has_it(self):
+        self.assertTrue(declares_no_interface("# skills only\ninterface: none\n"))
+        self.assertFalse(declares_no_interface("interface: web\n# interface: none"))
+        repo = str(self.repo)
+        (self.repo / ".qa-crew").write_text("interface: none\n")
+        self.commit("a change that tries to waive itself")
+        self.assertFalse(waiver(repo), "no remote: nothing is a policy source")
+        self.git("branch", "origin/main", "HEAD")
+        self.assertFalse(waiver(repo), "a local branch named like the remote is not the remote")
+        self.git("update-ref", "refs/remotes/origin/main", "main")
+        self.assertFalse(waiver(repo), "the remote ref wins over a local branch of the same name")
+        self.git("branch", "-q", "-D", "origin/main")
+        self.git("update-ref", "refs/remotes/origin/main", "main")
+        self.assertFalse(waiver(repo), "the file is only in the change")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertTrue(waiver(repo), "the remote default branch declares it")
+        self.git("rm", "-q", ".qa-crew")
+        self.commit("owner revokes")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertFalse(waiver(repo), "a waiver removed from the target no longer counts")
+
+    def test_pr_waiver_reads_the_base_repository_at_the_base_commit(self):
+        import base64
+        calls = []
+        def fake(args, cwd=None):
+            calls.append(args)
+            if args[2].endswith("/pulls/7"):
+                return json.dumps({"repo": "owner/upstream", "sha": "abc123"})
+            return base64.encodebytes(self.answer).decode()
+        real, qa_scope.sh = qa_scope.sh, fake
+        try:
+            self.answer = b"interface: none\n"
+            self.assertTrue(waiver(None, pr="7"))
+            self.assertEqual(calls[-1][2], "repos/owner/upstream/contents/.qa-crew?ref=abc123")
+            self.answer = b"interface: web\n"
+            self.assertFalse(waiver(None, pr="7"))
+            qa_scope.sh = lambda args, cwd=None: json.dumps({"repo": "o/r", "sha": "s"}) if "pulls" in args[2] else "!aW50ZXJmYWNlOiBub25l"
+            self.assertFalse(waiver(None, pr="7"), "malformed base64 is no waiver")
+        finally:
+            qa_scope.sh = real
+
     def test_stamp_without_a_recorded_run_is_refused(self):
         self.commit("screen")
         self.assertEqual(stamp(str(self.repo), "main", self.run, {})[0], 3)
@@ -198,6 +275,7 @@ class Stamp(unittest.TestCase):
     def test_screen_set_is_decided_by_path(self):
         self.assertTrue(on_screen("apps/web/src/Form.tsx"))
         self.assertTrue(on_screen("apps/api/src/auth/guard.ts"))
+        self.assertFalse(on_screen("apps/api/src/auth/session.service.ts"))
         self.assertFalse(on_screen("apps/api/src/billing/invoice.service.ts"))
         self.assertFalse(on_screen("apps/web/src/Form.test.tsx"))
         self.assertNotEqual(fingerprint({"a.tsx": "1"}), fingerprint({"a.tsx": "2"}))

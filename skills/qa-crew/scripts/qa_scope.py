@@ -15,6 +15,7 @@ skips the gate on its own reading of the diff.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -38,15 +39,16 @@ ACCESS = re.compile(
     r"\b(permissions?|rbac|acl|authoriz\w+|unauthori[sz]ed|forbidden|isAdmin|hasRole|hasPermission|requireAuth"
     r"|can[A-Z]\w+\(|user\.roles?|session\.|roles?\.(includes|some|has))"
 )
-ACCESS_PATH = re.compile(
-    r"auth(?!or)|(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|sessions?|grants?)([/._-]|$)", re.I
-)
+# A folder named auth or session says little; a guard, policy or permission file is the rule itself.
+RULE_PATH = re.compile(r"(^|[/._-])(permissions?|roles?|rbac|acl|polic(y|ies)|guards?|grants?)([/._-]|$)", re.I)
+DATA_FILE = re.compile(r"\.(json|ya?ml|sql|snap|lock)$|(^|/)migrations?/", re.I)
 FORM = re.compile(
     r"<form|<input|<select|<textarea|useForm|onSubmit|handleSubmit|<(Text)?Field|<Input|<Select|<Checkbox"
     r"|<Radio|<DatePicker|<Combobox|type=\"(file|date|number|tel|email)\"|z\.object|yup\.object",
 )
 MARKER = re.compile(r"<!--\s*qa-crew:\s*head=([0-9a-f]{7,40})([^>]*?)-->")
-LIGHT_LINES = 40
+FULL_LINES = 300
+STYLE_EXT = (".css", ".scss", ".sass", ".less")
 
 
 def is_ui(path: str) -> bool:
@@ -54,17 +56,41 @@ def is_ui(path: str) -> bool:
     return lower.endswith(UI_EXT) or lower.endswith(BLADE) or bool(TEXT.search(path))
 
 
+def is_screen(path: str) -> bool:
+    """A file that is a screen or a component, not a stylesheet, a text catalogue or a test."""
+    return is_ui(path) and not NOT_PRODUCT.search(path) and not path.lower().endswith(STYLE_EXT) and not TEXT.search(path)
+
+
 def split_patch(patch: str) -> dict[str, list[str]]:
     """Changed lines (added and removed, without the marker) per file."""
     files: dict[str, list[str]] = {}
-    current = None
+    current, in_hunk = None, False
     for line in patch.splitlines():
         if line.startswith("diff --git "):
-            current = line.split(" b/", 1)[-1]
+            current, in_hunk = line.split(" b/", 1)[-1], False
             files[current] = []
-        elif current and line[:1] in "+-" and not line.startswith(("+++", "---")):
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif current and in_hunk and line[:1] in "+-":
             files[current].append(line[1:])
     return files
+
+
+def added_files(patch: str) -> set[str]:
+    """New files, and files renamed into an interface name from one that was not (Console.ts to Console.tsx)."""
+    added, current, moved_from = set(), None, None
+    for line in patch.splitlines():
+        if line.startswith("diff --git "):
+            current, moved_from = line.split(" b/", 1)[-1], None
+        elif line.startswith("@@"):
+            current = None
+        elif current and line.startswith("new file mode"):
+            added.add(current)
+        elif current and line.startswith("rename from "):
+            moved_from = line[len("rename from "):]
+        elif current and line.startswith("rename to ") and moved_from and not is_screen(moved_from):
+            added.add(current)
+    return added
 
 
 def classify(patch: str) -> dict:
@@ -73,7 +99,7 @@ def classify(patch: str) -> dict:
     ui = {path: lines for path, lines in product.items() if is_ui(path)}
     access = sorted(
         path for path, lines in product.items()
-        if ACCESS_PATH.search(path) or any(ACCESS.search(line) for line in lines)
+        if RULE_PATH.search(path) or (not DATA_FILE.search(path) and any(ACCESS.search(line) for line in lines))
     )
     forms = sorted(path for path, lines in ui.items() if any(FORM.search(line) for line in lines))
     ui_lines = sum(len(lines) for lines in ui.values())
@@ -94,10 +120,14 @@ def classify(patch: str) -> dict:
         lenses.append("inputs")
     if access:
         lenses.append("wrong-person")
-    light = lenses == ["hurry"] and ui_lines < LIGHT_LINES
+    # Full where the day-one runs found most: a screen that did not exist, a large change, an access rule.
+    new_screens = sorted(path for path in added_files(patch) & set(ui) if is_screen(path))
+    if new_screens:
+        reasons.append(f"{len(new_screens)} new screen file(s)")
+    full = bool(new_screens or access or ui_lines >= FULL_LINES)
     return {
         "decision": "run",
-        "size": "light" if light else "full",
+        "size": "full" if full else "quick",
         "reasons": reasons,
         "lenses": lenses,
         "workers": len([lens for lens in lenses if lens != "inputs"]),  # inputs is the form probe, a script
@@ -107,7 +137,7 @@ def classify(patch: str) -> dict:
 
 def on_screen(path: str) -> bool:
     """Path-only test, so the local tree and the PR files API agree on the set."""
-    return not NOT_PRODUCT.search(path) and (is_ui(path) or bool(ACCESS_PATH.search(path)))
+    return not NOT_PRODUCT.search(path) and (is_ui(path) or bool(RULE_PATH.search(path)))
 
 
 def fingerprint(blobs: dict[str, str]) -> str:
@@ -135,12 +165,20 @@ def pr_patch(pr: str, repo: str | None) -> str:
     except subprocess.CalledProcessError:
         # Over 300 files GitHub refuses the diff; the files API pages through them.
         rows = sh(["gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/pulls/{pr}/files",
-                   "--jq", ".[] | {filename, patch} | @json"], repo)
-        parts = []
-        for row in filter(None, rows.splitlines()):
-            item = json.loads(row)
-            parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{item.get('patch') or ''}")
-        return "\n".join(parts)
+                   "--jq", ".[] | {filename, patch, status, changes, previous_filename} | @json"], repo)
+        return patch_from_rows(json.loads(row) for row in filter(None, rows.splitlines()))
+
+
+def patch_from_rows(rows) -> str:
+    parts = []
+    for item in rows:
+        head = "new file mode 100644\n" if item.get("status") == "added" else ""
+        if item.get("previous_filename"):
+            head += f"rename from {item['previous_filename']}\nrename to {item['filename']}\n"
+        # GitHub omits the patch of a large file: keep its size, so the 300-line rule still sees it.
+        body = item.get("patch") or "\n".join(["@@ patch unavailable @@"] + ["+"] * item.get("changes", 0))
+        parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{head}{body}")
+    return "\n".join(parts)
 
 
 def local_blobs(repo: str, base: str) -> dict[str, str]:
@@ -192,14 +230,49 @@ def stamp(repo: str, base: str, run: Path, counts: dict[str, int]) -> tuple[int,
     if sh(["git", "status", "--porcelain", "--untracked-files=no"], repo).strip():
         return 3, {"state": "dirty", "why": "commit the work first: the marker names a commit"}
     blobs = local_blobs(repo, base)
-    changed = sorted(name for name in set(blobs) | set(record["files"]) if blobs.get(name) != record["files"].get(name))
+    used = {name: blob for name, blob in record["files"].items() if on_screen(name)}
+    changed = sorted(name for name in set(blobs) | set(used) if blobs.get(name) != used.get(name))
     if changed:
         return 3, {"state": "stale", "changed_since": changed,
                    "why": "these screens changed after the crew used them: run one worker on them, then --exercised again"}
     head = sh(["git", "rev-parse", "HEAD"], repo).strip()
     fields = " ".join(f"{key}={value}" for key, value in counts.items())
-    marker = f"<!-- qa-crew: head={head} screens={record['screens']} lenses={'+'.join(record['lenses'])} {fields} -->"
+    marker = f"<!-- qa-crew: head={head} screens={fingerprint(blobs)} lenses={'+'.join(record['lenses'])} {fields} -->"
     return 0, {"state": "ok", "marker": marker}
+
+
+NO_INTERFACE = {"decision": "skip", "reasons": ["the repository declares no interface (.qa-crew on the base branch)"],
+                "lenses": [], "workers": 0, "files": {}}
+
+
+def declares_no_interface(text: str) -> bool:
+    return any(re.fullmatch(r"interface:\s*none", line.strip()) for line in text.splitlines())
+
+
+def remote_default(repo: str | None) -> str | None:
+    """The default branch as the remote has it; a local branch or a --base the caller picked is not a policy source."""
+    try:
+        target = sh(["git", "symbolic-ref", "refs/remotes/origin/HEAD"], repo).strip()
+        return target if target.startswith("refs/remotes/origin/") else None
+    except subprocess.CalledProcessError:
+        for name in ("refs/remotes/origin/main", "refs/remotes/origin/master"):
+            if subprocess.run(["git", "rev-parse", "--verify", "-q", name], cwd=repo, capture_output=True).returncode == 0:
+                return name
+    return None
+
+
+def waiver(repo: str | None, pr: str | None = None) -> bool:
+    """`.qa-crew` counts only as the target branch has it, never as the change has it: a PR cannot waive itself."""
+    try:
+        if pr:
+            base = json.loads(sh(["gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{pr}",
+                                  "--jq", "{repo: .base.repo.full_name, sha: .base.sha}"], repo))
+            found = sh(["gh", "api", f"repos/{base['repo']}/contents/.qa-crew?ref={base['sha']}", "--jq", ".content"], repo)
+            return declares_no_interface(base64.b64decode("".join(found.split()), validate=True).decode())
+        target = remote_default(repo)
+        return bool(target) and declares_no_interface(sh(["git", "show", f"{target}:.qa-crew"], repo))
+    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError):
+        return False
 
 
 def evidence(pr: str, repo: str | None, scope: dict) -> dict:
@@ -262,12 +335,12 @@ def main() -> int:
             print(result["marker"] if code == 0 else json.dumps(result, indent=2))
             return code
         if args.pr:
-            scope = classify(pr_patch(args.pr, args.repo))
+            scope = NO_INTERFACE if waiver(args.repo, pr=args.pr) else classify(pr_patch(args.pr, args.repo))
             if scope["decision"] == "run":
                 scope["evidence"] = evidence(args.pr, args.repo, scope)
         else:
             base = args.base or default_base(args.repo)
-            scope = classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
+            scope = dict(NO_INTERFACE) if waiver(args.repo) else classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
             scope["base"] = base
     except subprocess.CalledProcessError as error:
         print(f"qa_scope: {' '.join(error.cmd[:3])} failed: {error.stderr.strip()[:200]}", file=sys.stderr)

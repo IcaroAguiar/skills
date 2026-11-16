@@ -248,7 +248,7 @@ const html = `<form>
 </form>`;
 export const scene: Scene = {
   id: 'probe', title: 'Form probe',
-  async play({ page, probe, note }) {
+  async play({ page, probe, shot, note }) {
     await page.setContent(html);
     await page.evaluate(() => document.getElementById('q')!.addEventListener('input', (event) => {
       const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
@@ -257,6 +257,7 @@ export const scene: Scene = {
       const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
     }));
     await probe();
+    await shot();
     const rich = await page.locator('#rich').innerHTML();
     note(`restored=${(await page.locator('#n').inputValue()) === 'Ana' && rich === '<b>Ana</b><br>Silva'}`);
   },
@@ -280,6 +281,7 @@ assert ('CPF', 'aceita letras') in found, found
 assert ('Quantidade', 'muda o valor em silêncio') in found, found
 assert not any(field == 'Quantidade' and kind == 'apaga sem avisar' for field, kind in found), found
 assert 'restored=true' in (run / 'report-probe.json').read_text()
+assert (run / 'shots' / 'probe-1.png').stat().st_size > 1000, 'shot() must save a still'
 print('PASS probe: ruler counted, letters and silent change reported, form restored')
 PY
 
