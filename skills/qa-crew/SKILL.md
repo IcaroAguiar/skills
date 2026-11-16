@@ -23,7 +23,7 @@ Two modes:
 python3 <skill-dir>/scripts/qa_scope.py --repo <repo> [--base <ref>]
 ```
 
-- `decision: skip` → write "QA: não se aplica (<reason>)" in the task summary and stop here. A repository with nothing a person sees (a catalogue of scripts, a library) declares it once in a `.qa-crew` file with the line `interface: none`; the script reads that file from the base branch, so only its owner can add it, in a PR of its own. Never add it to get a change through.
+- `decision: skip` → write "QA: não se aplica (<reason>)" in the task summary and stop here. A repository with nothing a person sees (a catalogue of scripts, a library) declares it once in a `.qa-crew` file with the line `interface: none`; the script reads that file from the remote default branch (for a PR, from the base repository at the base commit), so it counts only after its own PR is merged. Never add it to get a change through.
 - `decision: run` → the gate runs at the `size` it gives. Nothing a person sees ships unchecked, and the check is sized to the change:
   - `quick` (a change to a screen that already exists): the form probe when `inputs` is listed, plus one `hurry` worker with a 5-minute box on the touched screens. About 10 minutes in all.
   - `full` (a new screen file, 300 or more changed interface lines, or an access rule): every lens listed. `hurry` and `wrong-person` are one worker each with a 10-minute box; `inputs` is the form probe, a script, never a worker.

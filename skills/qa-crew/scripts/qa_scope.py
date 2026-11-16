@@ -249,16 +249,28 @@ def declares_no_interface(text: str) -> bool:
     return any(re.fullmatch(r"interface:\s*none", line.strip()) for line in text.splitlines())
 
 
-def waiver(repo: str | None, base: str | None = None, pr: str | None = None) -> bool:
-    """`.qa-crew` is read from the base, never from the change: a PR cannot waive itself."""
+def remote_default(repo: str | None) -> str | None:
+    """The default branch as the remote has it; a local branch or a --base the caller picked is not a policy source."""
+    try:
+        return sh(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo).strip()
+    except subprocess.CalledProcessError:
+        for name in ("origin/main", "origin/master"):
+            if subprocess.run(["git", "rev-parse", "--verify", "-q", name], cwd=repo, capture_output=True).returncode == 0:
+                return name
+    return None
+
+
+def waiver(repo: str | None, pr: str | None = None) -> bool:
+    """`.qa-crew` counts only as the target branch has it, never as the change has it: a PR cannot waive itself."""
     try:
         if pr:
-            ref = json.loads(sh(["gh", "pr", "view", pr, "--json", "baseRefName"], repo))["baseRefName"]
-            found = sh(["gh", "api", f"repos/{{owner}}/{{repo}}/contents/.qa-crew?ref={ref}", "--jq", ".content"], repo)
-            return declares_no_interface(base64.b64decode(found).decode())
-        fork = sh(["git", "merge-base", base, "HEAD"], repo).strip()
-        return declares_no_interface(sh(["git", "show", f"{fork}:.qa-crew"], repo))
-    except (subprocess.CalledProcessError, ValueError, KeyError):
+            base = json.loads(sh(["gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{pr}",
+                                  "--jq", "{repo: .base.repo.full_name, sha: .base.sha}"], repo))
+            found = sh(["gh", "api", f"repos/{base['repo']}/contents/.qa-crew?ref={base['sha']}", "--jq", ".content"], repo)
+            return declares_no_interface(base64.b64decode("".join(found.split()), validate=True).decode())
+        target = remote_default(repo)
+        return bool(target) and declares_no_interface(sh(["git", "show", f"{target}:.qa-crew"], repo))
+    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError):
         return False
 
 
@@ -327,7 +339,7 @@ def main() -> int:
                 scope["evidence"] = evidence(args.pr, args.repo, scope)
         else:
             base = args.base or default_base(args.repo)
-            scope = dict(NO_INTERFACE) if waiver(args.repo, base) else classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
+            scope = dict(NO_INTERFACE) if waiver(args.repo) else classify(sh(["git", "diff", f"{base}...HEAD"], args.repo))
             scope["base"] = base
     except subprocess.CalledProcessError as error:
         print(f"qa_scope: {' '.join(error.cmd[:3])} failed: {error.stderr.strip()[:200]}", file=sys.stderr)

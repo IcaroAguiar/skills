@@ -227,18 +227,41 @@ class Stamp(unittest.TestCase):
         finally:
             qa_scope.sh, qa_scope.pr_blobs = real
 
-    def test_waiver_counts_only_from_the_base(self):
+    def test_waiver_counts_only_as_the_remote_default_branch_has_it(self):
         self.assertTrue(declares_no_interface("# skills only\ninterface: none\n"))
         self.assertFalse(declares_no_interface("interface: web\n# interface: none"))
+        repo = str(self.repo)
         (self.repo / ".qa-crew").write_text("interface: none\n")
         self.commit("a change that tries to waive itself")
-        self.assertFalse(waiver(str(self.repo), "main"))
-        self.git("checkout", "-q", "main")
-        (self.repo / ".qa-crew").write_text("interface: none\n")
-        self.commit("owner declares no interface")
-        self.git("checkout", "-q", "feature")
-        self.git("rebase", "-q", "-X", "theirs", "main")
-        self.assertTrue(waiver(str(self.repo), "main"))
+        self.assertFalse(waiver(repo), "no remote: nothing is a policy source")
+        self.git("update-ref", "refs/remotes/origin/main", "main")
+        self.assertFalse(waiver(repo), "the file is only in the change")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertTrue(waiver(repo), "the remote default branch declares it")
+        self.git("rm", "-q", ".qa-crew")
+        self.commit("owner revokes")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertFalse(waiver(repo), "a waiver removed from the target no longer counts")
+
+    def test_pr_waiver_reads_the_base_repository_at_the_base_commit(self):
+        import base64
+        calls = []
+        def fake(args, cwd=None):
+            calls.append(args)
+            if args[2].endswith("/pulls/7"):
+                return json.dumps({"repo": "owner/upstream", "sha": "abc123"})
+            return base64.encodebytes(self.answer).decode()
+        real, qa_scope.sh = qa_scope.sh, fake
+        try:
+            self.answer = b"interface: none\n"
+            self.assertTrue(waiver(None, pr="7"))
+            self.assertEqual(calls[-1][2], "repos/owner/upstream/contents/.qa-crew?ref=abc123")
+            self.answer = b"interface: web\n"
+            self.assertFalse(waiver(None, pr="7"))
+            qa_scope.sh = lambda args, cwd=None: json.dumps({"repo": "o/r", "sha": "s"}) if "pulls" in args[2] else "!aW50ZXJmYWNlOiBub25l"
+            self.assertFalse(waiver(None, pr="7"), "malformed base64 is no waiver")
+        finally:
+            qa_scope.sh = real
 
     def test_stamp_without_a_recorded_run_is_refused(self):
         self.commit("screen")
