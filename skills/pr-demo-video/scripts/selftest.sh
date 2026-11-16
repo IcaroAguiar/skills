@@ -368,6 +368,11 @@ import json, pathlib, sys
 assert json.loads(pathlib.Path(sys.argv[1], 'access', 'flood-1.json').read_text())['notAsked'] > 0
 print('PASS access limit: calls that were not asked fail the scene and are counted')
 PY
+sed -e "s/id: 'access'/id: 'bound'/" -e "s#void fetch('/api/stream');#await fetch('/api/open', { headers: { 'x-xsrf-token': 't' } });#" "$run/scenes/access.ts" > "$run/scenes/bound.ts"
+invoke access-session-bound-header fail scene "$run" bound --fast
+test ! -e "$run/access/bound-1.json"
+grep -q 'x-xsrf-token' "$run/report-bound.json"
+echo 'PASS access refuses a header tied to one session instead of reading its rejection as enforced'
 
 # A kit carries project.ts, the Playwright command, scenes and sessions to the next run.
 kit="$root/kit"

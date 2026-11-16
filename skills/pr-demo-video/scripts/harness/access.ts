@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { Browser, Response } from '@playwright/test';
 
 // qa-crew access check: what the scene's account fetched, asked again as someone else. Rows are candidates to triage.
-export type Seen = { method: string; url: string; data: string | null; headers: Record<string, string>; bearer: boolean; body: Promise<string | null> };
+export type Seen = { method: string; url: string; data: string | null; headers: Record<string, string>; bound: string | null; body: Promise<string | null> };
 export type Verdict = 'enforced' | 'same' | 'differs' | 'redirected' | 'error';
 export type AccessRow = { method: string; url: string; unasked?: string; as: Record<string, { status: number; verdict: Verdict; error?: string }> };
 
@@ -14,6 +14,8 @@ function within<T>(ms: number, work: Promise<T>): Promise<T | null> {
 
 const digest = (body: Buffer) => crypto.createHash('sha256').update(body).digest('hex');
 const LIMIT = 60;
+// Sent with another session, a header like these is refused for the wrong reason, and the refusal would read as enforced.
+const SESSION_BOUND = /^authorization$|csrf|xsrf|token|session|api-?key/i;
 // The session is what changes between askers; everything else the page sent goes again, or a scoped call is not the same call.
 const NOT_REPLAYED = /^(:|cookie$|authorization$|host$|content-length$|connection$|accept-encoding$|origin$|referer$|sec-)/i;
 // A stream or a long poll never finishes; its body is then unknown, not awaited forever.
@@ -27,7 +29,7 @@ export function seen(response: Response): Seen | null {
     url: response.url(),
     data: request.postData(),
     headers: Object.fromEntries(Object.entries(request.headers()).filter(([name]) => !NOT_REPLAYED.test(name))),
-    bearer: 'authorization' in request.headers(),
+    bound: Object.keys(request.headers()).find((name) => SESSION_BOUND.test(name)) ?? null,
     body: within(BODY_WAIT_MS, response.body().then(digest, () => null)),
   };
 }
@@ -40,8 +42,9 @@ const ask = (call: Seen) => ({
 export async function replay(
   browser: Browser, calls: Seen[], control: string, sessions: Record<string, string | undefined>, writes = false,
 ): Promise<{ rows: AccessRow[]; dropped: number }> {
-  if (calls.some((call) => call.bearer)) {
-    throw new Error('access(): this app sends an Authorization header, which a stored session cannot replace. Use the wrong-person worker.');
+  const bound = calls.find((call) => call.bound)?.bound;
+  if (bound) {
+    throw new Error(`access(): this app sends the header ${bound}, which belongs to one session and cannot be asked again as someone else. Use the wrong-person worker.`);
   }
   const unique = new Map<string, Seen>();
   for (const call of calls) {
