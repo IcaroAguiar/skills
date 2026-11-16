@@ -35,10 +35,7 @@ export type SceneCtx = {
   shot(): Promise<void>;
   /** Writes probe/<scene>-<n>.json. */
   probe(): Promise<ProbeResult>;
-  /**
-   * Asks again, as each named persona and as nobody, for what this scene fetched so far: access/<scene>-<n>.json.
-   * Only reads, unless `writes` is set on a throwaway database.
-   */
+  /** Asks again, as each persona and as nobody, for what the scene fetched: access/<scene>-<n>.json. Reads only, unless `writes`. */
   access(personas: string[], options?: { writes?: boolean }): Promise<AccessRow[]>;
 };
 
@@ -184,7 +181,10 @@ export async function runScenes(options: RunOptions) {
           const sessions: Record<string, string | undefined> = { nobody: undefined };
           for (const persona of personas) sessions[persona] = authState(runDir, persona);
           const rows = await replay(browser, calls, sessions, accessOptions.writes ?? false);
-          const safe = rows.map((row) => ({ ...row, url: clean(diagnosticURL(row.url)) }));
+          const safe = rows.map((row) => ({
+            ...row, url: clean(diagnosticURL(row.url)),
+            as: Object.fromEntries(Object.entries(row.as).map(([who, answer]) => [who, answer.error ? { ...answer, error: clean(answer.error) } : answer])),
+          }));
           const open = safe.filter((row) => Object.values(row.as).some((answer) => answer.verdict === 'same'));
           const folder = path.join(runDir, 'access');
           fs.mkdirSync(folder, { recursive: true });

@@ -2,14 +2,13 @@ import crypto from 'node:crypto';
 import type { Browser, Response } from '@playwright/test';
 
 // qa-crew access check: what the scene's account fetched, asked again as someone else. Rows are candidates to triage.
-export type Seen = { method: string; url: string; data: string | null; bearer: boolean; body: Promise<string> };
+export type Seen = { method: string; url: string; data: string | null; bearer: boolean; body: Promise<string | null> };
 export type Verdict = 'enforced' | 'same' | 'differs' | 'error';
-export type AccessRow = { method: string; url: string; as: Record<string, { status: number; verdict: Verdict }> };
+export type AccessRow = { method: string; url: string; as: Record<string, { status: number; verdict: Verdict; error?: string }> };
 
 const digest = (body: Buffer) => crypto.createHash('sha256').update(body).digest('hex');
 const LIMIT = 60;
 
-/** An API call the page made and the server answered with success, or null. */
 export function seen(response: Response): Seen | null {
   const request = response.request();
   if (!['xhr', 'fetch'].includes(request.resourceType()) || !/^https?:/.test(response.url()) || response.status() >= 400) return null;
@@ -18,7 +17,7 @@ export function seen(response: Response): Seen | null {
     url: response.url(),
     data: request.postData(),
     bearer: 'authorization' in request.headers(),
-    body: response.body().then(digest).catch(() => ''),
+    body: response.body().then(digest, () => null),
   };
 }
 
@@ -48,9 +47,10 @@ export async function replay(
           });
           status = answer.status();
           if ([401, 403, 404].includes(status) || (status >= 300 && status < 400)) verdict = 'enforced';
-          else if (status < 300) verdict = digest(await answer.body()) === original ? 'same' : 'differs';
-        } catch {
-          verdict = 'error';
+          else if (status < 300 && original !== null) verdict = digest(await answer.body()) === original ? 'same' : 'differs';
+        } catch (error) {
+          rows[index].as[persona] = { status, verdict, error: String(error).split('\n')[0].slice(0, 120) };
+          continue;
         }
         rows[index].as[persona] = { status, verdict };
       }

@@ -13,7 +13,6 @@ export const profile: ProjectProfile = {
     // e.g. open the start route and switch to the light theme.
     await page.goto('/');
   },
-  // With a kit, a session that still opens the app is kept instead of logging in again.
   async signedIn(page) {
     await page.goto('/');
     return !new URL(page.url()).pathname.startsWith('/login');

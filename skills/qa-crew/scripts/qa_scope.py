@@ -133,8 +133,7 @@ def classify(patch: str) -> dict:
         "size": "full" if full else "quick",
         "reasons": reasons,
         "lenses": lenses,
-        # inputs is the form probe and wrong-person the access check, both scripts. A person-like worker joins
-        # the access check where a script sees least: a rule file itself, or a screen nobody has used yet.
+        # A worker joins the access check where a script sees least: a rule file, or a screen nobody has used yet.
         "worker_lenses": (crew := ["hurry"] + (
             ["wrong-person"] if access and (new_screens or any(RULE_PATH.search(path) for path in access)) else [])),
         "workers": len(crew),

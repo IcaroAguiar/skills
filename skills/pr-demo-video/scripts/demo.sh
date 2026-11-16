@@ -15,7 +15,6 @@ load() {
   # shellcheck disable=SC1091
   source "$run/run.env"
   export DEMO_RUN_DIR="$run"
-  # A kit keeps sessions between runs, so the next round does not log in again.
   [ -z "${DEMO_KIT:-}" ] || export DEMO_KIT DEMO_AUTH_DIR="$DEMO_KIT"
 }
 pw() {
