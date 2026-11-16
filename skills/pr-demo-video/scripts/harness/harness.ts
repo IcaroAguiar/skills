@@ -108,16 +108,18 @@ export async function runScenes(options: RunOptions) {
   let context: BrowserContext | undefined;
   let video: ReturnType<Page['video']> = null;
   let current: SceneReport | undefined;
+  let persona: string | undefined;
   const videoDir = path.join(runDir, 'video');
   let t0 = Date.now();
   try {
     if (selected.length === 0) throw new Error('No scenes selected');
+    persona = (options.only ? selected[0].persona : undefined) ?? (process.env.DEMO_PERSONA || undefined);
     if (record) fs.rmSync(videoDir, { force: true, recursive: true });
     context = await browser.newContext({
       baseURL: project.baseURL,
       colorScheme: 'light',
       locale: project.locale ?? 'pt-BR',
-      storageState: authState(runDir, (options.only ? selected[0].persona : undefined) ?? (process.env.DEMO_PERSONA || undefined)),
+      storageState: authState(runDir, persona),
       timezoneId: project.timezoneId ?? 'America/Sao_Paulo',
       viewport: project.viewport,
       ...(record ? { recordVideo: { dir: videoDir, size: project.viewport } } : {}),
@@ -136,7 +138,7 @@ export async function runScenes(options: RunOptions) {
     let calls: Seen[] = [];
     page.on('response', (response) => {
       const call = seen(response);
-      if (call) calls.push(call);
+      if (call && calls.length < 300) calls.push(call);
       if (response.status() >= 400) {
         diagnostics()?.failedRequests.push(clean(`${response.status()} ${response.request().method()} ${diagnosticURL(response.url())}`));
       }
@@ -180,17 +182,18 @@ export async function runScenes(options: RunOptions) {
         access: async (personas, accessOptions = {}) => {
           const sessions: Record<string, string | undefined> = { nobody: undefined };
           for (const persona of personas) sessions[persona] = authState(runDir, persona);
-          const rows = await replay(browser, calls, sessions, accessOptions.writes ?? false);
+          const rows = await replay(browser, calls, authState(runDir, persona), sessions, accessOptions.writes ?? false);
           const safe = rows.map((row) => ({
             ...row, url: clean(diagnosticURL(row.url)),
             as: Object.fromEntries(Object.entries(row.as).map(([who, answer]) => [who, answer.error ? { ...answer, error: clean(answer.error) } : answer])),
           }));
           const open = safe.filter((row) => Object.values(row.as).some((answer) => answer.verdict === 'same'));
+          const unverified = safe.filter((row) => row.unasked || Object.values(row.as).some((answer) => answer.verdict === 'error'));
           const folder = path.join(runDir, 'access');
           fs.mkdirSync(folder, { recursive: true });
           checks += 1;
-          fs.writeFileSync(path.join(folder, `${scene.id}-${checks}.json`), JSON.stringify({ asked: Object.keys(sessions), candidates: open, rows: safe }, null, 2));
-          current?.notes.push(`access: ${safe.length} call(s) asked again, ${open.length} answered the same to someone else`);
+          fs.writeFileSync(path.join(folder, `${scene.id}-${checks}.json`), JSON.stringify({ asked: Object.keys(sessions), candidates: open, unverified, rows: safe }, null, 2));
+          current?.notes.push(`access: ${safe.length} call(s) asked again, ${open.length} answered the same to someone else, ${unverified.length} unverified`);
           return rows;
         },
         show: async (target, holdMs = 2200) => {

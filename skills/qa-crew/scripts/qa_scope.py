@@ -256,6 +256,9 @@ ROUND_CAP = 90  # a round left open by a crash does not eat the budget forever
 def ledger(repo: str) -> Path:
     common = Path(repo, sh(["git", "rev-parse", "--git-common-dir"], repo).strip()).resolve()
     branch = sh(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo).strip()
+    if branch == "HEAD":  # detached: one ledger per worktree, not one for all of them
+        top = sh(["git", "rev-parse", "--show-toplevel"], repo).strip()
+        branch = "detached-" + hashlib.sha256(top.encode()).hexdigest()[:10]
     return common / "qa-crew" / (re.sub(r"[^\w.-]+", "-", branch) + ".json")
 
 

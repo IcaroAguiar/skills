@@ -55,7 +55,7 @@ $S new /tmp/pr-demo/<slug> --cwd <repo> --playwright "pnpm --filter <app> exec p
 $S login /tmp/pr-demo/<slug>
 ```
 
-For work that returns to the same project, `new … --kit <dir>` starts the run from a kit and `demo.sh keep <run> [scene-id…]` saves `project.ts`, the Playwright command and the named scenes back into it; sessions live in the kit and one that still opens the app (`signedIn` in `project.ts`) is kept. `demo.sh login <run> <persona>` stores a second account, and a scene with `persona: '<name>'` runs as it.
+For work that returns to the same project, `new … --kit <dir>` starts the run from a kit and `demo.sh keep <run> [scene-id…]` saves `project.ts`, the Playwright command and the named scenes back into it; sessions live in the kit and one that still opens the app (`signedIn` in `project.ts`) is kept. `demo.sh login <run> <persona>` stores a second account, and a scene with `persona: '<name>'` runs as it when it runs alone (`demo.sh scene`); a recording is one account.
 
 ## 4. Scene team (cheap parallel workers)
 

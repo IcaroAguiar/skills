@@ -287,19 +287,21 @@ PY
 
 # The access check: what the scene fetched, asked again as another account and as nobody. Reads only.
 cat > "$run/scenes/access.ts" <<'TS'
-import fs from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { sessionFile, type Scene } from '../harness';
+import type { Scene } from '../harness';
 export const scene: Scene = {
-  id: 'access', title: 'Access check',
+  id: 'access', title: 'Access check', persona: 'admin',
   async play({ page, access, note }) {
     let writes = 0;
+    let once = 0;
     const server = http.createServer((request, response) => {
       const role = /role=(\w+)/.exec(request.headers.cookie ?? '')?.[1];
       const send = (status: number, body: string) => { response.writeHead(status, { 'content-type': 'application/json' }); response.end(body); };
       if (request.url === '/') { response.writeHead(200, { 'content-type': 'text/html' }); response.end('<h1>Access</h1>'); }
       else if (request.url === '/api/open') send(200, '{"open":true}');
+      else if (request.url === '/api/once') { once += 1; once === 1 ? send(200, '{}') : send(409, '{}'); }
+      else if (request.url === '/api/stream') { response.writeHead(200, { 'content-type': 'text/event-stream' }); response.write('data: 1\n\n'); }
       else if (!role) send(401, '{}');
       else if (request.url === '/api/secret') role === 'admin' ? send(200, '{"secret":1}') : send(403, '{}');
       else if (request.url === '/api/leak?id=7') send(200, '{"leak":1}');
@@ -310,28 +312,36 @@ export const scene: Scene = {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try {
-      const cookie = (value: string) => ({ name: 'role', value, domain: '127.0.0.1', path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' as const });
-      fs.writeFileSync(sessionFile(process.env.DEMO_RUN_DIR!, 'nopriv'), JSON.stringify({ cookies: [cookie('user')], origins: [] }));
-      await page.context().addCookies([cookie('admin')]);
       await page.goto(origin);
       await page.evaluate(async () => {
-        for (const path of ['/api/open', '/api/secret', '/api/leak?id=7', '/api/me']) await fetch(path);
+        for (const path of ['/api/open', '/api/secret', '/api/leak?id=7', '/api/me', '/api/once']) await fetch(path);
+        void fetch('/api/stream');
         await fetch('/api/write', { method: 'POST', body: '{}' });
       });
+      await page.waitForTimeout(300);
       await access(['nopriv']);
       note(`writes=${writes}`);
     } finally {
+      server.closeAllConnections();
       server.close();
     }
   },
 };
 TS
+python3 - "$run" <<'PY'
+import json, pathlib, sys
+for persona, role in (('admin', 'admin'), ('nopriv', 'user')):
+    cookie = {'name': 'role', 'value': role, 'domain': '127.0.0.1', 'path': '/', 'expires': -1, 'httpOnly': False, 'secure': False, 'sameSite': 'Lax'}
+    pathlib.Path(sys.argv[1], f'.auth-{persona}.json').write_text(json.dumps({'cookies': [cookie], 'origins': []}))
+PY
 invoke access-scene ok scene "$run" access --fast
 python3 - "$run" <<'PY'
 import json, pathlib, sys
 run = pathlib.Path(sys.argv[1])
 result = json.loads((run / 'access' / 'access-1.json').read_text())
 rows = {row['url'].split('/api/')[1].split('?')[0]: {who: answer['verdict'] for who, answer in row['as'].items()} for row in result['rows']}
+assert rows.pop('once') == {} and rows.pop('stream') == {}, 'a call the own session cannot repeat, or whose body never ends, is asked of nobody'
+assert sorted(row['url'].split('/api/')[1] for row in result['unverified']) == ['once', 'stream'], result['unverified']
 assert rows == {
     'open': {'nobody': 'same', 'nopriv': 'same'},
     'secret': {'nobody': 'enforced', 'nopriv': 'enforced'},
@@ -354,7 +364,7 @@ invoke kit-keep-without-kit fail keep "$run"
 bash "$here/demo.sh" new "$root/run3" --cwd "$cwd" --kit "$kit" >> "$root/kit.log"
 cmp -s "$run/project.ts" "$root/run3/project.ts" && test -f "$root/run3/scenes/reach.ts" && cmp -s "$root/run2/playwright.args" "$root/run3/playwright.args"
 invoke kit-login ok login "$root/run3" nopriv
-test "$(stat -f %Lp "$kit/.auth-nopriv.json" 2>/dev/null || stat -c %a "$kit/.auth-nopriv.json")" = 600
+python3 -c 'import os, sys; sys.exit(os.stat(sys.argv[1]).st_mode & 0o777 != 0o600)' "$kit/.auth-nopriv.json"
 test ! -e "$root/run3/.auth-nopriv.json"
 if bash "$here/demo.sh" new "$root/run4" --cwd "$cwd" --kit "$root/empty-kit" >> "$root/kit.log" 2>&1; then echo 'FAIL an empty kit must still ask for --playwright' >&2; exit 1; fi
 echo 'PASS kit: project, command and scene reused; the persona session is stored in the kit, mode 600'
