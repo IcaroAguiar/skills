@@ -96,7 +96,7 @@ The proof of a fix is a pair of stills, and the scene replayed on the fixed code
 3. **After.** Copy the run (`cp -R <run>/before <run>/after`), delete the proposal scenes, and adjust each remaining scene only where the fix changed the screen. Change the captions to say what is different for the person. Run each: `DEMO_BADGE=Depois demo.sh scene <run>/after <id> --fast`. A still that shows the problem means the fix failed: fix again, once.
 4. **Look at every pair**: the badge and caption match what is on screen, the problem is visible in "antes" and gone in "depois", and no personal data shows.
 
-No video by default: it cost more than the workers did. When the user asks for one, record the same two runs with `demo.sh record` and cut them with `scripts/qa_reel.py --out <run>/out --pair <run>/before <run>/after`.
+No video by default: it cost more than the workers did. When the user asks for one, record the same two runs with `demo.sh record` and cut them with `python3 <skill-dir>/scripts/qa_reel.py --out <run>/out --pair <run>/before <run>/after`.
 
 With no finding to fix or propose there are no stills: the evidence is the list of journeys walked.
 

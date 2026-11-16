@@ -55,6 +55,11 @@ def is_ui(path: str) -> bool:
     return lower.endswith(UI_EXT) or lower.endswith(BLADE) or bool(TEXT.search(path))
 
 
+def is_screen(path: str) -> bool:
+    """A file that is a screen or a component, not a stylesheet, a text catalogue or a test."""
+    return is_ui(path) and not NOT_PRODUCT.search(path) and not path.lower().endswith(STYLE_EXT) and not TEXT.search(path)
+
+
 def split_patch(patch: str) -> dict[str, list[str]]:
     """Changed lines (added and removed, without the marker) per file."""
     files: dict[str, list[str]] = {}
@@ -82,7 +87,7 @@ def added_files(patch: str) -> set[str]:
             added.add(current)
         elif current and line.startswith("rename from "):
             moved_from = line[len("rename from "):]
-        elif current and line.startswith("rename to ") and moved_from and not is_ui(moved_from):
+        elif current and line.startswith("rename to ") and moved_from and not is_screen(moved_from):
             added.add(current)
     return added
 
@@ -115,8 +120,7 @@ def classify(patch: str) -> dict:
     if access:
         lenses.append("wrong-person")
     # Full where the day-one runs found most: a screen that did not exist, a large change, an access rule.
-    new_screens = sorted(path for path in added_files(patch) & set(ui)
-                         if not path.lower().endswith(STYLE_EXT) and not TEXT.search(path))
+    new_screens = sorted(path for path in added_files(patch) & set(ui) if is_screen(path))
     if new_screens:
         reasons.append(f"{len(new_screens)} new screen file(s)")
     full = bool(new_screens or access or ui_lines >= FULL_LINES)

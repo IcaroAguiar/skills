@@ -81,6 +81,9 @@ class Scope(unittest.TestCase):
         self.assertEqual(classify(local)["size"], "full")
         moved = "diff --git a/src/Old.tsx b/src/New.tsx\nrename from src/Old.tsx\nrename to src/New.tsx\n@@ -1 +1 @@\n+<main />"
         self.assertEqual(classify(moved)["size"], "quick")
+        for source in ("src/Console.css", "src/locales/console.ts", "src/Prototype.test.tsx"):
+            renamed = f"diff --git a/{source} b/src/Console.tsx\nrename from {source}\nrename to src/Console.tsx\n@@ -1 +1 @@\n+<main />"
+            self.assertEqual(classify(renamed)["size"], "full", source)
         api = patch_from_rows([{"filename": "src/Console.tsx", "status": "renamed", "previous_filename": "src/Console.ts", "patch": "@@ -1 +1 @@\n+<main />"}])
         self.assertEqual(classify(api)["size"], "full")
         big = patch_from_rows([{"filename": "src/Page.tsx", "status": "modified", "changes": 350}])
