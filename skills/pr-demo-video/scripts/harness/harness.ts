@@ -28,6 +28,8 @@ export type SceneCtx = {
   hold(ms: number): Promise<void>;
   /** Records a fact for the orchestrator (what the screen said, a count…). Never log personal data. */
   note(message: string): void;
+  /** A still of the screen as it is now, caption and badge included: shots/<scene>-<n>.png. */
+  shot(): Promise<void>;
   /** Writes probe/<scene>-<n>.json. */
   probe(): Promise<ProbeResult>;
 };
@@ -135,6 +137,7 @@ export async function runScenes(options: RunOptions) {
       current.startMs = Date.now() - t0;
       current.status = 'ok';
       let probes = 0;
+      let stills = 0;
       const ctx: SceneCtx = {
         caption: async (text, holdMs = 2600) => {
           await setCaption(page, text);
@@ -142,6 +145,10 @@ export async function runScenes(options: RunOptions) {
         },
         fast, hold, page,
         note: (text) => current?.notes.push(clean(text)),
+        shot: async () => {
+          stills += 1;
+          await page.screenshot({ path: path.join(shots, `${scene.id}-${stills}.png`) });
+        },
         probe: async () => {
           const result = await probeForms(page);
           const folder = path.join(runDir, 'probe');

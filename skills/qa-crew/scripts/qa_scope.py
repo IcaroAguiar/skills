@@ -58,22 +58,31 @@ def is_ui(path: str) -> bool:
 def split_patch(patch: str) -> dict[str, list[str]]:
     """Changed lines (added and removed, without the marker) per file."""
     files: dict[str, list[str]] = {}
-    current = None
+    current, in_hunk = None, False
     for line in patch.splitlines():
         if line.startswith("diff --git "):
-            current = line.split(" b/", 1)[-1]
+            current, in_hunk = line.split(" b/", 1)[-1], False
             files[current] = []
-        elif current and line[:1] in "+-" and not line.startswith(("+++", "---")):
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif current and in_hunk and line[:1] in "+-":
             files[current].append(line[1:])
     return files
 
 
 def added_files(patch: str) -> set[str]:
-    added, current = set(), None
+    """New files, and files renamed into an interface name from one that was not (Console.ts to Console.tsx)."""
+    added, current, moved_from = set(), None, None
     for line in patch.splitlines():
         if line.startswith("diff --git "):
-            current = line.split(" b/", 1)[-1]
+            current, moved_from = line.split(" b/", 1)[-1], None
+        elif line.startswith("@@"):
+            current = None
         elif current and line.startswith("new file mode"):
+            added.add(current)
+        elif current and line.startswith("rename from "):
+            moved_from = line[len("rename from "):]
+        elif current and line.startswith("rename to ") and moved_from and not is_ui(moved_from):
             added.add(current)
     return added
 
@@ -151,13 +160,20 @@ def pr_patch(pr: str, repo: str | None) -> str:
     except subprocess.CalledProcessError:
         # Over 300 files GitHub refuses the diff; the files API pages through them.
         rows = sh(["gh", "api", "--paginate", f"repos/{{owner}}/{{repo}}/pulls/{pr}/files",
-                   "--jq", ".[] | {filename, patch, status} | @json"], repo)
-        parts = []
-        for row in filter(None, rows.splitlines()):
-            item = json.loads(row)
-            new = "new file mode 100644\n" if item.get("status") == "added" else ""
-            parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{new}{item.get('patch') or ''}")
-        return "\n".join(parts)
+                   "--jq", ".[] | {filename, patch, status, changes, previous_filename} | @json"], repo)
+        return patch_from_rows(json.loads(row) for row in filter(None, rows.splitlines()))
+
+
+def patch_from_rows(rows) -> str:
+    parts = []
+    for item in rows:
+        head = "new file mode 100644\n" if item.get("status") == "added" else ""
+        if item.get("previous_filename"):
+            head += f"rename from {item['previous_filename']}\nrename to {item['filename']}\n"
+        # GitHub omits the patch of a large file: keep its size, so the 300-line rule still sees it.
+        body = item.get("patch") or "\n".join(["@@ patch unavailable @@"] + ["+"] * item.get("changes", 0))
+        parts.append(f"diff --git a/{item['filename']} b/{item['filename']}\n{head}{body}")
+    return "\n".join(parts)
 
 
 def local_blobs(repo: str, base: str) -> dict[str, str]:

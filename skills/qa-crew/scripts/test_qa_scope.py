@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from qa_scope import MARKER, blobs_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
+from qa_scope import MARKER, blobs_from_rows, patch_from_rows, classify, evidence, fingerprint, local_blobs, on_screen, record_exercised, stamp
 import qa_scope  # noqa: E402
 
 
@@ -17,6 +17,7 @@ def patch(*files):
         out.append(f"diff --git a/{path} b/{path}")
         out.append(f"--- a/{path}")
         out.append(f"+++ b/{path}")
+        out.append("@@ -1 +1 @@")
         out.extend(f"+{line}" for line in lines)
     return "\n".join(out)
 
@@ -73,6 +74,21 @@ class Scope(unittest.TestCase):
 
     def test_large_visual_change_is_full(self):
         scope = classify(patch(("apps/web/src/Page.tsx", ["<div />"] * 300)))
+        self.assertEqual(scope["size"], "full")
+
+    def test_rename_into_a_screen_and_missing_patch_stay_full(self):
+        local = "diff --git a/src/Console.ts b/src/Console.tsx\nsimilarity index 90%\nrename from src/Console.ts\nrename to src/Console.tsx\n@@ -1 +1 @@\n+<main />"
+        self.assertEqual(classify(local)["size"], "full")
+        moved = "diff --git a/src/Old.tsx b/src/New.tsx\nrename from src/Old.tsx\nrename to src/New.tsx\n@@ -1 +1 @@\n+<main />"
+        self.assertEqual(classify(moved)["size"], "quick")
+        api = patch_from_rows([{"filename": "src/Console.tsx", "status": "renamed", "previous_filename": "src/Console.ts", "patch": "@@ -1 +1 @@\n+<main />"}])
+        self.assertEqual(classify(api)["size"], "full")
+        big = patch_from_rows([{"filename": "src/Page.tsx", "status": "modified", "changes": 350}])
+        self.assertEqual(classify(big)["size"], "full")
+
+    def test_lines_that_look_like_headers_are_counted(self):
+        body = "\n".join(["---count;"] * 150 + ["+++count;"] * 150)
+        scope = classify(f"diff --git a/src/Page.tsx b/src/Page.tsx\n--- a/src/Page.tsx\n+++ b/src/Page.tsx\n@@ -1,150 +1,150 @@\n{body}")
         self.assertEqual(scope["size"], "full")
 
     def test_auth_folder_and_data_files_are_not_access_rules(self):
