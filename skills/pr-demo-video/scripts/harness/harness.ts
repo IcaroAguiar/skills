@@ -147,7 +147,8 @@ export async function runScenes(options: RunOptions) {
           const folder = path.join(runDir, 'probe');
           fs.mkdirSync(folder, { recursive: true });
           probes += 1;
-          fs.writeFileSync(path.join(folder, `${scene.id}-${probes}.json`), clean(JSON.stringify(result, null, 2)));
+          const safe = JSON.stringify(result, (_key, value) => (typeof value === 'string' ? clean(value) : value), 2);
+          fs.writeFileSync(path.join(folder, `${scene.id}-${probes}.json`), safe);
           current?.notes.push(`probe: ${result.ruler.fieldsShown} field(s), ${result.findings.length} candidate(s)`);
           return result;
         },

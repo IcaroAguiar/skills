@@ -239,6 +239,12 @@ const html = `<form>
   <label for="q">Quantidade</label><input id="q" type="text" inputmode="numeric" maxlength="4">
   <label for="n">Nome completo</label><input id="n" type="text" required value="Ana">
   <input id="x" type="text" placeholder="Buscar">
+  <label for="d">Cidade</label><input id="d" type="text" maxlength="60">
+  <label for="h">CNPJ</label><input id="h" type="text" aria-describedby="hh"><span id="hh">Informe o documento da empresa</span>
+  <label for="v">Valor</label><input id="v" type="text" inputmode="decimal">
+  <select aria-label="Prioridade"><option>1</option></select>
+  <div id="rich" contenteditable="true" aria-label="Observações"><b>Ana</b><br>Silva</div>
+  <input id="u" type="text" aria-label="Apelido" maxlength="20" value="%22aspas%22">
 </form>`;
 export const scene: Scene = {
   id: 'probe', title: 'Form probe',
@@ -247,8 +253,12 @@ export const scene: Scene = {
     await page.evaluate(() => document.getElementById('q')!.addEventListener('input', (event) => {
       const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
     }));
+    await page.evaluate(() => document.getElementById('v')!.addEventListener('input', (event) => {
+      const input = event.target as HTMLInputElement; input.value = input.value.replace(/\D/g, '');
+    }));
     await probe();
-    note(`restored=${(await page.locator('#n').inputValue()) === 'Ana'}`);
+    const rich = await page.locator('#rich').innerHTML();
+    note(`restored=${(await page.locator('#n').inputValue()) === 'Ana' && rich === '<b>Ana</b><br>Silva'}`);
   },
 };
 TS
@@ -258,8 +268,13 @@ import json, pathlib, sys
 run = pathlib.Path(sys.argv[1])
 result = json.loads((run / 'probe' / 'probe-1.json').read_text())
 ruler, found = result['ruler'], {(f['field'], f['kind']) for f in result['findings']}
-assert (ruler['fieldsShown'], ruler['required'], ruler['withoutLabel']) == (4, 1, 1), ruler
-assert ruler['wrongKeyboard'] == 1 and ruler['fixedFormatWithoutMaskOrExample'] == 1, ruler
+assert (ruler['fieldsShown'], ruler['required'], ruler['withoutLabel']) == (10, 1, 1), ruler
+assert ruler['wrongKeyboard'] == 2 and ruler['fixedFormatWithoutMaskOrExample'] == 3, ruler
+shapes = {f['label']: f['shape'] for f in result['fields']}
+assert shapes['Cidade'] is None and shapes['Prioridade'] == 'number', shapes
+assert ('CNPJ', 'aceita letras') in found, 'help text must not hide a finding'
+assert ('Valor', 'muda o valor em silêncio') in found, 'a decimal or a sign lost is a silent change'
+assert not any(field in ('Cidade', 'Observações', 'Prioridade') for field, _ in found), found
 assert ('CPF', 'aceita letras') in found, found
 assert ('Quantidade', 'muda o valor em silêncio') in found, found
 assert not any(field == 'Quantidade' and kind == 'apaga sem avisar' for field, kind in found), found

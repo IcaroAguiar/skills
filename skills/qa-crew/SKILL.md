@@ -108,7 +108,7 @@ With no finding to fix or propose there is no video: the evidence is the list of
 python3 <skill-dir>/scripts/qa_scope.py --repo <repo> --exercised <run> --lenses <the lenses that ran, comma separated>
 ```
 
-It stores the screens as they are now. Name only lenses a worker really ran with its account.
+It stores the screens as they are now. Name `inputs` when the probe ran on every touched form, and a worker lens only when a worker really ran it with its account.
 
 **Complete when:** every fixed finding has a "depois" frame you looked at that shows it gone, or the gate found nothing; and `<run>/exercised.json` exists.
 
