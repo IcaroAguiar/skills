@@ -1,17 +1,11 @@
 import type { Page } from '@playwright/test';
 
-/**
- * Mechanical form check for qa-crew: counts what a form asks for and types
- * what people really type into every visible field, without submitting.
- * It works on whatever is on screen now, so a scene can open a dialog first.
- * Candidates only: the orchestrator reproduces before believing one.
- */
+// qa-crew form check on whatever is on screen now. It never submits; findings are candidates to reproduce.
 export type ProbeField = {
   label: string;
   tag: string;
   type: string;
   required: boolean;
-  /** What the label says the field holds, when it has a fixed shape. */
   shape: 'number' | 'cpf' | 'cnpj' | 'cep' | 'phone' | 'email' | 'date' | 'money' | null;
   inputMode: string;
   maxLength: number | null;
@@ -38,7 +32,6 @@ export type ProbeResult = {
 
 const MARK = 'data-qa-probe';
 
-/** Runs in the page: tags each visible field and describes it. */
 function describeFields(mark: string): ProbeField[] {
   const shapes: [ProbeField['shape'], RegExp][] = [
     ['cpf', /\bcpf\b/i], ['cnpj', /\bcnpj\b/i], ['cep', /\bcep\b|zip|postal/i],
@@ -83,7 +76,6 @@ function describeFields(mark: string): ProbeField[] {
   return out;
 }
 
-/** Runs in the page: the value a field kept and any error it shows. */
 function readField(selector: string): { value: string; invalid: boolean; error: string } {
   const node = document.querySelector<HTMLInputElement>(selector);
   if (!node) return { value: '', invalid: false, error: '' };
@@ -155,7 +147,6 @@ export async function probeForms(page: Page): Promise<ProbeResult> {
     } catch (error) {
       findings.push({ field: field.label, kind: 'não testado', detail: `O campo não aceitou digitação automática: ${String(error).split('\n')[0].slice(0, 120)}` });
     } finally {
-      // Leave the screen as it was, so the scene can go on.
       await target.fill(before.value, { timeout: 2000 }).catch(() => undefined);
       await target.blur({ timeout: 2000 }).catch(() => undefined);
     }

@@ -28,7 +28,7 @@ export type SceneCtx = {
   hold(ms: number): Promise<void>;
   /** Records a fact for the orchestrator (what the screen said, a count…). Never log personal data. */
   note(message: string): void;
-  /** qa-crew: counts and types into every field on screen now; writes probe/<scene>-<n>.json. */
+  /** Writes probe/<scene>-<n>.json. */
   probe(): Promise<ProbeResult>;
 };
 

@@ -47,9 +47,7 @@ PYMODULE
   (export NODE_PATH="$module_path${NODE_PATH:+:$NODE_PATH}"
    cd "$PW_CWD" && browser_lane "${args[@]}" test -c "$run/playwright.config.ts")
 }
-# One headless browser is light next to a build or a typecheck, so recordings take their own lane
-# (DEMO_BROWSER_SLOTS, default 2) and do not wait behind a machine-wide queue for heavy jobs.
-# HEAVY_SLOT tells such a queue, where one wraps the package manager, to let this command through.
+# Recordings take their own lane; HEAVY_SLOT lets them through a queue that wraps the package manager.
 browser_lane() {
   command -v lockf >/dev/null 2>&1 || { HEAVY_SLOT=browser "$@"; return; }
   local state="${XDG_STATE_HOME:-$HOME/.local/state}/demo-browser" slots="${DEMO_BROWSER_SLOTS:-2}"
@@ -61,8 +59,7 @@ browser_lane() {
     if [ "$level" -lt 25 ] && [ "$waited" -lt 300 ]; then sleep 5; continue; fi
     for ((i = 0; i < slots; i++)); do
       rm -f "$marker"
-      # The child writes the marker before the command, so a busy slot (lockf exits 75
-      # without running anything) is not mistaken for the command exiting 75.
+      # A busy slot exits 75 without running; the marker tells that from the command exiting 75.
       lockf -s -k -t 0 "$state/slot.$i" /bin/sh -c ': > "$0"; HEAVY_SLOT=browser "$@"' "$marker" "$@"; rc=$?
       if [ -f "$marker" ]; then rm -f "$marker"; return "$rc"; fi
     done
