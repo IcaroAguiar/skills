@@ -35,7 +35,7 @@ function repoNames(root) {
 
 const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// `front-processes` must not match a repository called `front`.
+// `front-app` must not match a repository called `front`.
 const mentions = (names) => {
   const pattern = new RegExp(`(?<![\\w-])(?:${names.map(escapeRegExp).join("|")})(?![\\w-])`, "i");
   return (text) => pattern.test(text);

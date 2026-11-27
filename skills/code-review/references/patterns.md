@@ -18,7 +18,7 @@ entry per mechanism:
 
 ```markdown
 ## hover-only-action: row action visible only on hover
-- seen: 2026-10-22 front-processes src/features/context/components/context-row-actions.tsx:41; …
+- seen: 2026-01-15 front-app src/features/orders/components/order-row-actions.tsx:41; …
 - check: candidate
 ```
 

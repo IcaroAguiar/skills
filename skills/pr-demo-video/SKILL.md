@@ -1,15 +1,18 @@
 ---
 name: pr-demo-video
-description: Record a short captioned video of a change running in the real app, so a reviewer or stakeholder sees every improvement of a PR (or stack) in two minutes. A team of cheap parallel workers writes one scene each; you storyboard, judge every frame, and fix defects the recording exposes. Use when asked for a "demo", "vídeo demo", "grave uma demo", "mostrar as melhorias", "vídeo do PR", or to attach a walkthrough video to a PR.
+description: >-
+  Record the real app on video: a captioned demo of a PR's changes ("grave uma demo", "vídeo do PR", "mostrar as melhorias") or a flow recorded as evidence ("grave o fluxo", tutorial, CLI or API run).
 ---
 
 # PR demo video
 
 Goal: a 1–3 minute video of the **real app** where each improvement of the change is visible, captioned in the user's language, with no personal data on screen. A mock, a slideshow or a screenshot collage is not this skill.
 
-Quality comes from your decisions, cost from the workers. You decide what to show and with which data, and you judge the result. Workers (the cheapest capable model, parallel when supported) write and debug one scene each. Keep scene authorship separate from orchestration: a lone worker took 2h17 and shipped a weak video with a false claim.
+**Two branches, one harness.** A demo of a PR's changes follows sections 1–8. A recording asked for as evidence of a flow (a journey for a reviewer, a tutorial, a CLI or API run, a before/after across a deadline) follows [references/evidence-recording.md](references/evidence-recording.md): its proof standard, neutral `Teste 1` labels and evidence manifest, reusing this harness for browser flows.
 
-Harness: `scripts/demo.sh` and `scripts/harness/` (Playwright, run with the project's own Playwright). `qa-crew` records its before/after clips with the same harness; `DEMO_BADGE=<label>` puts a fixed label on a recording, and in a scene `probe()` checks every field on screen and `shot()` saves a still, both for `qa-crew`. Everything lives in a run directory outside the repository, for example `/tmp/pr-demo/<slug>`.
+Quality comes from your decisions, cost from the workers. You decide what to show and with which data, and you judge the result. Workers (the cheapest capable model, parallel when supported) write and debug one scene each. Keep scene authorship separate from orchestration: a lone worker takes far longer and tends to ship a weak video with a false claim.
+
+Harness: `scripts/demo.sh` and `scripts/harness/` (Playwright, run with the project's own Playwright). `exploratory-qa` records its before/after clips with the same harness; `DEMO_BADGE=<label>` puts a fixed label on a recording, and in a scene `probe()` checks every field on screen and `shot()` saves a still, both for `exploratory-qa`. Everything lives in a run directory outside the repository, for example `/tmp/pr-demo/<slug>`.
 
 ## 1. Inventory the promises (you)
 
@@ -39,7 +42,7 @@ Write `<run>/storyboard.md` from `references/storyboard.md`. For each scene, giv
 
 The end state of scene N is the start state of scene N+1. Captions say what the viewer should notice, in plain language, no jargon, one idea per caption, ≤ 90 characters.
 
-Before briefing anyone, check that every label in the actions exists in the code being served: `git grep -n "<label>" HEAD -- <app>`. A storyboard once relied on a feature from a later PR in the stack while the checkout was on an earlier one. The worker rightly stopped instead of faking it, but the round was lost.
+Before briefing anyone, check that every label in the actions exists in the code being served: `git grep -n "<label>" HEAD -- <app>`. A storyboard that relies on a feature from a later PR in a stack, while the checkout is on an earlier one, loses the round: the worker rightly stops instead of faking it.
 
 Then fill `<run>/project.ts` from `project.template.ts`:
 - base URL;
@@ -91,7 +94,7 @@ While they work, you do the rest of the task. Do not wait idle.
 ## 6. Defects the recording exposes
 
 The recording is also a test: it plays the product the way a person does.
-- **Verify every worker claim yourself** before believing it. A worker once reported "the editor closes"; it did not.
+- **Verify every worker claim yourself** before believing it. Workers sometimes report a behaviour ("the editor closes") that does not happen.
 - A confirmed defect in the change, or one that the change makes easier to hit, gets **fixed**: TDD, the project's review gate, then re-record the scene. Do not edit the storyboard to hide it.
 - A defect clearly outside the change gets an issue, unless the user has said to fix such defects too.
 

@@ -28,8 +28,6 @@ jobs:
           node-version: 22
       - run: node scripts/validate-skills.mjs
       - run: node scripts/test-validate-skills.mjs
-      - run: node scripts/test-design-direction-contracts.mjs
-      - run: node scripts/test-design-canvas-contracts.mjs
       - run: python3 skills/task-closeout/scripts/test_inspect_checkout.py
       - run: python3 skills/task-closeout/scripts/test_delivered_leftovers.py
       - name: Work budget

@@ -124,7 +124,7 @@ export async function runScenes(options: RunOptions) {
       ...(record ? { recordVideo: { dir: videoDir, size: project.viewport } } : {}),
     });
     await context.addInitScript(overlayInitScript, project.extraMasks ?? []);
-    // DEMO_BADGE labels a whole recording (qa-crew: "Antes" / "Depois").
+    // DEMO_BADGE labels a whole recording (exploratory-qa: "Antes" / "Depois").
     if (process.env.DEMO_BADGE) await context.addInitScript(badgeInitScript, process.env.DEMO_BADGE);
     const page = await context.newPage();
     video = page.video();

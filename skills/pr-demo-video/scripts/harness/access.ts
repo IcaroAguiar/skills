@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { Browser, Response } from '@playwright/test';
 
-// qa-crew access check: what the scene's account fetched, asked again as someone else. Rows are candidates to triage.
+// exploratory-qa access check: what the scene's account fetched, asked again as someone else. Rows are candidates to triage.
 export type Seen = { method: string; url: string; data: string | null; headers: Record<string, string>; bound: string | null; body: Promise<string | null> };
 export type Verdict = 'enforced' | 'same' | 'differs' | 'redirected' | 'error';
 export type AccessRow = { method: string; url: string; unasked?: string; as: Record<string, { status: number; verdict: Verdict; error?: string }> };

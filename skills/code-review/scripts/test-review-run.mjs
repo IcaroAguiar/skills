@@ -334,20 +334,20 @@ try {
   assert.equal(node("review-run.mjs", ["-C", repo, "--plan", "--role", "review"]).status, 2, "the T3 plan needs the author too");
   // One rule everywhere: only the author's own model is skipped. Opus work may get
   // a Sonnet review, and a Cursor id with parameters is still that model.
-  setPolicy(front("main", { "claude-sonnet": claude("sonnet"), "cursor-sonnet": cursor("claude-sonnet-5-5[effort=high]"), "codex-ok": codex("gpt-6.1-sol") }, { review: ["claude-sonnet", "cursor-sonnet", "codex-ok"] }));
+  setPolicy(front("main", { "claude-sonnet": claude("sonnet"), "cursor-sonnet": cursor("claude-sonnet-5-5[effort=high]"), "codex-ok": codex("gpt-model-a") }, { review: ["claude-sonnet", "cursor-sonnet", "codex-ok"] }));
   assert.deepEqual(plan(["--author-model", "claude-opus-5-5"]).plan.slots[0].map((entry) => entry.available), [true, true, true]);
   assert.deepEqual(plan(["--author-model", "sonnet"]).plan.slots[0].map((entry) => entry.available), [false, false, true]);
-  setPolicy({ ...front("main", { "codex-ok": codex("gpt-6.1-sol") }, { review: ["codex-ok"] }), independence: "vendor" });
+  setPolicy({ ...front("main", { "codex-ok": codex("gpt-model-a") }, { review: ["codex-ok"] }), independence: "vendor" });
   const leftover = plan();
   assert.equal(leftover.status, 2, "a leftover independence key is refused, not ignored");
   assert.match(leftover.output, /independence was removed/);
 
   // ---- 6b. Cursor: read-only ask mode, prompt on argv, auth falls back ---------------------
-  chain({ "codex-limited": codex("m-limited"), "cursor-gpt": cursor("gpt-5.6-sol[reasoning=high]", { t3: { providerInstanceId: "cursor", model: "gpt-5.6-sol" } }) }, ["codex-limited", "cursor-gpt"]);
+  chain({ "codex-limited": codex("m-limited"), "cursor-gpt": cursor("gpt-model-b[reasoning=high]", { t3: { providerInstanceId: "cursor", model: "gpt-model-b" } }) }, ["codex-limited", "cursor-gpt"]);
   reset({ "m-limited": "limit" });
   const viaCursor = rr(["--effort", "high"]);
   assert.equal(viaCursor.status, 0, viaCursor.output);
-  assert.equal(readFileSync(outFile, "utf8"), "answer from cursor/gpt-5.6-sol[reasoning=high] [REVIEW-PROMPT]");
+  assert.equal(readFileSync(outFile, "utf8"), "answer from cursor/gpt-model-b[reasoning=high] [REVIEW-PROMPT]");
   const cursorCall = calls().find((call) => call.cli === "cursor");
   for (const flag of ["-p", "--trust"]) assert.ok(cursorCall.argv.includes(flag), flag);
   assert.deepEqual([cursorCall.argv[cursorCall.argv.indexOf("--mode") + 1], cursorCall.argv[cursorCall.argv.indexOf("--sandbox") + 1]], ["ask", "enabled"]);
@@ -356,13 +356,13 @@ try {
   assert.deepEqual([cursorEvent.status, cursorEvent.effort, cursorEvent.sessionId, cursorEvent.usage.cacheRead], ["ok", null, "c-1", 60]);
   assert.equal(plan().plan.slots[0][1].t3.providerInstanceId, "cursor", "inside T3 the plan names the cursor instance");
   // Not logged in outside T3: auth, cooled down, and the next candidate answers.
-  chain({ "cursor-gpt": cursor("gpt-5.6-sol"), "claude-ok": claude("m-ok") }, ["cursor-gpt", "claude-ok"]);
-  reset({ "gpt-5.6-sol": "auth" });
+  chain({ "cursor-gpt": cursor("gpt-model-b"), "claude-ok": claude("m-ok") }, ["cursor-gpt", "claude-ok"]);
+  reset({ "gpt-model-b": "auth" });
   const loggedOut = rr();
   assert.equal(loggedOut.result.provider, "claude-ok", loggedOut.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "auth"], ["claude-ok", "ok"]]);
   // The plan's weekly usage ran out for this model: a limit, so the next candidate answers.
-  reset({ "gpt-5.6-sol": "plan-usage" });
+  reset({ "gpt-model-b": "plan-usage" });
   const outOfPlan = rr();
   assert.equal(outOfPlan.result.provider, "claude-ok", outOfPlan.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "limit"], ["claude-ok", "ok"]]);
@@ -374,13 +374,13 @@ try {
   const oversized = rr(["--prompt", bigPrompt]);
   assert.equal(oversized.result.provider, "claude-ok", oversized.output);
   assert.deepEqual(callEvents().map((event) => [event.provider, event.status]), [["cursor-gpt", "oversize"], ["claude-ok", "ok"]]);
-  assert.equal(invoked("gpt-5.6-sol").length, 0, "an oversize prompt never reaches the argv CLI");
+  assert.equal(invoked("gpt-model-b").length, 0, "an oversize prompt never reaches the argv CLI");
   // An empty answer falls back like Claude's and Codex's.
-  reset({ "gpt-5.6-sol": "empty" });
+  reset({ "gpt-model-b": "empty" });
   const emptyCursor = rr();
   assert.equal(emptyCursor.result.provider, "claude-ok", emptyCursor.output);
   assert.equal(callEvents()[0].status, "empty");
-  invalid({ c: cursor("gpt-5.6-sol") }, { fix: ["c"] }, /cursor provider c cannot take this role/);
+  invalid({ c: cursor("gpt-model-b") }, { fix: ["c"] }, /cursor provider c cannot take this role/);
 
   // ---- 7. A/B split is stable per head ---------------------------------------------------
   setPolicy(front("main", { a: claude("m-ok"), b: codex("m-ok") }, { review: [{ split: ["a", "b"] }] }));
@@ -548,12 +548,12 @@ try {
   const opusRow = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-opus");
   assert.deepEqual([opusRow.calls, opusRow.limited, opusRow.auth], [2, 1, 1]);
   assert.match(ledgerCli("stats").stdout, /limited\s+auth\s+p50/);
-  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "300", "--turns", "4", "--cost", "0.5", "--input", "100", "--cache-read", "300").status, 0);
-  const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-sol");
-  assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-6.1-sol", "high", 300_000, 4, 0.5, 0.75]);
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-gpt", "--model", "gpt-model-a", "--effort", "high", "--status", "ok", "--duration", "300", "--turns", "4", "--cost", "0.5", "--input", "100", "--cache-read", "300").status, 0);
+  const t3Row = JSON.parse(ledgerCli("stats", "--json").stdout).rows.find((entry) => entry.provider === "t3-gpt");
+  assert.deepEqual([t3Row.model, t3Row.effort, t3Row.p50, t3Row.turnsP50, t3Row.costPerOk, t3Row.cacheRead], ["gpt-model-a", "high", 300_000, 4, 0.5, 0.75]);
   // --by size splits each row by the change's reviewable lines; calls without a size land in "?".
-  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-sol", "--model", "gpt-6.1-sol", "--effort", "high", "--status", "ok", "--duration", "900", "--lines", "2400", "--files", "40").status, 0);
-  const bySize = JSON.parse(ledgerCli("stats", "--by", "size", "--json").stdout).rows.filter((entry) => entry.provider === "t3-sol");
+  assert.equal(ledgerCli("record", "--front", "main", "--role", "review", "--provider", "t3-gpt", "--model", "gpt-model-a", "--effort", "high", "--status", "ok", "--duration", "900", "--lines", "2400", "--files", "40").status, 0);
+  const bySize = JSON.parse(ledgerCli("stats", "--by", "size", "--json").stdout).rows.filter((entry) => entry.provider === "t3-gpt");
   assert.deepEqual(bySize.map((entry) => [entry.size, entry.calls, entry.p50]), [[">2000", 1, 900_000], ["?", 1, 300_000]]);
   assert.match(ledgerCli("stats", "--by", "size").stdout, /effort\s+size\s+calls/);
   assert.equal(ledgerCli("stats", "--by", "repo").status, 2, "--by takes only size");

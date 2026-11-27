@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check GitHub Actions workflows against the global CI rule in ~/.agents/AGENTS.md ("CI stays essential").
+"""Check GitHub Actions workflows against the CI rule in ../references/ci-rule.md.
 
 Usage: ci_rule_check.py <repo-or-workflow-dir> [...]
 Exit 1 when any workflow breaks the rule. YAML is parsed through Ruby's stdlib (no PyYAML on this machine).
@@ -20,6 +20,8 @@ HEAVY = re.compile(
 )
 LABEL_GATE = re.compile(r"label", re.I)
 REVALIDATE = re.compile(r"\b(lint|typecheck|tsc --noEmit|jest|vitest|go test|pnpm( -\w+)* test|npm test|biome check)\b", re.I)
+# Lint and tests are the author's verification before the push; a typecheck may stand in for the build.
+LOCAL_ONLY = re.compile(r"\b(lint|eslint|biome check|prettier|semgrep|jest|vitest|go test|pytest|pnpm( -\w+)* test|npm (run )?test|yarn test)\b", re.I)
 RELEASE_PROOF = re.compile(r"release:verify|release:build|docker save|simulated worker|--output \.local/release", re.I)
 
 
@@ -87,6 +89,8 @@ def check(path: Path) -> list[str]:
         steps = [s for s in job.get("steps") or [] if isinstance(s, dict)]
         pr_steps = [s for s in steps if not re.search(r"label|push|workflow_dispatch", str(s.get("if", "")), re.I)]
         body = json.dumps({**{k: v for k, v in job.items() if k != "steps"}, "steps": pr_steps})
+        if LOCAL_ONLY.search(body):
+            findings.append(f"job {name}: lint or tests on every PR; they run locally before the push, the PR job only builds (move them behind the run-full-ci label)")
         if HEAVY.search(body):
             findings.append(f"job {name}: E2E, image build or whole suite on every PR (move behind a label or to the publishing push)")
         if "services" in job:
@@ -120,7 +124,14 @@ def push_jobs(doc: dict, on: dict) -> list[str]:
         if not isinstance(job, dict):
             continue
         cond = str(job.get("if", ""))
-        if LABEL_GATE.search(cond) or re.search(r"event_name == '(pull_request|workflow_dispatch|release)'", cond):
+        # An explicit push branch can coexist with a label or dispatch branch in the same condition.
+        runs_on_push = re.search(r'''event_name\s*==\s*['"]push['"]''', cond)
+        on_demand = LABEL_GATE.search(cond) or re.search(
+            r'''event_name\s*==\s*['"](pull_request|workflow_dispatch|release)['"]''', cond
+        )
+        if not runs_on_push and (
+            on_demand or re.search(r'''event_name\s*!=\s*['"]push['"]''', cond)
+        ):
             continue
         legs = 1
         matrix = (job.get("strategy") or {}).get("matrix") if isinstance(job.get("strategy"), dict) else None

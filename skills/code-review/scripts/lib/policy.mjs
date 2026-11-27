@@ -152,7 +152,7 @@ export function normalizeRemote(url) {
 
 // Claude aliases name a family (`sonnet`), full ids a version; both count as the
 // same model for independence. Other ids compare exactly, without an effort
-// suffix or Cursor's bracketed parameters (`gpt-5.6-sol[reasoning=high]`).
+// suffix or Cursor's bracketed parameters (`gpt-model-b[reasoning=high]`).
 export function modelFamily(model) {
   const id = String(model ?? "").toLowerCase().replace(/\[[^\]]*\]$/, "").replace(/-(low|medium|high|xhigh|max)$/, "");
   const claude = /(?:^|claude-)(opus|sonnet|haiku|fable)\b/.exec(id);
@@ -201,6 +201,24 @@ export function candidates(front, role, { slot = 0, authorModel = null, headSha 
         : null;
     return { ...candidate, provider, skip };
   });
+}
+
+export function nativeReviewFallback(front, { authorModel = null, headSha = "", cooled = new Map() } = {}) {
+  if (!authorModel) return null;
+  const peers = candidates(front, "review", { authorModel, headSha, cooled });
+  if (peers.some(({ skip }) => !skip)) return null;
+  const own = candidates(front, "review", { headSha, cooled }).find(({ provider, skip }) =>
+    !skip && provider.kind === "codex" && provider.t3?.providerInstanceId &&
+    modelFamily(provider.model) === modelFamily(authorModel));
+  if (!own) return null;
+  return {
+    provider: own.id,
+    providerInstanceId: own.provider.t3.providerInstanceId,
+    model: own.provider.model,
+    effort: own.provider.effort ?? "high",
+    freshContext: true,
+    instruction: "Use the runtime native subagent on this account in a fresh context; give it the fixed diff and spec. The author cannot review its own work. Record its verdict and triage in the review ledger.",
+  };
 }
 
 // The change's reviewable size from T0's route, recorded on every call so the

@@ -1,4 +1,4 @@
 interface:
   display_name: "Design Direction"
   short_description: "Design, audit, and art-direct task-shaped interfaces"
-  default_prompt: "Use $design-direction to design, redesign, or review this interface in the house style: disciplined structure plus a domain-specific expression for each screen."
+  default_prompt: "Use $design-direction to judge this interface inside the product's established design, with the taste profile as the judge."
