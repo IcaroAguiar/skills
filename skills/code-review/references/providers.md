@@ -24,6 +24,18 @@ node scripts/review-ledger.mjs limits
 node scripts/review-ledger.mjs clear <provider> --front <front>
 ```
 
+## Native fallback in a runtime
+
+`review-run --plan --role review --author-model <model>` includes
+`nativeFallback` when other review candidates are unavailable but the author's
+Codex account is usable. It identifies the existing permitted provider and model;
+it does not launch a CLI or approve the change. Use the runtime's native subagent
+with a fresh context, fixed diff, spec and check results. Record the resulting
+call with `review-ledger record` (the listed provider, `--label native-subagent`)
+and triage every finding. T1 unavailable is recorded as such; the full reviewer
+covers those lenses. Account limits and boundaries still apply. A different
+available model keeps priority over this fallback.
+
 ## The policy
 
 `~/.config/agent-review/policy.json` (or `$AGENT_REVIEW_POLICY`) is private to
@@ -39,16 +51,16 @@ scoped to that CLI's path) and `review-run` refuses to run.
       "name": "work",
       "match": { "paths": ["~/dev/work"], "remotes": ["github.com/WorkOrg/"] },
       "providers": {
-        "codex-sol":  { "kind": "codex",  "bin": "/abs/work-codex",  "model": "gpt-6.1-sol",
-                        "t3": { "providerInstanceId": "codex-work", "model": "gpt-6.1-sol" } },
+        "codex-main":  { "kind": "codex",  "bin": "/abs/work-codex",  "model": "gpt-model-a",
+                        "t3": { "providerInstanceId": "codex-work", "model": "gpt-model-a" } },
         "sonnet":     { "kind": "claude", "bin": "/abs/work-claude", "model": "claude-sonnet-5-5", "effort": "high" },
         "sonnet-med": { "kind": "claude", "bin": "/abs/work-claude", "model": "claude-sonnet-5-5", "effort": "medium" },
         "haiku":      { "kind": "claude", "bin": "/abs/work-claude", "model": "claude-haiku-5-5" }
       },
       "roles": {
         "t1":     [[{ "split": ["sonnet-med", "sonnet"] }], ["haiku"]],
-        "review": ["codex-sol", "sonnet"],
-        "fix":    ["codex-sol", "sonnet"]
+        "review": ["codex-main", "sonnet"],
+        "fix":    ["codex-main", "sonnet"]
       }
     }
   ]

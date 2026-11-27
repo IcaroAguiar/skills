@@ -348,6 +348,47 @@ try {
   assert.ok(routed().route.reviewFiles >= 1, "an edited binary rename still counts (git may show it as a delete and an add)");
   // routed() asserts exit 0, so a large change still passes: size advises, never blocks.
 
+  // ---- tests: the TESTS line observes unit and end-to-end files and never gates ----
+  newRepo("tests");
+  write("README.md", "# tests\n");
+  write("src/old.test.ts", code(4));
+  commit("base");
+  const testLine = (output) => output.split("\n").find((line) => line.startsWith("TESTS"));
+  write("src/a.ts", code(20));
+  const withoutTests = routed();
+  assert.equal(testLine(withoutTests.output), "TESTS observe: no test files in this diff, source +20 lines");
+  write("src/new.test.ts", code(5));
+  write("src/new.spec.tsx", code(2));
+  write("src/old.test.ts", code(10));
+  write("pkg/test_thing.py", "x = 1\n");
+  write("pkg/thing_test.go", "package pkg\n");
+  write("e2e/login.spec.ts", code(3));
+  write("flows/checkout.test.ts", code(4));
+  write("src/pay.e2e.ts", code(2));
+  write("src/helper.ts", code(1));
+  const withTests = routed();
+  assert.equal(testLine(withTests.output), "TESTS observe: unit 5 files (4 new, +15 lines), e2e 3 files (3 new, +9 lines), source +21 lines");
+  assert.deepEqual(reviewT0(["--no-checks"]).report.tests, { unit: { files: 5, created: 4, lines: 15 }, e2e: { files: 3, created: 3, lines: 9 }, sourceLines: 21 });
+  const e2eOnly = (() => {
+    rmSync(join(repo, "src/new.test.ts"));
+    for (const file of ["src/new.spec.tsx", "pkg/test_thing.py", "pkg/thing_test.go", "src/helper.ts"]) rmSync(join(repo, file));
+    sh("git", ["checkout", "--", "src/old.test.ts"]);
+    rmSync(join(repo, "flows"), { recursive: true });
+    rmSync(join(repo, "src/pay.e2e.ts"));
+    return routed().output;
+  })();
+  assert.equal(testLine(e2eOnly), "TESTS observe: e2e 1 file (1 new, +3 lines), source +20 lines", "a diff with only an end-to-end file leaves unit out");
+  // Test files change neither the verdict nor the exit code.
+  write("notes.md", "<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> feature\n");
+  const gateOf = (result) => [result.status, result.report.verdict, result.report.blockers];
+  const blockedWith = reviewT0(["--no-checks"]);
+  rmSync(join(repo, "e2e"), { recursive: true });
+  const blockedWithout = reviewT0(["--no-checks"]);
+  assert.equal(blockedWith.status, 1, blockedWith.output);
+  assert.match(testLine(blockedWith.output), /e2e 1 file/);
+  assert.match(testLine(blockedWithout.output), /no test files/);
+  assert.deepEqual(gateOf(blockedWith), gateOf(blockedWithout), "the verdict, exit and blockers are the same with and without test files");
+
   // ---- Ctrl-C during a check starts no further check ---------------------------
   newRepo("cancel");
   const marks = join(workspace, "marks");

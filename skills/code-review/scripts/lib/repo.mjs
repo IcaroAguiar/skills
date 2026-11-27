@@ -223,8 +223,10 @@ export function collectChanges(root, base, head = null) {
   const changed = [];
   const added = new Map();
   const renamed = new Map();
+  const created = new Set();
   entries.forEach((entry, index) => {
     changed.push(entry.path);
+    if (entry.code === "A") created.add(entry.path);
     if (entry.code === "R") renamed.set(entry.path, entry.from);
     if (entry.code === "D") return;
     const lines = new Set();
@@ -240,7 +242,8 @@ export function collectChanges(root, base, head = null) {
   });
   for (const file of head ? [] : git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean)) {
     changed.push(file);
+    created.add(file);
     added.set(file, "all");
   }
-  return { changed, added, renamed };
+  return { changed, added, renamed, created };
 }

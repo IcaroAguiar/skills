@@ -1,187 +1,71 @@
 ---
 name: code-review
-description: Review a stable material pull-request diff once after implementation and focused checks are complete. Invoke implicitly, without being asked, whenever a material change is ready; it runs T0, the fast pre-pass (T1) when T0's route asks for it, and one independent reviewer, the same way on every account, harness and model, with fallback when a subscription is limited. Also invoke explicitly for a fixed branch or PR review.
+description: >-
+  Review a stable PR diff after implementation: T0, then one independent reviewer. Runs unasked for a risky change (data, auth, money, safety-critical values, migration, deploy, CI) and once per production batch, or on request: "revisa com o Codex", "deixa o Codex revisar e corrigir".
 ---
 
 # Code review
 
-Review one fixed diff along two axes:
+A review is owed for any risky change: data, auth, money, safety-critical values, a migration, deploy or CI. Start it when the PR has exact base and head SHAs, the implementation is complete, and the author has no planned edits. Later commits and pushes start no new review, and the review authorizes nothing outward.
 
-- `Standards`: repository rules and `references/review-standards.md`.
-- `Spec`: whether the change implements the requested behavior without omissions or scope creep.
+## T0: the author's deterministic check
 
-## Stable review gate
-
-Invoke implicitly when the change is material, the PR has exact base/head SHAs,
-the implementation is complete, focused checks ran or have named blockers, and
-the author has no planned edits. Before that point, keep implementing. Commits,
-pushes, CI updates, comments, and local corrections do not start another review.
-
-An explicit review request may supply a fixed branch or PR before this gate.
-
-When the change also owes the `qa-crew` gate, both start on the same commit and run side by side. Their findings are corrected in one round, and that round gets one delta review, whatever the first verdict was, because the QA fixes are code no reviewer has read.
-
-## Deterministic pre-review (T0)
-
-Before any model reviewer, the author runs T0 on the checkout under review:
+Before any model reviewer, the author runs:
 
 ```bash
 node <this-skill>/scripts/review-t0.mjs -C <repo> [--base <base-sha>] [--wrap <queue>]
 ```
 
-It checks only what the diff added (secrets, new vulnerable dependencies,
-conflict markers, manifest without lockfile, the rules in `rules/`, and repository
-rules in `.semgrep/`) and runs the repository's typecheck, lint and affected
-tests. `BLOCKED` goes back to the author; no reviewer runs on a red T0. Hand the
-reviewer the T0 summary: it does not re-report what T0 or repository tooling
-covers, and confirms or dismisses each T0 warning with a reason. T0's `ROUTE`
-line gives the reviewer's starting reasoning effort and says whether T1 runs.
-Its `SIZE` line flags a change past the layer target or the limit. Split it into a
-stack, or say in the PR why it stays whole: `references/pr-size.md`. Its
-`COMMENTS` line flags a diff that adds many comments: from 5% of the added source
-lines it blocks T0, and `review-run` refuses the review too, so trim them before
-asking; below that the reviewer reports the ones the code does not need
-(`references/review-standards.md`, Comments).
-Details, configuration and suppression: `references/t0.md`.
+It checks only what the diff added (secrets, vulnerable dependencies, conflict markers, manifest without lockfile, `rules/`, the repository's `.semgrep/`) and runs typecheck, lint and affected tests. It prints:
 
-## Fast pre-pass (T1)
+- `RESULT`: `BLOCKED` goes back to the author; no reviewer runs on a red T0.
+- `ROUTE`: the reviewer's starting effort, and whether T1 runs.
+- `SIZE`: past the layer target or limit, split into a stack or say in the PR why it stays whole (`references/pr-size.md`).
+- `COMMENTS`: from 5% of added source lines it blocks, and `review-run` refuses too; below that the reviewer flags the needless ones.
+- `TESTS observe`: the unit and end-to-end test files the change adds. It never blocks.
 
-When T0 passes and its route says `T1 run`, the author runs:
+Hand the reviewer the T0 summary; it confirms or dismisses each warning with a reason. Details and suppression: `references/t0.md`.
 
-```bash
-node <this-skill>/scripts/review-t1.mjs -C <repo> [--spec <pr-body-file>] [--claude <account wrapper>]
-```
+When `ROUTE` says `T1 run`, the author runs `scripts/review-t1.mjs` once before the first full review and fixes or dismisses each finding (`references/t1.md`). T1 never approves or blocks.
 
-Fast lenses from the review policy (without one, Claude Sonnet at medium effort
-and Claude Haiku) review the same diff and the changed files in parallel,
-read-only, in about three minutes. The author
-fixes or dismisses each finding with a reason, reruns T0 if code changed, and
-gives the reviewer the dismissed findings, which it may re-raise. Like T0, T1 is
-the author's tool, not a reviewer wave: it never approves or blocks, and it runs
-once, before the first full review. Details: `references/t1.md`.
+## One independent reviewer
 
-## Known mistakes
+Exactly one reviewer, in a fresh context that did not write the change: pass the fixed diff, the spec, the standards and the check results, never the author's conversation. The author never approves its own work.
 
-T1 and the deep reviewer receive a `<known_mistakes>` block without being asked,
-built from the front's pattern catalog and the repository's committed
-`REVIEW.md` (up to 6 KB). The catalog entries that cite the repository appear as a title and
-a check state, open ones first; `enforced` ones are marked as already caught by T0 or lint.
-The reviewer checks the diff against the block first and reports a match as a
-normal finding only when the diff contains it. It exists because `AGENTS.md` is
-git-ignored in some repositories and absent from a worktree. Without a catalog entry for the repository and without a `REVIEW.md`, there is no block. Details: `references/patterns.md`.
+Account boundary: read `~/.config/agent-review/local.md` (or `$AGENT_REVIEW_LOCAL`) first. `~/.config/agent-review/policy.json` maps each repository to its front (an account boundary) and lists the candidates per role. Every model call for a repository, subagents included, stays on its owning account.
 
-## Accounts, providers and fallback
-
-If `~/.config/agent-review/local.md` (or `$AGENT_REVIEW_LOCAL`) exists, read it
-first: it is this machine's private policy for accounts, models and job queues.
-Every model call for a repository, including subagents and delegated tasks, runs
-on the account that owns the repository.
-
-`~/.config/agent-review/policy.json` is the machine-readable part of that policy.
-It maps each repository to its front (an account boundary) and gives, per role,
-the candidates allowed to answer. Call every reviewer and fixer through
-`scripts/review-run.mjs` (in T3, through its `--plan`), so every harness picks the
-same model, falls back the same way when a subscription is limited, never leaves
-the front, and logs the call. Details: `references/providers.md`.
+Route every reviewer and fixer through `review-run.mjs`, so every harness picks, falls back and logs the same way (`references/providers.md`):
 
 ```bash
 node <this-skill>/scripts/review-run.mjs --role review -C <repo> --base <base-sha> --prompt <file> --out <file> --author-model <author's model>
 ```
 
-## Independence
+`--plan` shows the candidates and exposes `nativeFallback`: when the peers are limited, use a fresh native subagent on the owning account, even with the author's model. Stop for availability only when neither can run.
 
-If the current context authored or fixed the change, dispatch exactly one fresh
-independent reviewer with this skill and the fixed diff. When the local policy
-names the reviewer (for example an OpenAI model through the Codex CLI), use that one, on
-the account that owns the repository, at the starting effort from T0's route.
-Pass the author's model as `--author-model`, so a fallback never lands on it.
-If the current context is already that reviewer, review directly. Never create
-separate Standards and Spec reviewers or other nested reviewer waves.
+When the user names Codex or the policy routes to it, read `references/codex-cli.md` (CLI facts, prompts, fixer flow).
 
-The whole sequence (T0, T1 when routed, independent review, delta reviews) runs without the
-user asking: reaching the stable review gate is the trigger. It authorizes
-nothing outward; pushing, merging and deploying still follow the task's own
-authorization.
+The reviewer receives a `<known_mistakes>` block, built from the front's pattern catalog and the repository's `REVIEW.md` (`references/patterns.md`), and applies `references/review-standards.md`.
 
-## Process
+## Findings
 
-1. Pin the fixed point. For a PR, resolve its exact base and head SHAs. Otherwise
-   use the ref supplied by the user. Capture `git diff <base>...<head>` and
-   `git log <base>..<head> --oneline` once. Stop on a missing ref or empty diff.
-2. Find the Spec source in the user request, linked issue, PR description, or a
-   matching file under `docs/`, `specs/`, or `.scratch/`. If none exists, report
-   `no spec available`; do not invent requirements.
-3. Find Standards sources such as `REVIEW.md` (what matters to the code's
-   owners, what failure looks like there, paths to skip), `AGENTS.md`,
-   `CODING_STANDARDS.md`, `CONTRIBUTING.md`, and relevant repository docs.
-   Repository rules override the shared baseline. Skip formatting or checks already enforced by tooling
-   or reported by T0.
-4. Read `references/review-standards.md`, then inspect the complete diff once.
-   Search adjacent code only to answer a concrete question raised by the diff.
-5. Report actionable findings under `Standards` and `Spec`. Keep the axes
-   separate so one cannot hide the other.
+Report findings under `Standards` (repository rules, `REVIEW.md`) and `Spec` (the requested behavior, omissions, scope creep); with no spec, say `no spec available`. Each finding carries a severity, `file:line` from the current diff, the impact and the smallest fix. A repeated mistake is one finding listing every place. Severities:
 
-Each finding needs severity, stable location, impact, current-diff evidence
-(a file and line, not a guess from a name), smallest correction, and validation
-path. When one mistake repeats, report it once with every place, so the fix
-covers the whole class. Mark a real bug the change did not introduce as
-`Pre-existing`: it stays visible, never blocks, and is not the author's fault.
-Critical/high findings block. Medium/low observations remain visible unless they
-prove correctness or verification failure. Start the report with the number of
-blocking findings, and say plainly when there is nothing to fix.
+- **Critical / high**: block.
+- **Medium / low**: visible, block only when they prove a correctness or verification failure.
+- **Pre-existing**: a real bug the change did not introduce; visible, never blocks.
 
-End with one compact gate line and a verdict:
+Start the report with the number of blocking findings, and say plainly when there is nothing to fix.
 
-`CORRECTNESS=PASS SIMPLIFICATION=PASS SEMANTICS=PASS DOCUMENTATION=N/A VERIFICATION=PASS`
+A finding whose fix removes or changes something the user approved in a design goes to the user with options; the approved element stays until they answer.
 
-Use `APPROVE`, `APPROVE_WITH_RESIDUAL_RISK`, `REQUEST_CHANGES`, or `BLOCKED`.
-
-## Triage and measurement
-
-The author decides every finding from T1 and from the reviewer: `fixed`,
-`wrong`, `intentional`, `irrelevant` or `deferred`, with a reason for all but
-`fixed`. Record the decisions with `scripts/review-ledger.mjs triage` (T1 spots
-by number, review findings by call id; `[]` when a review found nothing).
-Before the final report, `scripts/review-ledger.mjs untriaged --repo <repo>` must
-print no call: it exits 1 while an answered T1 or review call has no decisions. Those decisions are the acted-on rate
-that tells which model and effort are worth their cost; `review-ledger stats`
-reads it back. When the same kind of finding keeps coming back, stop it before
-review: a pitfall the author reads in `AGENTS.md`, a type or test that makes it
-impossible, or a lint or T0 Semgrep rule:
-`review-ledger findings` lists the fixed findings, and
-[references/patterns.md](references/patterns.md) keeps the catalog and the
-weekly pass. When a bug escapes review, add the change as a `review-eval` case.
+Optionally, record decisions (`fixed`, `wrong`, `intentional`, `irrelevant`, `deferred`) with `scripts/review-ledger.mjs triage`; `review-ledger stats` reads the acted-on rate back, and `findings` feeds the catalog in `references/patterns.md`. A bug that escapes review becomes a `review-eval` case.
 
 ## Delta review
 
-The author or one fixer applies accepted critical/high findings, reruns only
-affected checks, and reruns T0 until it passes; T1 does not run again. The same reviewer then reviews
-`git diff <old-head>..<new-head>` plus affected callers and tests, through
-`review-run --resume <call>`. Preserve the earlier full-diff coverage and do not
-repeat findings already reported. Request another full review only if the base changes,
-the scope expands materially, reviewers disagree, or the correction crosses
-auth, tenancy, credentials, migrations, transactions, concurrency, or public
-contracts.
+The author or one fixer applies the accepted critical and high findings, reruns the affected checks and T0. A fix adds at most one check per cause, at the cheapest level that catches it. The same reviewer then reads `git diff <old-head>..<new-head>` plus affected callers, through `review-run --resume <call>`, without repeating earlier findings.
 
-A delta is owed after a blocking finding, and after any correction that crosses
-one of those areas. After a verdict of `APPROVE` or `APPROVE_WITH_RESIDUAL_RISK`,
-a correction of the remaining medium or low findings owes none when it stays
-inside the files the findings named and under 50 changed lines, unless the round also carried `qa-crew` fixes. The author
-applies it and reruns the affected checks and T0. The orchestrator, or the author
-when there is none, reads `git diff <old-head>..<new-head>` and records
-`no delta: <reason>` in the triage. Measured on 2026-11-12 across five
-orchestration windows, 22 of 69 delta rounds found nothing, against 2 of 87
-full reviews. A bug traced to a skipped delta becomes a `review-eval` case, and
-that kind of correction gets its delta back.
+- A delta is owed after a blocking finding, and after any correction that crosses auth, tenancy, credentials, migrations, transactions, concurrency or public contracts.
+- After approval, fixing the remaining medium or low findings inside the named files and under 50 changed lines owes none: rerun the affected checks and T0, and note `no delta: <reason>`.
+- A full review again only when the base changes, the scope grows materially or reviewers disagree.
 
-Continue in the same reviewer session while blockers converge; another in-scope
-correction does not need permission. Rounds that keep finding blockers are a
-signal, not progress: Anthropic found that most code flagged again had been
-there since the first pass, so the reviewer was finding a few more old bugs each
-round. After the second delta still has blockers, stop and show the user the
-open findings with a recommendation (defer, accept as residual risk, rethink the
-approach, or one more round). The author and fixer never approve their own work.
-
-Run required final checks once, confirm the final PR head, and report residual
-risk. Hosting approval, CI monitoring, external providers, merge, deployment,
-and tracker state are separate tasks.
+**Two-delta stop.** When the second delta still has blockers, stop and show the user the open findings with a recommendation: defer, accept as residual risk, rethink the approach, or one more round.

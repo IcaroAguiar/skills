@@ -4,7 +4,7 @@ Apply the guardrails to one repository in verifiable steps. Each step ends with 
 
 ## 1. Diagnose with numbers
 
-Run one read-only diagnosis per repository and keep the report on persistent storage. The `codebase-health` skill runs the full check-up (CI history, dead code, near-copies, test value and speed, abstractions, architecture) with its own scripts; the list below is what this playbook needs from it. Measure:
+Run one read-only diagnosis per repository and keep the report on persistent storage. The list below is what this playbook needs from a full check-up (CI history, dead code, near-copies, test value and speed, abstractions, architecture). Measure:
 - **Inventory:**
   - test files and tests per area, and test-to-source line ratio;
   - largest and slowest files;

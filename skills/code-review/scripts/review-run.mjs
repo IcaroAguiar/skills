@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cooldowns, findCall, readEvents } from "./lib/ledger.mjs";
 import { knownMistakesBlock } from "./lib/known-mistakes.mjs";
-import { candidates, diffSize, dispatch, loadPolicy, policyPath, resolveFront } from "./lib/policy.mjs";
+import { candidates, diffSize, dispatch, loadPolicy, nativeReviewFallback, policyPath, resolveFront } from "./lib/policy.mjs";
 import { commentLevel, commentShare, formatComments } from "./lib/comments.mjs";
 import { collectChanges, defaultReportPath, git, readJson, resolveBase, stopGroups, treeFingerprint, writePrivateFile, writeReport } from "./lib/repo.mjs";
 
@@ -154,7 +154,10 @@ function plan(front, options, headSha) {
   const list = slots.map((slot) => candidates(front, options.role, { slot, authorModel: options.authorModel, headSha, cooled }).map(({ id, provider, skip, experiment, arm }) => ({
     id, kind: provider.kind, model: provider.model ?? null, effort: provider.effort ?? null, t3: provider.t3 ?? null, available: !skip, reason: skip, experiment, arm,
   })));
-  console.log(JSON.stringify({ front: front.name, role: options.role, slots: list }, null, 2));
+  const nativeFallback = options.role === "review"
+    ? nativeReviewFallback(front, { authorModel: options.authorModel, headSha, cooled })
+    : null;
+  console.log(JSON.stringify({ front: front.name, role: options.role, slots: list, ...(nativeFallback ? { nativeFallback } : {}) }, null, 2));
 }
 
 const elapsed = (ms) => `${Math.floor(ms / 60000)}m${String(Math.round((ms % 60000) / 1000)).padStart(2, "0")}s`;

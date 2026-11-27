@@ -40,15 +40,16 @@ Repository instructions define catalogue maintenance. The repository is the cano
 
 | Skill | Use it to |
 | --- | --- |
-| `design-canvas` | Approve a redesign on a static prototype built with the project's real components before product code changes |
 | `code-review` | Gate a finished pull request: deterministic pre-review, a fast pre-pass, then one independent reviewer |
 | `codebase-guardrails` | Keep a codebase healthy when agents write most of the code and tests |
-| `codebase-health` | Run an evidence-based repository check-up that ends in a sequenced roadmap |
-| `design-direction` | Art-direct and review interfaces: disciplined structure plus a domain-specific expression per screen |
-| `qa-crew` | Use a change as a person before it ships: persona agents find defects and form friction, fixes land in the same PR with a before/after video |
+| `create-verification-skill` | Generate or maintain a repository's verification skill that drives the app the way a user does (adapted from pstack by Lauren Tan, MIT) |
+| `design-canvas` | Approve a screen as images, built on the real product, before the PR; the approved version becomes the PR |
+| `design-direction` | Judge or set visual direction without editing code, with a starting house style |
+| `exploratory-qa` | Use a change as a person would before it ships: persona agents find defects and friction, fixes land in the same PR |
+| `merge-gate` | Land or escalate your own PRs by risk so none sits forgotten |
+| `portly` | Manage persistent local dev servers with the Portly macOS app and CLI |
 | `pr-demo-video` | Record a short captioned demo of a change running in the real app |
 | `task-closeout` | Close a task with a reviewable delivery and every workspace artifact accounted for |
-| `video-editor` | Turn photos, clips and a song into a beat-synced vertical video with 3D parallax, velocity and kinetic lyrics |
 
 ## Recommended from other catalogues
 
@@ -56,11 +57,9 @@ These are part of the same daily workflow but maintained upstream. Install them 
 
 | Source | Skills |
 | --- | --- |
-| [`mattpocock/skills`](https://github.com/mattpocock/skills) | `pr`, `tdd`, `diagnosing-bugs`, `writing-for-agents`, `grilling`, `prototype`, `domain-modeling`, `codebase-design` |
-| [`humanlayer/skills`](https://github.com/humanlayer/skills) | `show-me` |
+| [`mattpocock/skills`](https://github.com/mattpocock/skills) | `pr`, `diagnosing-bugs`, `writing-for-agents`, `grilling`, `domain-modeling` |
 | [`rafaelquintanilha/skills`](https://github.com/rafaelquintanilha/skills) | `better-portuguese`, `orchestrate` |
 | [`github/gh-stack`](https://github.com/github/gh-stack) | `gh-stack` |
-| [`emilkowalski/skills`](https://github.com/emilkowalski/skills) | `improve-animations` |
 | [`pbakaus/impeccable`](https://github.com/pbakaus/impeccable) | `impeccable` |
 
 ## License

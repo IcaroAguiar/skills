@@ -465,6 +465,8 @@ const SENSITIVE_AREAS = Object.entries({
 }).map(([area, words]) => [area, new Set(words.split(" "))]);
 const MIGRATION_FILE = /(^|\/)migrations?\/|\.sql$|(^|\/)schema\.prisma$|\.migration\.[cm]?[jt]s$/i;
 const T1_MIN_CHANGED_LINES = 20;
+const UNIT_TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$|_test\.(go|py)$|(^|\/)test_[^/]+\.py$/;
+const E2E_TEST_FILE = /(^|\/)(e2e|qa|flows|playwright|cypress|maestro)\/|\.e2e\./;
 // The PR size rule (references/pr-size.md): a layer of about 1,000 reviewable lines,
 // and past 2,000 lines or 60 files the change is split into a stack or says why.
 const LARGE_DIFF = { lines: 2000, files: 60 };
@@ -548,6 +550,26 @@ function formatSize(route) {
   return null;
 }
 
+// Observes before any limit is decided: it never changes the verdict.
+function testShare(added, created, count) {
+  const share = { unit: { files: 0, created: 0, lines: 0 }, e2e: { files: 0, created: 0, lines: 0 } };
+  for (const file of added.keys()) {
+    if (!reviewable(file)) continue;
+    if (!UNIT_TEST_FILE.test(file) && !/\.e2e\./.test(file)) continue;
+    const kind = E2E_TEST_FILE.test(file) ? "e2e" : "unit";
+    share[kind].files += 1;
+    share[kind].created += created.has(file) ? 1 : 0;
+    share[kind].lines += count(file);
+  }
+  return share;
+}
+
+function formatTests(tests) {
+  const group = (name, { files, created, lines }) => `${name} ${files} file${files === 1 ? "" : "s"} (${created} new, +${lines} lines)`;
+  const found = ["unit", "e2e"].filter((kind) => tests[kind].files).map((kind) => group(kind, tests[kind]));
+  return `TESTS observe: ${found.length ? `${found.join(", ")}, ` : "no test files in this diff, "}source +${tests.sourceLines} lines`;
+}
+
 // ---- report -----------------------------------------------------------------
 
 function format(report) {
@@ -560,7 +582,7 @@ function format(report) {
   for (const check of report.checks) lines.push(`  ${mark[check.status]} ${check.name.padEnd(28)} ${seconds(check.durationMs).padStart(7)}  ${check.command}`);
   for (const skipped of report.skippedChecks) lines.push(`  -    ${skipped}`);
   if (report.skippedFiles.length) lines.push(`  -    ${report.skippedFiles.length} file(s) not scanned or code-rules only; see skippedFiles in the report`);
-  if (report.route) lines.push("", formatRoute(report.route), ...[formatSize(report.route), formatComments(report.comments)].filter(Boolean));
+  if (report.route) lines.push("", formatRoute(report.route), ...[formatSize(report.route), formatComments(report.comments), report.tests && formatTests(report.tests)].filter(Boolean));
   if (report.findings.length) {
     lines.push("", "findings (added lines only):");
     for (const finding of report.findings) {
@@ -592,7 +614,7 @@ async function main() {
   const headSha = git(root, ["rev-parse", "HEAD"]).trim();
   const dirty = git(root, ["status", "--porcelain"]).trim().length > 0;
   const reportPath = options.json ?? defaultReportPath("review-t0", root, headSha, dirty);
-  const { changed, added, renamed } = collectChanges(root, base.sha);
+  const { changed, added, renamed, created } = collectChanges(root, base.sha);
   const report = {
     tool: "review-t0",
     version: 3,
@@ -614,6 +636,7 @@ async function main() {
     skippedFiles: [],
     findings: [],
     route: null,
+    tests: null,
     reportPath,
   };
   if (!changed.length) {
@@ -655,8 +678,12 @@ async function main() {
     const comments = commentShare(root, base.sha, { added, changed, renamed });
     if (commentLevel(comments) === "block") report.blockers.push(`comments: ${comments.lines - (comments.removed ?? 0)} new in ${comments.sourceLines} added source lines`);
     let reviewAdded = 0;
-    for (const [file, lines] of added) {
-      const count = lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").filter((line, index, all) => line || index < all.length - 1).length : 0) : lines.size;
+    const addedCount = (file) => {
+      const lines = added.get(file);
+      return lines === "all" ? (targets.secret.includes(file) ? readFileSync(join(root, file), "utf8").split("\n").filter((line, index, all) => line || index < all.length - 1).length : 0) : lines.size;
+    };
+    for (const file of added.keys()) {
+      const count = addedCount(file);
       report.addedLines += count;
       if (reviewable(file)) reviewAdded += count;
     }
@@ -664,6 +691,7 @@ async function main() {
       verdict: report.blockers.length ? "BLOCKED" : "PASS",
       route: routeChange(root, base.sha, changed, { addedLines: report.addedLines, reviewAdded }),
       comments,
+      tests: { ...testShare(added, created, addedCount), sourceLines: comments.sourceLines },
       durationMs: Date.now() - started,
       steps: steps.map(({ findings: stepFindings, ...step }) => ({ ...step, findings: stepFindings.length })),
       checkSource: discovered.source,

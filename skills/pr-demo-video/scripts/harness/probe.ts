@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-// qa-crew form check on whatever is on screen now. It never submits; findings are candidates to reproduce.
+// exploratory-qa form check on whatever is on screen now. It never submits; findings are candidates to reproduce.
 export type ProbeField = {
   label: string;
   tag: string;
